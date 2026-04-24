@@ -38,9 +38,9 @@ def audio_briefing_script_max_tokens(target_chars: int, conversation_mode: str =
     if mode == "duo":
         # Duo scripts pay extra output overhead for speaker/section/item_id fields
         # on every turn, so they need materially more output tokens than single mode.
-        boosted = round(target * 2.0) + 2000
-        return clamp_int(boosted, 4800, 32000)
-    return clamp_int(round(target), 2400, 14000)
+        boosted = round(target * 4.0) + 4000
+        return clamp_int(boosted, 9600, 64000)
+    return clamp_int(round(target * 2.0), 4800, 28000)
 
 
 def summary_composite_score(breakdown: dict) -> float:

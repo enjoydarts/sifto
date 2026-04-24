@@ -35,10 +35,18 @@ def _is_glm_model(model: str) -> bool:
     return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
 
 
+def _is_deepseek_v4_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized in {"deepseek-v4-flash", "deepseek-v4-pro"}
+
+
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
         # exhaust output tokens into reasoning_content and leave message.content empty.
+        body["thinking"] = {"type": "disabled"}
+        return
+    if provider_name == "deepseek" and _is_deepseek_v4_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         return
     if provider_name == "deepinfra":

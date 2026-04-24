@@ -19,6 +19,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("deepseek-chat"); got == nil {
 		t.Fatal("deepseek-chat not found in catalog")
 	}
+	if got := findModelCatalog("deepseek-v4-flash"); got == nil {
+		t.Fatal("deepseek-v4-flash not found in catalog")
+	}
+	if got := findModelCatalog("deepseek-v4-pro"); got == nil {
+		t.Fatal("deepseek-v4-pro not found in catalog")
+	}
 	if got := findModelCatalog("kimi-k2.5"); got == nil {
 		t.Fatal("kimi-k2.5 not found in catalog")
 	}
@@ -138,6 +144,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
+		{model: "deepseek-v4-flash", provider: "deepseek"},
+		{model: "deepseek-v4-pro", provider: "deepseek"},
 		{model: "deepseek-chat", provider: "deepseek"},
 		{model: "qwen3.5-plus", provider: "alibaba"},
 		{model: "qwen3.6-plus", provider: "alibaba"},

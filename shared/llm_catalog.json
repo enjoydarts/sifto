@@ -43,7 +43,7 @@
     {
       "id": "deepseek",
       "api_key_header": "x-deepseek-api-key",
-      "match_exact": ["deepseek-chat", "deepseek-reasoner"],
+      "match_exact": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
       "default_models": {
         "facts": "deepseek-chat",
         "summary": "deepseek-chat",
@@ -2370,13 +2370,59 @@
       }
     },
     {
+      "id": "deepseek-v4-flash",
+      "provider": "deepseek",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast", "latest"],
+      "comment": "DeepSeek V4 系の軽量側。1M context と低コストを両立し、抽出や通常要約の主力候補として使いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "deepseek_pricing_2026_04_24",
+        "input_per_mtok_usd": 0.14,
+        "output_per_mtok_usd": 0.28,
+        "cache_read_per_mtok_usd": 0.028
+      }
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "provider": "deepseek",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["reasoning", "latest"],
+      "comment": "DeepSeek V4 系の上位側。1M context と高い推論力を持ち、複雑な要約や長文の統合・質問応答で有力。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "deepseek_pricing_2026_04_24",
+        "input_per_mtok_usd": 1.74,
+        "output_per_mtok_usd": 3.48,
+        "cache_read_per_mtok_usd": 0.145
+      }
+    },
+    {
       "id": "deepseek-chat",
       "provider": "deepseek",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "strong",
       "best_for": "facts",
       "highlights": ["fast"],
-      "comment": "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。",
+      "comment": "互換 alias。将来的には deepseek-v4-flash へ寄せる前提だが、既存設定の互換維持用として残している。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2386,9 +2432,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_static_2026_03",
-        "input_per_mtok_usd": 0.28,
-        "output_per_mtok_usd": 0.42,
+        "pricing_source": "deepseek_pricing_2026_04_24",
+        "input_per_mtok_usd": 0.14,
+        "output_per_mtok_usd": 0.28,
         "cache_read_per_mtok_usd": 0.028
       }
     },
@@ -2399,7 +2445,7 @@
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
-      "comment": "推論寄りで比較価値はあるが、速度面では chat より重い。常用より難ケースの比較向け。",
+      "comment": "互換 alias。thinking 側は deepseek-v4-flash の推論モードに対応し、既存設定の互換維持用として残している。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2409,9 +2455,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_static_2026_03",
-        "input_per_mtok_usd": 0.28,
-        "output_per_mtok_usd": 0.42,
+        "pricing_source": "deepseek_pricing_2026_04_24",
+        "input_per_mtok_usd": 0.14,
+        "output_per_mtok_usd": 0.28,
         "cache_read_per_mtok_usd": 0.028
       }
     },

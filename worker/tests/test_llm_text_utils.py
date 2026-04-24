@@ -24,12 +24,12 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
 
         self.assertFalse(facts_need_japanese_localization(facts))
 
-    def test_audio_briefing_script_max_tokens_uses_target_chars_with_original_cap(self):
-        self.assertEqual(audio_briefing_script_max_tokens(14000), 14000)
+    def test_audio_briefing_script_max_tokens_uses_doubled_target_chars_with_updated_cap(self):
+        self.assertEqual(audio_briefing_script_max_tokens(14000), 28000)
 
     def test_audio_briefing_script_max_tokens_boosts_duo_mode(self):
         self.assertGreater(audio_briefing_script_max_tokens(600, "duo"), audio_briefing_script_max_tokens(600, "single"))
-        self.assertEqual(audio_briefing_script_max_tokens(14000, "duo"), 30000)
+        self.assertEqual(audio_briefing_script_max_tokens(14000, "duo"), 60000)
 
     def test_summary_max_tokens_increases_by_about_fifteen_percent(self):
         self.assertEqual(summary_max_tokens(500), 1400)

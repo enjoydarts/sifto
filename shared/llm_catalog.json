@@ -100,6 +100,25 @@
       }
     },
     {
+      "id": "cerebras",
+      "label": "Cerebras AI",
+      "api_key_header": "x-cerebras-api-key",
+      "match_exact": [
+        "gpt-oss-120b",
+        "llama3.1-8b",
+        "qwen-3-235b-a22b-instruct-2507",
+        "zai-glm-4.7"
+      ],
+      "default_models": {
+        "facts": "llama3.1-8b",
+        "summary": "gpt-oss-120b",
+        "digest_cluster_draft": "gpt-oss-120b",
+        "digest": "gpt-oss-120b",
+        "ask": "gpt-oss-120b",
+        "source_suggestion": "llama3.1-8b"
+      }
+    },
+    {
       "id": "minimax",
       "api_key_header": "x-minimax-api-key",
       "match_exact": [
@@ -299,6 +318,102 @@
     }
   ],
   "chat_models": [
+    {
+      "id": "gpt-oss-120b",
+      "provider": "cerebras",
+      "source_provider": "OpenAI",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Cerebras の Production 主力。高速な要約・質問・ダイジェスト向け。reasoning_effort は worker 側で low に抑える。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_manual_2026_04",
+        "input_per_mtok_usd": 0.35,
+        "output_per_mtok_usd": 0.75,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "llama3.1-8b",
+      "provider": "cerebras",
+      "source_provider": "Meta",
+      "available_purposes": ["facts", "summary", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast", "lowestCost"],
+      "comment": "Cerebras の軽量 Production 枠。事実抽出や候補生成向け。公式 docs では 2026-05-27 deprecation 予定のため、既定は軽量用途に限定する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_manual_2026_04",
+        "input_per_mtok_usd": 0.10,
+        "output_per_mtok_usd": 0.10,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "qwen-3-235b-a22b-instruct-2507",
+      "provider": "cerebras",
+      "source_provider": "Qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "experimental",
+      "highlights": ["experimental", "fast"],
+      "comment": "Cerebras Preview model。評価用に手動選択可能にするが、Preview かつ 2026-05-27 deprecation 予定のため既定にはしない。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_manual_2026_04",
+        "input_per_mtok_usd": 0.60,
+        "output_per_mtok_usd": 1.20,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "zai-glm-4.7",
+      "provider": "cerebras",
+      "source_provider": "Z.ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "experimental",
+      "highlights": ["experimental", "fast"],
+      "comment": "Cerebras Preview model。coding / agent 寄りの比較用途として手動選択用に載せる。Preview のため既定にはしない。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_manual_2026_04",
+        "input_per_mtok_usd": 2.25,
+        "output_per_mtok_usd": 2.75,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
     {
       "id": "featherless::Qwen/Qwen3.5-9B",
       "provider": "featherless",

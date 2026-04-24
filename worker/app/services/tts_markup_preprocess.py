@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.services.alibaba_service import _p as alibaba_provider
 from app.services.claude_service import _call_with_model_fallback as anthropic_call_with_model_fallback
 from app.services.claude_service import _llm_meta as anthropic_llm_meta
+from app.services.cerebras_service import _p as cerebras_provider
 from app.services.deepseek_service import _p as deepseek_provider
 from app.services.deepinfra_service import _p as deepinfra_provider
 from app.services.fireworks_service import _p as fireworks_provider
@@ -100,6 +101,7 @@ class TTSMarkupPreprocessService:
             "poe": lambda key: self._preprocess_openai_compat(poe_provider._chat_json, poe_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "siliconflow": lambda key: self._preprocess_openai_compat(siliconflow_provider._chat_json, siliconflow_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "deepinfra": lambda key: self._preprocess_openai_compat(deepinfra_provider._chat_json, deepinfra_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "cerebras": lambda key: self._preprocess_openai_compat(cerebras_provider._chat_json, cerebras_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
         }
         handler = handlers.get(provider)
         if handler is None:

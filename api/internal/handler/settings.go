@@ -973,6 +973,20 @@ func (h *SettingsHandler) DeleteOpenAIAPIKey(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func (h *SettingsHandler) SetCerebrasAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "cerebras", map[string]func(*model.UserSettings) any{
+		"has_cerebras_api_key":   func(s *model.UserSettings) any { return s.HasCerebrasAPIKey },
+		"cerebras_api_key_last4": func(s *model.UserSettings) any { return s.CerebrasAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteCerebrasAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "cerebras", map[string]func(*model.UserSettings) any{
+		"has_cerebras_api_key":   func(s *model.UserSettings) any { return s.HasCerebrasAPIKey },
+		"cerebras_api_key_last4": func(s *model.UserSettings) any { return s.CerebrasAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetGoogleAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "google", map[string]func(*model.UserSettings) any{
 		"has_google_api_key":   func(s *model.UserSettings) any { return s.HasGoogleAPIKey },

@@ -255,6 +255,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
 				r.Post("/openai-key", settingsH.SetOpenAIAPIKey)
 				r.Delete("/openai-key", settingsH.DeleteOpenAIAPIKey)
+				r.Post("/cerebras-key", settingsH.SetCerebrasAPIKey)
+				r.Delete("/cerebras-key", settingsH.DeleteCerebrasAPIKey)
 				r.Post("/google-key", settingsH.SetGoogleAPIKey)
 				r.Delete("/google-key", settingsH.DeleteGoogleAPIKey)
 				r.Post("/groq-key", settingsH.SetGroqAPIKey)

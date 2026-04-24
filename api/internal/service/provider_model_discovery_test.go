@@ -111,6 +111,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1/openai/chat/completions",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "cerebras",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchCerebrasModels(ctx)
+			},
+			apiKey:   "test-cerebras-key",
+			baseKey:  "CEREBRAS_API_BASE_URL",
+			baseURL:  "/v1/chat/completions",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {

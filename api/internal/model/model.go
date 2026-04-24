@@ -27,6 +27,8 @@ type UserSettings struct {
 	HasAnthropicAPIKey               bool       `json:"has_anthropic_api_key"`
 	OpenAIAPIKeyLast4                *string    `json:"openai_api_key_last4,omitempty"`
 	HasOpenAIAPIKey                  bool       `json:"has_openai_api_key"`
+	CerebrasAPIKeyLast4              *string    `json:"cerebras_api_key_last4,omitempty"`
+	HasCerebrasAPIKey                bool       `json:"has_cerebras_api_key"`
 	MiniMaxAPIKeyLast4               *string    `json:"minimax_api_key_last4,omitempty"`
 	HasMiniMaxAPIKey                 bool       `json:"has_minimax_api_key"`
 	XiaomiMiMoTokenPlanAPIKeyLast4   *string    `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`

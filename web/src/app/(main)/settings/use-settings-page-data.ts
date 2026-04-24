@@ -175,6 +175,8 @@ export function useSettingsPageData() {
   const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
   const [savingMistralKey, setSavingMistralKey] = useState(false);
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
+  const [savingCerebrasKey, setSavingCerebrasKey] = useState(false);
+  const [deletingCerebrasKey, setDeletingCerebrasKey] = useState(false);
   const [savingMiniMaxKey, setSavingMiniMaxKey] = useState(false);
   const [deletingMiniMaxKey, setDeletingMiniMaxKey] = useState(false);
   const [savingXiaomiMiMoTokenPlanKey, setSavingXiaomiMiMoTokenPlanKey] = useState(false);
@@ -232,6 +234,7 @@ export function useSettingsPageData() {
   const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
+  const [cerebrasApiKeyInput, setCerebrasApiKeyInput] = useState("");
   const [miniMaxApiKeyInput, setMiniMaxApiKeyInput] = useState("");
   const [xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput] = useState("");
   const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
@@ -1199,6 +1202,12 @@ export function useSettingsPageData() {
         deleteTitle: t("settings.mistralDeleteTitle"), deleteMessage: t("settings.mistralDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.mistralSaved"), deleteSuccessMessage: t("settings.toast.mistralDeleted"),
       },
+      cerebras: {
+        value: cerebrasApiKeyInput, setValue: setCerebrasApiKeyInput, setSaving: setSavingCerebrasKey, setDeleting: setDeletingCerebrasKey,
+        save: api.setCerebrasApiKey, remove: api.deleteCerebrasApiKey,
+        deleteTitle: t("settings.cerebrasDeleteTitle"), deleteMessage: t("settings.cerebrasDeleteMessage"),
+        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cerebrasSaved"), deleteSuccessMessage: t("settings.toast.cerebrasDeleted"),
+      },
       minimax: {
         value: miniMaxApiKeyInput, setValue: setMiniMaxApiKeyInput, setSaving: setSavingMiniMaxKey, setDeleting: setDeletingMiniMaxKey,
         save: api.setMiniMaxApiKey, remove: api.deleteMiniMaxApiKey,
@@ -1358,6 +1367,7 @@ export function useSettingsPageData() {
       minimax: createAccessCardRuntime(miniMaxApiKeyInput, setMiniMaxApiKeyInput, apiKeyHandlers.minimax!.submit, apiKeyHandlers.minimax!.remove, savingMiniMaxKey, deletingMiniMaxKey),
       xiaomi_mimo_token_plan: createAccessCardRuntime(xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput, apiKeyHandlers.xiaomi_mimo_token_plan!.submit, apiKeyHandlers.xiaomi_mimo_token_plan!.remove, savingXiaomiMiMoTokenPlanKey, deletingXiaomiMiMoTokenPlanKey),
       mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
+      cerebras: createAccessCardRuntime(cerebrasApiKeyInput, setCerebrasApiKeyInput, apiKeyHandlers.cerebras!.submit, apiKeyHandlers.cerebras!.remove, savingCerebrasKey, deletingCerebrasKey),
       moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
       xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),
       zai: createAccessCardRuntime(zaiApiKeyInput, setZaiApiKeyInput, apiKeyHandlers.zai!.submit, apiKeyHandlers.zai!.remove, savingZAIKey, deletingZAIKey),

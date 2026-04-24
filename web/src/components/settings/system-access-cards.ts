@@ -11,6 +11,7 @@ export type AccessProviderID =
   | "deepseek"
   | "alibaba"
   | "mistral"
+  | "cerebras"
   | "minimax"
   | "xiaomi_mimo_token_plan"
   | "moonshot"
@@ -166,6 +167,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.mistralNotSet",
     placeholder: "sk-...",
     selectStatus: (settings) => ({ configured: settings.has_mistral_api_key, last4: settings.mistral_api_key_last4 }),
+  },
+  {
+    id: "cerebras",
+    titleKey: "settings.cerebrasTitle",
+    descriptionKey: "settings.cerebrasDescription",
+    notSetKey: "settings.cerebrasNotSet",
+    placeholder: "csk-...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_cerebras_api_key), last4: settings.cerebras_api_key_last4 ?? null }),
   },
   {
     id: "moonshot",

@@ -38,6 +38,8 @@ type SettingsGetPayload struct {
 	AnthropicAPIKeyLast4           *string                         `json:"anthropic_api_key_last4,omitempty"`
 	HasOpenAIAPIKey                bool                            `json:"has_openai_api_key"`
 	OpenAIAPIKeyLast4              *string                         `json:"openai_api_key_last4,omitempty"`
+	HasCerebrasAPIKey              bool                            `json:"has_cerebras_api_key"`
+	CerebrasAPIKeyLast4            *string                         `json:"cerebras_api_key_last4,omitempty"`
 	HasMiniMaxAPIKey               bool                            `json:"has_minimax_api_key"`
 	MiniMaxAPIKeyLast4             *string                         `json:"minimax_api_key_last4,omitempty"`
 	HasXiaomiMiMoTokenPlanAPIKey   bool                            `json:"has_xiaomi_mimo_token_plan_api_key"`
@@ -399,6 +401,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AnthropicAPIKeyLast4:           settings.AnthropicAPIKeyLast4,
 		HasOpenAIAPIKey:                settings.HasOpenAIAPIKey,
 		OpenAIAPIKeyLast4:              settings.OpenAIAPIKeyLast4,
+		HasCerebrasAPIKey:              settings.HasCerebrasAPIKey,
+		CerebrasAPIKeyLast4:            settings.CerebrasAPIKeyLast4,
 		HasMiniMaxAPIKey:               settings.HasMiniMaxAPIKey,
 		MiniMaxAPIKeyLast4:             settings.MiniMaxAPIKeyLast4,
 		HasXiaomiMiMoTokenPlanAPIKey:   settings.HasXiaomiMiMoTokenPlanAPIKey,
@@ -1264,6 +1268,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetAnthropicAPIKey(ctx, userID, enc, last4)
 	case "openai":
 		return s.repo.SetOpenAIAPIKey(ctx, userID, enc, last4)
+	case "cerebras":
+		return s.repo.SetCerebrasAPIKey(ctx, userID, enc, last4)
 	case "minimax":
 		return s.repo.SetMiniMaxAPIKey(ctx, userID, enc, last4)
 	case "xiaomi_mimo_token_plan":
@@ -1317,6 +1323,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearAnthropicAPIKey(ctx, userID)
 	case "openai":
 		return s.repo.ClearOpenAIAPIKey(ctx, userID)
+	case "cerebras":
+		return s.repo.ClearCerebrasAPIKey(ctx, userID)
 	case "minimax":
 		return s.repo.ClearMiniMaxAPIKey(ctx, userID)
 	case "xiaomi_mimo_token_plan":

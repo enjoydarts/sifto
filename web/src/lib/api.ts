@@ -1002,6 +1002,16 @@ export const api = {
       "/settings/mistral-key",
       { method: "DELETE" }
     ),
+  setCerebrasApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_cerebras_api_key: boolean; cerebras_api_key_last4: string | null }>(
+      "/settings/cerebras-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteCerebrasApiKey: () =>
+    apiFetch<{ user_id: string; has_cerebras_api_key: boolean; cerebras_api_key_last4: string | null }>(
+      "/settings/cerebras-key",
+      { method: "DELETE" }
+    ),
   setMiniMaxApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_minimax_api_key: boolean; minimax_api_key_last4: string | null }>(
       "/settings/minimax-key",

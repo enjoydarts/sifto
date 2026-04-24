@@ -708,6 +708,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasDeepInfraAPIKey
 	case "featherless":
 		return settings.HasFeatherlessAPIKey
+	case "cerebras":
+		return settings.HasCerebrasAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

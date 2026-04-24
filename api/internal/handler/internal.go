@@ -781,6 +781,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				openAIKey, err = h.loadDeepInfraAPIKey(r.Context(), t.UserID)
 			case "featherless":
 				openAIKey, err = h.loadFeatherlessAPIKey(r.Context(), t.UserID)
+			case "cerebras":
+				openAIKey, err = h.loadCerebrasAPIKey(r.Context(), t.UserID)
 			default:
 				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
 			}
@@ -1147,6 +1149,24 @@ func (h *InternalHandler) loadFeatherlessAPIKey(ctx context.Context, userID stri
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("featherless api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadCerebrasAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetCerebrasAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("cerebras api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

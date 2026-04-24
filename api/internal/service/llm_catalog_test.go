@@ -191,6 +191,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
+		{model: CerebrasAliasModelID("llama-4-scout-17b-16e-instruct"), provider: "cerebras"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {

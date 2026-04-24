@@ -12,7 +12,7 @@ Provider = Literal[
     "openai", "anthropic", "google", "groq", "deepseek",
     "openrouter", "together", "mistral", "xai", "alibaba",
     "poe", "siliconflow", "fireworks", "zai", "moonshot", "minimax", "xiaomi_mimo_token_plan",
-    "featherless", "deepinfra",
+    "featherless", "deepinfra", "cerebras",
 ]
 
 

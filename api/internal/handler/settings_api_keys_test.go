@@ -60,6 +60,12 @@ func lockSettingsHandlerTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.deepinfra_api_key_last4: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.cerebras_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
+	}
 }
 
 func newSettingsHandlerForAPIKeyTest(t *testing.T) *SettingsHandler {
@@ -344,5 +350,71 @@ func TestSettingsHandlerDeleteDeepInfraAPIKey(t *testing.T) {
 	}
 	if resp.DeepInfraAPIKeyLast4 != nil {
 		t.Fatalf("deepinfra_api_key_last4 = %#v, want nil", resp.DeepInfraAPIKeyLast4)
+	}
+}
+
+func TestSettingsHandlerSetCerebrasAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/cerebras-key", bytes.NewBufferString(`{"api_key":"cerebras-handler-key"}`))
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "00000000-0000-4000-8000-000000000051"))
+	rec := httptest.NewRecorder()
+
+	handler.SetCerebrasAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		UserID              string  `json:"user_id"`
+		HasCerebrasAPIKey   bool    `json:"has_cerebras_api_key"`
+		CerebrasAPIKeyLast4 *string `json:"cerebras_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.HasCerebrasAPIKey {
+		t.Fatal("has_cerebras_api_key = false, want true")
+	}
+	if resp.CerebrasAPIKeyLast4 == nil || *resp.CerebrasAPIKeyLast4 != "-key" {
+		t.Fatalf("cerebras_api_key_last4 = %#v, want %q", resp.CerebrasAPIKeyLast4, "-key")
+	}
+}
+
+func TestSettingsHandlerDeleteCerebrasAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+	userID := "00000000-0000-4000-8000-000000000051"
+
+	setReq := httptest.NewRequest(http.MethodPost, "/api/settings/cerebras-key", bytes.NewBufferString(`{"api_key":"cerebras-handler-key"}`))
+	setReq = setReq.WithContext(context.WithValue(setReq.Context(), middleware.UserIDKey, userID))
+	setRec := httptest.NewRecorder()
+	handler.SetCerebrasAPIKey(setRec, setReq)
+	if setRec.Code != http.StatusOK {
+		t.Fatalf("setup status = %d, want 200 body=%s", setRec.Code, setRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/settings/cerebras-key", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.DeleteCerebrasAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		HasCerebrasAPIKey   bool    `json:"has_cerebras_api_key"`
+		CerebrasAPIKeyLast4 *string `json:"cerebras_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.HasCerebrasAPIKey {
+		t.Fatal("has_cerebras_api_key = true, want false")
+	}
+	if resp.CerebrasAPIKeyLast4 != nil {
+		t.Fatalf("cerebras_api_key_last4 = %#v, want nil", resp.CerebrasAPIKeyLast4)
 	}
 }

@@ -14,7 +14,7 @@ func TestChooseAskModelAcceptsFeatherlessConfiguredModel(t *testing.T) {
 
 	got := chooseAskModel(
 		settings,
-		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false,
+		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false,
 	)
 
 	if got == nil || *got != "featherless::Qwen/Qwen3.5-9B" {
@@ -30,7 +30,7 @@ func TestChooseAskModelAcceptsDeepInfraConfiguredModel(t *testing.T) {
 
 	got := chooseAskModel(
 		settings,
-		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false,
+		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false,
 	)
 
 	if got == nil || *got != "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo" {

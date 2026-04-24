@@ -291,6 +291,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.DeepInfra == "" {
 			keys.DeepInfra = s.loadUserKey(ctx, user.ID, s.settings.GetDeepInfraAPIKeyEncrypted)
 		}
+		if keys.Cerebras == "" {
+			keys.Cerebras = s.loadUserKey(ctx, user.ID, s.settings.GetCerebrasAPIKeyEncrypted)
+		}
 	}
 	return NewProviderModelDiscoveryServiceWithKeys(keys), nil
 }

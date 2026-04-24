@@ -71,6 +71,7 @@ const siliconFlowAliasPrefix = "siliconflow::"
 const togetherAliasPrefix = "together::"
 const featherlessAliasPrefix = "featherless::"
 const deepInfraAliasPrefix = "deepinfra::"
+const cerebrasAliasPrefix = "cerebras::"
 const miniMaxAliasPrefix = "minimax::"
 const miniMaxSlashPrefix = "minimax/"
 
@@ -205,6 +206,26 @@ func ResolveDeepInfraModelID(model string) string {
 
 func IsDeepInfraAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), deepInfraAliasPrefix)
+}
+
+func CerebrasAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, cerebrasAliasPrefix) {
+		return m
+	}
+	return cerebrasAliasPrefix + m
+}
+
+func ResolveCerebrasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, cerebrasAliasPrefix)
+}
+
+func IsCerebrasAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), cerebrasAliasPrefix)
 }
 
 func MiniMaxAliasModelID(model string) string {
@@ -492,6 +513,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsDeepInfraAliasedModel(m) {
 		return "deepinfra"
+	}
+	if IsCerebrasAliasedModel(m) {
+		return "cerebras"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

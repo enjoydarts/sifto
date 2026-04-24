@@ -666,6 +666,8 @@ func TestSelectAudioBriefingOpenAICompatibleKeySupportsFeatherless(t *testing.T)
 	poeKey := stringPtr("poe-key")
 	siliconFlowKey := stringPtr("siliconflow-key")
 	featherlessKey := stringPtr("featherless-key")
+	deepinfraKey := stringPtr("deepinfra-key")
+	cerebrasKey := stringPtr("cerebras-key")
 
 	got := selectAudioBriefingOpenAICompatibleKey(
 		"featherless",
@@ -678,7 +680,8 @@ func TestSelectAudioBriefingOpenAICompatibleKeySupportsFeatherless(t *testing.T)
 		poeKey,
 		siliconFlowKey,
 		featherlessKey,
-		nil,
+		deepinfraKey,
+		cerebrasKey,
 	)
 
 	if got == nil || *got != "featherless-key" {
@@ -718,10 +721,42 @@ func TestSelectAudioBriefingOpenAICompatibleKeySupportsDeepInfra(t *testing.T) {
 		siliconFlowKey,
 		featherlessKey,
 		deepinfraKey,
+		nil,
 	)
 
 	if got == nil || *got != "deepinfra-key" {
 		t.Fatalf("deepinfra key = %v, want deepinfra-key", got)
+	}
+}
+
+func TestSelectAudioBriefingOpenAICompatibleKeySupportsCerebras(t *testing.T) {
+	cerebrasKey := stringPtr("cerebras-key")
+
+	got := selectAudioBriefingOpenAICompatibleKey(
+		"cerebras",
+		stringPtr("openai-key"),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		cerebrasKey,
+	)
+
+	if got == nil || *got != "cerebras-key" {
+		t.Fatalf("cerebras key = %v, want cerebras-key", got)
+	}
+}
+
+func TestHasAudioBriefingProviderKeySupportsCerebras(t *testing.T) {
+	settings := &model.UserSettings{HasCerebrasAPIKey: true}
+
+	if !hasAudioBriefingProviderKey(settings, "cerebras") {
+		t.Fatal("hasAudioBriefingProviderKey(cerebras) = false, want true")
 	}
 }
 

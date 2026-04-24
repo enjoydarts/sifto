@@ -183,6 +183,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 	siliconFlowAPIKey := allKeys["siliconflow"]
 	featherlessAPIKey := allKeys["featherless"]
 	deepinfraAPIKey := allKeys["deepinfra"]
+	cerebrasAPIKey := allKeys["cerebras"]
 	openAIAPIKey := allKeys["openai"]
 	anthropicSourceSuggestionModel := s.getUserSourceSuggestionModel(ctx, userID)
 	resolved := selectSourceSuggestionLLM(
@@ -204,6 +205,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 		siliconFlowAPIKey,
 		featherlessAPIKey,
 		deepinfraAPIKey,
+		cerebrasAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -352,6 +354,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 		resolved.PoeAPIKey,
 		resolved.SiliconFlowAPIKey,
 		resolved.FeatherlessAPIKey,
+		resolved.CerebrasAPIKey,
 		resolved.XAIAPIKey,
 		resolved.ZAIAPIKey,
 		resolved.OpenAIAPIKey,
@@ -403,6 +406,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 	poeAPIKey *string,
 	siliconFlowAPIKey *string,
 	featherlessAPIKey *string,
+	cerebrasAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	openAIAPIKey *string,
@@ -434,10 +438,11 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
 	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
 	hasFeatherless := featherlessAPIKey != nil && strings.TrimSpace(*featherlessAPIKey) != ""
+	hasCerebras := cerebrasAPIKey != nil && strings.TrimSpace(*cerebrasAPIKey) != ""
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasMoonshot && !hasOpenRouter && !hasPoe && !hasSiliconFlow && !hasFeatherless && !hasXAI && !hasZAI && !hasOpenAI {
+	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasMoonshot && !hasOpenRouter && !hasPoe && !hasSiliconFlow && !hasFeatherless && !hasCerebras && !hasXAI && !hasZAI && !hasOpenAI {
 		return nil
 	}
 	existing := make([]RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -489,6 +494,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 		poeAPIKey,
 		siliconFlowAPIKey,
 		featherlessAPIKey,
+		cerebrasAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		fireworksAPIKey,
@@ -639,11 +645,12 @@ type resolvedProviderKeys struct {
 	SiliconFlowAPIKey         *string
 	FeatherlessAPIKey         *string
 	DeepInfraAPIKey           *string
+	CerebrasAPIKey            *string
 	OpenAIAPIKey              *string
 	SelectedModel             *string
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, featherlessAPIKey, deepinfraAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, featherlessAPIKey, deepinfraAPIKey, cerebrasAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -662,6 +669,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
 	hasFeatherless := featherlessAPIKey != nil && strings.TrimSpace(*featherlessAPIKey) != ""
 	hasDeepInfra := deepinfraAPIKey != nil && strings.TrimSpace(*deepinfraAPIKey) != ""
+	hasCerebras := cerebrasAPIKey != nil && strings.TrimSpace(*cerebrasAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -750,6 +758,14 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 					DeepInfraAPIKey: deepinfraAPIKey,
 					OpenAIAPIKey:    deepinfraAPIKey,
 					SelectedModel:   resolved,
+				}
+			}
+		case "cerebras":
+			if hasCerebras {
+				return resolvedProviderKeys{
+					CerebrasAPIKey: cerebrasAPIKey,
+					OpenAIAPIKey:   cerebrasAPIKey,
+					SelectedModel:  resolved,
 				}
 			}
 		case "openai":

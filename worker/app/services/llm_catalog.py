@@ -9,8 +9,16 @@ SILICONFLOW_ALIAS_PREFIX = "siliconflow::"
 TOGETHER_ALIAS_PREFIX = "together::"
 FEATHERLESS_ALIAS_PREFIX = "featherless::"
 DEEPINFRA_ALIAS_PREFIX = "deepinfra::"
+CEREBRAS_ALIAS_PREFIX = "cerebras::"
 MINIMAX_ALIAS_PREFIX = "minimax::"
 MINIMAX_SLASH_PREFIX = "minimax/"
+
+_WORKER_PROVIDER_OVERRIDES = {
+    "cerebras": {
+        "id": "cerebras",
+        "api_key_header": "x-cerebras-api-key",
+    },
+}
 
 
 def resolve_model_id(model: str | None) -> str:
@@ -27,6 +35,8 @@ def resolve_model_id(model: str | None) -> str:
         return m[len(FEATHERLESS_ALIAS_PREFIX) :]
     if m.startswith(DEEPINFRA_ALIAS_PREFIX):
         return m[len(DEEPINFRA_ALIAS_PREFIX) :]
+    if m.startswith(CEREBRAS_ALIAS_PREFIX):
+        return m[len(CEREBRAS_ALIAS_PREFIX) :]
     if m.startswith(MINIMAX_ALIAS_PREFIX):
         return m[len(MINIMAX_ALIAS_PREFIX) :]
     if m.startswith(MINIMAX_SLASH_PREFIX):
@@ -75,8 +85,12 @@ def provider_for_model(model: str | None) -> str:
         return "featherless"
     if m.startswith(DEEPINFRA_ALIAS_PREFIX):
         return "deepinfra"
+    if m.startswith(CEREBRAS_ALIAS_PREFIX):
+        return "cerebras"
     if m.startswith(MINIMAX_ALIAS_PREFIX) or m.startswith(MINIMAX_SLASH_PREFIX):
         return "minimax"
+    if m == "gpt-oss-120b":
+        return "cerebras"
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):
@@ -98,6 +112,8 @@ def provider_config(provider_id: str | None) -> dict | None:
     pid = str(provider_id or "").strip()
     if not pid:
         return None
+    if pid in _WORKER_PROVIDER_OVERRIDES:
+        return dict(_WORKER_PROVIDER_OVERRIDES[pid])
     catalog = load_llm_catalog()
     for provider in catalog.get("providers", []):
         if str(provider.get("id") or "").strip() == pid:

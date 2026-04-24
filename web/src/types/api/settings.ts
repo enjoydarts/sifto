@@ -75,6 +75,8 @@ export interface UserSettings {
   alibaba_api_key_last4: string | null;
   has_mistral_api_key: boolean;
   mistral_api_key_last4: string | null;
+  has_cerebras_api_key?: boolean;
+  cerebras_api_key_last4?: string | null;
   has_moonshot_api_key: boolean;
   moonshot_api_key_last4: string | null;
   has_minimax_api_key: boolean;

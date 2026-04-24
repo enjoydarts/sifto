@@ -136,6 +136,18 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				}
 			},
 		},
+		{
+			name:  "cerebras",
+			model: "cerebras::gpt-oss-120b",
+			check: func(t *testing.T, got resolvedProviderKeys) {
+				if got.CerebrasAPIKey == nil || *got.CerebrasAPIKey != "cerebras-key" {
+					t.Fatalf("CerebrasAPIKey = %v", got.CerebrasAPIKey)
+				}
+				if got.OpenAIAPIKey == nil || *got.OpenAIAPIKey != "cerebras-key" {
+					t.Fatalf("OpenAIAPIKey = %v, want cerebras-key passthrough", got.OpenAIAPIKey)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,6 +171,7 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				strPtr("siliconflow-key"),
 				nil,
 				strPtr("deepinfra-key"),
+				strPtr("cerebras-key"),
 				strPtr("openai-key"),
 				strPtr(tt.model),
 			)

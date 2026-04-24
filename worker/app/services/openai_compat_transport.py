@@ -40,7 +40,20 @@ def _is_deepseek_v4_model(model: str) -> bool:
     return normalized in {"deepseek-v4-flash", "deepseek-v4-pro"}
 
 
+def _is_gpt_oss_model(model: str) -> bool:
+    return str(model or "").strip().lower() == "gpt-oss-120b"
+
+
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
+    if provider_name == "cerebras":
+        if _is_gpt_oss_model(normalized_model):
+            # GPT-OSS can spend the whole output budget on reasoning and return
+            # empty JSON content. Keep reasoning minimal for structured tasks.
+            body["reasoning_effort"] = "low"
+            return
+        if normalized_model == "zai-glm-4.7":
+            body["reasoning_effort"] = "none"
+            return
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
         # exhaust output tokens into reasoning_content and leave message.content empty.

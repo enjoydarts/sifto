@@ -237,6 +237,8 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetDeepInfraAPIKeyEncrypted, s.cipher, userID, "deepinfra api key is not configured")
 	case "featherless":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetFeatherlessAPIKeyEncrypted, s.cipher, userID, "featherless api key is not configured")
+	case "cerebras":
+		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetCerebrasAPIKeyEncrypted, s.cipher, userID, "cerebras api key is not configured")
 	default:
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetAnthropicAPIKeyEncrypted, s.cipher, userID, "anthropic api key is not configured")
 	}
@@ -299,6 +301,8 @@ func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string)
 		return settings.HasDeepInfraAPIKey
 	case "featherless":
 		return settings.HasFeatherlessAPIKey
+	case "cerebras":
+		return settings.HasCerebrasAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

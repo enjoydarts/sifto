@@ -58,6 +58,7 @@ type ProviderModelDiscoveryKeys struct {
 	XiaomiMiMoTokenPlan string
 	Featherless         string
 	DeepInfra           string
+	Cerebras            string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -98,6 +99,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"xiaomi_mimo_token_plan", s.fetchXiaomiMiMoTokenPlanModels},
 		{"featherless", s.fetchFeatherlessModels},
 		{"deepinfra", s.fetchDeepInfraModels},
+		{"cerebras", s.fetchCerebrasModels},
 	}
 	type indexedResult struct {
 		index  int
@@ -724,6 +726,31 @@ func (s *ProviderModelDiscoveryService) fetchDeepInfraSnapshots(ctx context.Cont
 	return snapshots, nil
 }
 
+func (s *ProviderModelDiscoveryService) fetchCerebrasModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(s.keys.Cerebras)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("CEREBRAS_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := normalizeCerebrasAPIBaseURL(os.Getenv("CEREBRAS_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var models []string
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		var readErr error
+		models, readErr = readModelsListResponse(resp)
+		return readErr
+	}); err != nil {
+		return nil, err
+	}
+	return models, nil
+}
+
 func parseDiscoveryFloatPtr(m map[string]any, keys ...string) *float64 {
 	if len(m) == 0 {
 		return nil
@@ -761,6 +788,19 @@ func parseDiscoveryFloatPtr(m map[string]any, keys ...string) *float64 {
 		}
 	}
 	return nil
+}
+
+func normalizeCerebrasAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://api.cerebras.ai"
+	}
+	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
 }
 
 func normalizeXiaomiMiMoTokenPlanAPIBaseURL(raw string) string {

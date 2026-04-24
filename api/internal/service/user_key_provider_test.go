@@ -80,3 +80,25 @@ func TestUserKeyProviderGetAPIKeyLoadsDeepInfraKey(t *testing.T) {
 		t.Fatalf("GetAPIKey(deepinfra) = %#v, want %q", got, "deepinfra-secret-value")
 	}
 }
+
+func TestUserKeyProviderGetAPIKeyLoadsCerebrasKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "user-key-provider-cerebras-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "cerebras", "cerebras-secret-value"); err != nil {
+		t.Fatalf("SetAPIKey(cerebras) error = %v", err)
+	}
+
+	provider := NewUserKeyProvider(svc.repo, svc.cipher)
+	got, err := provider.GetAPIKey(ctx, userID, "cerebras")
+	if err != nil {
+		t.Fatalf("GetAPIKey(cerebras) error = %v", err)
+	}
+	if got == nil || *got != "cerebras-secret-value" {
+		t.Fatalf("GetAPIKey(cerebras) = %#v, want %q", got, "cerebras-secret-value")
+	}
+}

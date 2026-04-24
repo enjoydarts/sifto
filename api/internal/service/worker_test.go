@@ -19,6 +19,7 @@ func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 	xiaomiKey := workerTestStringPtr("xiaomi-key")
 	featherlessKey := workerTestStringPtr("featherless-key")
 	deepinfraKey := workerTestStringPtr("deepinfra-key")
+	cerebrasKey := workerTestStringPtr("cerebras-key")
 	openAIKey := workerTestStringPtr("openai-key")
 
 	tests := []struct {
@@ -35,12 +36,13 @@ func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 		{name: "xiaomi mimo token plan", model: workerTestStringPtr("mimo-v2-pro"), want: xiaomiKey},
 		{name: "featherless", model: workerTestStringPtr("featherless::Qwen/Qwen3.5-9B"), want: featherlessKey},
 		{name: "deepinfra", model: workerTestStringPtr("deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo"), want: deepinfraKey},
+		{name: "cerebras", model: workerTestStringPtr("cerebras::llama-4-scout-17b-16e-instruct"), want: cerebrasKey},
 		{name: "openai fallback", model: workerTestStringPtr("gpt-5.4-mini"), want: openAIKey},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := selectOpenAICompatibleKey(tt.model, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, featherlessKey, deepinfraKey, openAIKey)
+			got := selectOpenAICompatibleKey(tt.model, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, featherlessKey, deepinfraKey, cerebrasKey, openAIKey)
 			if got == nil || tt.want == nil || *got != *tt.want {
 				t.Fatalf("got %v, want %v", workerTestDerefString(got), workerTestDerefString(tt.want))
 			}
@@ -71,6 +73,32 @@ func TestWorkerHeadersUsesMinimaxHeaderForMiniMaxModels(t *testing.T) {
 	}
 	if _, ok := headers["X-Openai-Api-Key"]; ok {
 		t.Fatalf("X-Openai-Api-Key should not be set for MiniMax models")
+	}
+}
+
+func TestWorkerHeadersUsesCerebrasHeaderForCerebrasModels(t *testing.T) {
+	headers := workerHeadersForModel(
+		workerTestStringPtr("cerebras::llama-4-scout-17b-16e-instruct"),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		workerTestStringPtr("cerebras-key"),
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	if got := headers["X-Cerebras-Api-Key"]; got != "cerebras-key" {
+		t.Fatalf("X-Cerebras-Api-Key = %q, want %q", got, "cerebras-key")
+	}
+	if _, ok := headers["X-Openai-Api-Key"]; ok {
+		t.Fatalf("X-Openai-Api-Key should not be set for Cerebras models")
 	}
 }
 

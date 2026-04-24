@@ -135,6 +135,44 @@ func TestCreateAudioBriefingPresetValidatesVoices(t *testing.T) {
 	}
 }
 
+func TestSettingsServiceSetAndDeleteCerebrasAPIKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-cerebras-test-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	settings, err := svc.SetAPIKey(ctx, userID, "cerebras", "cerebras-secret-value")
+	if err != nil {
+		t.Fatalf("SetAPIKey(cerebras) error = %v", err)
+	}
+	if !settings.HasCerebrasAPIKey {
+		t.Fatal("HasCerebrasAPIKey = false, want true")
+	}
+	if settings.CerebrasAPIKeyLast4 == nil || *settings.CerebrasAPIKeyLast4 != "alue" {
+		t.Fatalf("CerebrasAPIKeyLast4 = %#v, want %q", settings.CerebrasAPIKeyLast4, "alue")
+	}
+	enc, err := svc.repo.GetCerebrasAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetCerebrasAPIKeyEncrypted() error = %v", err)
+	}
+	if enc == nil || *enc == "" {
+		t.Fatalf("GetCerebrasAPIKeyEncrypted() = %#v, want encrypted value", enc)
+	}
+
+	settings, err = svc.DeleteAPIKey(ctx, userID, "cerebras")
+	if err != nil {
+		t.Fatalf("DeleteAPIKey(cerebras) error = %v", err)
+	}
+	if settings.HasCerebrasAPIKey {
+		t.Fatal("HasCerebrasAPIKey = true, want false")
+	}
+	if settings.CerebrasAPIKeyLast4 != nil {
+		t.Fatalf("CerebrasAPIKeyLast4 = %#v, want nil", settings.CerebrasAPIKeyLast4)
+	}
+}
+
 func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	t.Helper()
 
@@ -170,6 +208,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	}
 	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.deepinfra_api_key_last4: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.cerebras_api_key_enc: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
 	}
 }
 

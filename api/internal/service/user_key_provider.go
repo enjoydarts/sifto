@@ -47,6 +47,7 @@ func (p *UserKeyProvider) registerLoaders() {
 	p.loaders["poe"] = p.settingsRepo.GetPoeAPIKeyEncrypted
 	p.loaders["siliconflow"] = p.settingsRepo.GetSiliconFlowAPIKeyEncrypted
 	p.loaders["openai"] = p.settingsRepo.GetOpenAIAPIKeyEncrypted
+	p.loaders["cerebras"] = p.settingsRepo.GetCerebrasAPIKeyEncrypted
 }
 
 func (p *UserKeyProvider) GetAPIKey(ctx context.Context, userID, provider string) (*string, error) {
@@ -90,7 +91,7 @@ func (p *UserKeyProvider) GetAllKeys(ctx context.Context, userID string) map[str
 func (p *UserKeyProvider) ResolveOpenAIKey(keys map[string]*string, model *string) *string {
 	provider := LLMProviderForModel(model)
 	switch provider {
-	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax", "xiaomi_mimo_token_plan", "featherless", "deepinfra":
+	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax", "xiaomi_mimo_token_plan", "featherless", "deepinfra", "cerebras":
 		return keys[provider]
 	default:
 		return keys["openai"]

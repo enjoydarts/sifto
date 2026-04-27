@@ -17,17 +17,98 @@ from app.services.feed_task_common import (
     _audio_briefing_script_budgets,
     build_audio_briefing_script_schema,
     build_audio_briefing_script_task,
+    build_ask_rerank_task,
+    build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
     build_item_navigator_task,
     build_source_navigator_task,
     parse_audio_briefing_script_result,
+    parse_ask_rerank_result,
+    parse_ask_result,
 )
 from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import bind_prompt_override
 
 
 class FeedTaskCommonTests(unittest.TestCase):
+    def test_build_ask_task_uses_richer_context_and_answer_budget(self):
+        task = build_ask_task(
+            "AI投資の論点は？",
+            [
+                {
+                    "item_id": "item-1",
+                    "translated_title": "AI投資の記事",
+                    "summary": "あ" * 700,
+                    "facts": [f"fact-{idx}" for idx in range(1, 9)],
+                    "topics": ["AI", "投資"],
+                    "published_at": "2026-04-27T00:00:00Z",
+                    "similarity": 0.84,
+                }
+            ],
+        )
+
+        self.assertIn("6〜14文", task["system_instruction"])
+        self.assertIn("4〜7件", task["system_instruction"])
+        self.assertIn("facts=fact-1 / fact-2 / fact-3 / fact-4 / fact-5 / fact-6 / fact-7 / fact-8", task["prompt"])
+        self.assertIn("あ" * 650, task["prompt"])
+
+    def test_parse_ask_result_preserves_more_bullets_and_citations(self):
+        candidates = [{"item_id": f"item-{idx}"} for idx in range(1, 9)]
+        text = json.dumps(
+            {
+                "answer": "回答です [[item-1]]",
+                "bullets": [f"bullet-{idx}" for idx in range(1, 9)],
+                "citations": [{"item_id": f"item-{idx}", "reason": f"reason-{idx}"} for idx in range(1, 9)],
+            },
+            ensure_ascii=False,
+        )
+
+        result = parse_ask_result(text, candidates, error_prefix="ask")
+
+        self.assertEqual(len(result["bullets"]), 7)
+        self.assertEqual(len(result["citations"]), 7)
+        self.assertEqual(result["citations"][-1]["item_id"], "item-7")
+
+    def test_build_ask_rerank_task_uses_direct_evidence_rules(self):
+        task = build_ask_rerank_task(
+            "AI投資の論点は？",
+            [
+                {
+                    "item_id": "item-1",
+                    "translated_title": "AI投資の記事",
+                    "summary": "summary",
+                    "facts": ["fact"],
+                    "highlights": ["highlight"],
+                    "excerpt": "body excerpt",
+                    "hybrid_score": 0.72,
+                }
+            ],
+            top_k=12,
+        )
+
+        self.assertIn("質問に直接答える根拠", task["prompt"])
+        self.assertIn("hybrid_score=0.72", task["prompt"])
+        self.assertIn("highlights=highlight", task["prompt"])
+        self.assertEqual(task["top_k"], 12)
+
+    def test_parse_ask_rerank_result_filters_unknown_ids_and_fills_fallback(self):
+        result = parse_ask_rerank_result(
+            json.dumps(
+                {
+                    "items": [
+                        {"item_id": "item-3", "reason": "direct"},
+                        {"item_id": "missing", "reason": "bad"},
+                        {"item_id": "item-3", "reason": "dup"},
+                    ]
+                }
+            ),
+            [{"item_id": "item-1"}, {"item_id": "item-2"}, {"item_id": "item-3"}],
+            3,
+        )
+
+        self.assertEqual([item["item_id"] for item in result["items"]], ["item-3", "item-1", "item-2"])
+
     def test_build_audio_briefing_script_schema_for_duo_opening_requires_turns_shape(self):
         schema = build_audio_briefing_script_schema(
             conversation_mode="duo",

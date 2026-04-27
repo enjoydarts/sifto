@@ -380,9 +380,12 @@ type AskCandidate struct {
 	URL             string   `json:"url"`
 	Summary         string   `json:"summary"`
 	Facts           []string `json:"facts,omitempty"`
+	Excerpt         string   `json:"excerpt,omitempty"`
+	Highlights      []string `json:"highlights,omitempty"`
 	Topics          []string `json:"topics,omitempty"`
 	PublishedAt     *string  `json:"published_at,omitempty"`
 	Similarity      float64  `json:"similarity"`
+	HybridScore     float64  `json:"hybrid_score,omitempty"`
 }
 
 type AskCitation struct {
@@ -395,6 +398,16 @@ type AskResponse struct {
 	Bullets   []string      `json:"bullets"`
 	Citations []AskCitation `json:"citations"`
 	LLM       *LLMUsage     `json:"llm,omitempty"`
+}
+
+type AskRerankItem struct {
+	ItemID string `json:"item_id"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type AskRerankResponse struct {
+	Items []AskRerankItem `json:"items"`
+	LLM   *LLMUsage       `json:"llm,omitempty"`
 }
 
 type AskNavigatorCitation struct {
@@ -704,6 +717,36 @@ func (w *WorkerClient) AskWithModel(
 	return postWithHeaders[AskResponse](ctx, w, "/ask", map[string]any{
 		"query":      query,
 		"candidates": candidates,
+		"model":      model,
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+}
+
+func (w *WorkerClient) AskRerankWithModel(
+	ctx context.Context,
+	query string,
+	candidates []AskCandidate,
+	topK int,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	groqAPIKey *string,
+	deepseekAPIKey *string,
+	alibabaAPIKey *string,
+	mistralAPIKey *string,
+	xaiAPIKey *string,
+	zaiAPIKey *string,
+	fireworksAPIKey *string,
+	openAIAPIKey *string,
+	model *string,
+) (*AskRerankResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.askTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.askTimeout)
+		defer cancel()
+	}
+	return postWithHeaders[AskRerankResponse](ctx, w, "/ask-rerank", map[string]any{
+		"query":      query,
+		"candidates": candidates,
+		"top_k":      topK,
 		"model":      model,
 	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }

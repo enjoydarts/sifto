@@ -53,8 +53,10 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    ASK_MAX_OUTPUT_TOKENS,
     build_ai_navigator_brief_task,
     build_audio_briefing_script_task,
+    build_ask_rerank_task,
     build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -64,6 +66,7 @@ from app.services.feed_task_common import (
     build_seed_sites_task,
     parse_ai_navigator_brief_result,
     parse_audio_briefing_script_result,
+    parse_ask_rerank_result,
     parse_ask_result,
     parse_ask_navigator_result,
     parse_briefing_navigator_result,
@@ -754,7 +757,7 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
         f"{task['system_instruction']}\n\n{task['prompt']}",
         resolved_model,
         None,
-        max_tokens=3200,
+        max_tokens=ASK_MAX_OUTPUT_TOKENS,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
         system_prompt=task["system_instruction"],
@@ -764,6 +767,27 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
         _raise_execution_failure("ask", _execution_failures, "anthropic ask returned no message")
     text = _message_text(message)
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
+    return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
+
+
+def ask_rerank(query: str, candidates: list[dict], top_k: int, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "ask")
+    _require_api_key(api_key, "ask")
+    if not candidates:
+        return {"items": [], "llm": empty_llm_meta("none", "none")}
+    task = build_ask_rerank_task(query, candidates, top_k)
+    message, used_model, _execution_failures = _call_with_model_fallback(
+        task["prompt"],
+        resolved_model,
+        None,
+        max_tokens=1600,
+        api_key=api_key,
+        timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
+    )
+    if message is None:
+        _raise_execution_failure("ask", _execution_failures, "anthropic ask_rerank returned no message")
+    text = _message_text(message)
+    result = parse_ask_rerank_result(text, candidates, task["top_k"])
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
 
@@ -1427,7 +1451,7 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
         f"{task['system_instruction']}\n\n{task['prompt']}",
         resolved_model,
         None,
-        max_tokens=3200,
+        max_tokens=ASK_MAX_OUTPUT_TOKENS,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
         system_prompt=task["system_instruction"],
@@ -1437,6 +1461,27 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
         _raise_execution_failure("ask", _execution_failures, "anthropic ask returned no message")
     text = _message_text(message)
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
+    return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
+
+
+async def ask_rerank_async(query: str, candidates: list[dict], top_k: int, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "ask")
+    _require_api_key(api_key, "ask")
+    if not candidates:
+        return {"items": [], "llm": empty_llm_meta("none", "none")}
+    task = build_ask_rerank_task(query, candidates, top_k)
+    message, used_model, _execution_failures = await _call_with_model_fallback_async(
+        task["prompt"],
+        resolved_model,
+        None,
+        max_tokens=1600,
+        api_key=api_key,
+        timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
+    )
+    if message is None:
+        _raise_execution_failure("ask", _execution_failures, "anthropic ask_rerank returned no message")
+    text = _message_text(message)
+    result = parse_ask_rerank_result(text, candidates, task["top_k"])
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
 

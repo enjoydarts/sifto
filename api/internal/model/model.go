@@ -697,9 +697,12 @@ type RelatedItem struct {
 
 type AskCandidate struct {
 	Item
-	Summary    string   `json:"summary"`
-	Facts      []string `json:"facts,omitempty"`
-	Similarity float64  `json:"similarity"`
+	Summary     string   `json:"summary"`
+	Facts       []string `json:"facts,omitempty"`
+	Excerpt     string   `json:"excerpt,omitempty"`
+	Highlights  []string `json:"highlights,omitempty"`
+	Similarity  float64  `json:"similarity"`
+	HybridScore float64  `json:"hybrid_score,omitempty"`
 }
 
 type AskCitation struct {

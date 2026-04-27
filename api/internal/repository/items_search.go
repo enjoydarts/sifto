@@ -363,8 +363,8 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if limit <= 0 {
 		limit = 6
 	}
-	if limit > 20 {
-		limit = 20
+	if limit > 50 {
+		limit = 50
 	}
 	const minSimilarity = 0.35
 	fetchLimit := limit * 5
@@ -450,6 +450,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 func (r *ItemRepo) AskCandidatesByEmbedding(
 	ctx context.Context,
 	userID string,
+	queryText string,
 	queryEmbedding []float64,
 	days int,
 	unreadOnly bool,
@@ -471,9 +472,9 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 	if limit > 20 {
 		limit = 20
 	}
-	fetchLimit := limit * 4
-	if fetchLimit < 24 {
-		fetchLimit = 24
+	fetchLimit := limit * 3
+	if fetchLimit < 50 {
+		fetchLimit = 50
 	}
 	if fetchLimit > 80 {
 		fetchLimit = 80
@@ -485,10 +486,22 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 	if candidateLimit > askCandidateLimitMax {
 		candidateLimit = askCandidateLimitMax
 	}
+	queryTerms := askQueryTerms(queryText)
 
 	query := `
 		WITH q AS (
-			SELECT $2::double precision[] AS emb, array_length($2::double precision[], 1) AS dims
+			SELECT $2::double precision[] AS emb, array_length($2::double precision[], 1) AS dims, $4::text[] AS terms
+		), source_affinity AS (
+			SELECT i.source_id,
+			       COUNT(*) FILTER (WHERE ir.item_id IS NOT NULL)::double precision AS read_count,
+			       COUNT(*) FILTER (WHERE COALESCE(fb.is_favorite, false))::double precision AS favorite_count,
+			       COUNT(*) FILTER (WHERE COALESCE(fb.rating, 0) > 0)::double precision AS positive_count
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+			WHERE s.user_id = $1
+			GROUP BY i.source_id
 		), candidate_items AS (
 			SELECT i.id, COALESCE(i.published_at, i.created_at) AS effective_published_at, sm.score
 			FROM items i
@@ -500,13 +513,13 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $3::int)
 	`
-	args := []any{userID, queryEmbedding, days}
+	args := []any{userID, queryEmbedding, days, queryTerms}
 	if unreadOnly {
 		query += ` AND ir.item_id IS NULL`
 	}
 	if len(sourceIDs) > 0 {
 		args = append(args, sourceIDs)
-		query += ` AND i.source_id = ANY($4::uuid[])`
+		query += ` AND i.source_id = ANY($` + strconv.Itoa(len(args)) + `::uuid[])`
 	}
 	query += `
 			ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
@@ -520,9 +533,26 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			       COALESCE(fb.rating, 0) AS feedback_rating,
 			       sm.score, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.translated_title,
 			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+			       COALESCE(i.content_text, '') AS content_text,
 			       sm.summary,
 			       COALESCE(f.facts, '[]'::jsonb) AS facts,
 			       ci.effective_published_at,
+			       COALESCE(sa.read_count, 0) AS source_read_count,
+			       COALESCE(sa.favorite_count, 0) AS source_favorite_count,
+			       COALESCE(sa.positive_count, 0) AS source_positive_count,
+			       COALESCE(
+			         (
+			           SELECT array_agg(h.quote_text ORDER BY h.created_at DESC)
+			           FROM (
+			             SELECT quote_text, created_at
+			             FROM item_highlights
+			             WHERE user_id = $1::text AND item_id = i.id AND BTRIM(quote_text) <> ''
+			             ORDER BY created_at DESC
+			             LIMIT 3
+			           ) h
+			         ),
+			         '{}'::text[]
+			       ) AS highlights,
 			       COALESCE(
 			         (
 			           SELECT SUM(qv * cv)
@@ -539,17 +569,62 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			LEFT JOIN item_facts f ON f.item_id = i.id
 			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+			LEFT JOIN source_affinity sa ON sa.source_id = i.source_id
 	`
 	query += `
+		), enriched AS (
+			SELECT scored.*,
+			       LEAST(1.0, GREATEST(0.0, COALESCE(scored.score, 0)::double precision)) AS summary_score_norm,
+			       CASE
+			         WHEN scored.effective_published_at >= NOW() - INTERVAL '24 hours' THEN 1.0
+			         WHEN scored.effective_published_at >= NOW() - INTERVAL '3 days' THEN 0.75
+			         WHEN scored.effective_published_at >= NOW() - INTERVAL '7 days' THEN 0.55
+			         WHEN scored.effective_published_at >= NOW() - INTERVAL '30 days' THEN 0.30
+			         ELSE 0.12
+			       END AS recency_score,
+			       LEAST(1.0,
+			         CASE
+			           WHEN COALESCE(array_length((SELECT terms FROM q), 1), 0) = 0 THEN 0.0
+			           ELSE (
+			             SELECT COALESCE(SUM(
+			               CASE WHEN lower(COALESCE(scored.translated_title, '') || ' ' || COALESCE(scored.title, '')) LIKE '%' || term || '%' THEN 0.42 ELSE 0 END +
+			               CASE WHEN lower(COALESCE(scored.summary, '')) LIKE '%' || term || '%' THEN 0.28 ELSE 0 END +
+			               CASE WHEN lower(COALESCE(scored.facts::text, '')) LIKE '%' || term || '%' THEN 0.22 ELSE 0 END +
+			               CASE WHEN lower(COALESCE(array_to_string(scored.topics, ' '), '')) LIKE '%' || term || '%' THEN 0.18 ELSE 0 END
+			             ), 0.0) / GREATEST(COALESCE(array_length((SELECT terms FROM q), 1), 0)::double precision, 1.0)
+			             FROM unnest((SELECT terms FROM q)) AS term
+			           )
+			         END
+			       ) AS keyword_score,
+			       LEAST(1.0,
+			         (CASE WHEN scored.is_favorite THEN 0.35 ELSE 0 END) +
+			         (CASE WHEN scored.feedback_rating > 0 THEN 0.25 ELSE 0 END) +
+			         (CASE WHEN scored.feedback_rating < 0 THEN -0.25 ELSE 0 END) +
+			         (CASE WHEN scored.is_read THEN 0.08 ELSE 0 END) +
+			         LEAST(0.24, COALESCE(scored.source_positive_count, 0) * 0.04 + COALESCE(scored.source_favorite_count, 0) * 0.05 + COALESCE(scored.source_read_count, 0) * 0.01)
+			       ) AS user_affinity_score
+			FROM scored
+		), ranked AS (
+			SELECT enriched.*,
+			       (
+			         GREATEST(enriched.similarity, 0.0) * 0.46 +
+			         enriched.keyword_score * 0.24 +
+			         enriched.recency_score * 0.10 +
+			         enriched.summary_score_norm * 0.10 +
+			         enriched.user_affinity_score * 0.10
+			       ) AS hybrid_score
+			FROM enriched
 		)
 		SELECT id, source_id, url, title, thumbnail_url, status,
 		       is_read, is_favorite, feedback_rating,
 		       score, topics, translated_title,
 		       published_at, fetched_at, created_at, updated_at,
-		       summary, facts, similarity
-		FROM scored
-		WHERE similarity > 0.15
-		ORDER BY similarity DESC, score DESC NULLS LAST, effective_published_at DESC
+		       summary, facts, similarity, hybrid_score,
+		       LEFT(regexp_replace(COALESCE(content_text, ''), '\s+', ' ', 'g'), 1200) AS excerpt,
+		       COALESCE(highlights, '{}'::text[]) AS highlights
+		FROM ranked
+		WHERE similarity > 0.10 OR keyword_score > 0.05
+		ORDER BY hybrid_score DESC, similarity DESC, score DESC NULLS LAST, effective_published_at DESC
 		LIMIT $`
 	args = append(args, fetchLimit)
 	query += strconv.Itoa(len(args))
@@ -568,7 +643,8 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			&v.IsRead, &v.IsFavorite, &v.FeedbackRating,
 			&v.SummaryScore, &v.SummaryTopics, &v.TranslatedTitle,
 			&v.PublishedAt, &v.FetchedAt, &v.CreatedAt, &v.UpdatedAt,
-			&v.Summary, jsonStringArrayScanner{dst: &v.Facts}, &v.Similarity,
+			&v.Summary, jsonStringArrayScanner{dst: &v.Facts}, &v.Similarity, &v.HybridScore,
+			&v.Excerpt, &v.Highlights,
 		); err != nil {
 			return nil, err
 		}
@@ -634,7 +710,11 @@ func selectAskCandidatesByMMR(candidates []model.AskCandidate, limit int) []mode
 }
 
 func askCandidateBaseScore(item model.AskCandidate) float64 {
-	score := item.Similarity * 0.68
+	base := item.HybridScore
+	if base <= 0 {
+		base = item.Similarity
+	}
+	score := base * 0.68
 	if item.SummaryScore != nil {
 		score += *item.SummaryScore * 0.22
 	}
@@ -691,4 +771,25 @@ func maxAskTopicOverlap(item model.AskCandidate, selected []model.AskCandidate) 
 		}
 	}
 	return maxOverlap
+}
+
+func askQueryTerms(query string) []string {
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
+	terms := make([]string, 0, len(fields))
+	seen := map[string]struct{}{}
+	for _, field := range fields {
+		term := strings.Trim(field, " \t\r\n.,!?;:()[]{}<>\"'`“”‘’、。！？；：（）【】「」『』")
+		if len([]rune(term)) < 2 {
+			continue
+		}
+		if _, ok := seen[term]; ok {
+			continue
+		}
+		seen[term] = struct{}{}
+		terms = append(terms, term)
+		if len(terms) >= 12 {
+			break
+		}
+	}
+	return terms
 }

@@ -15,9 +15,12 @@ class AskCandidate(BaseModel):
     url: str
     summary: str
     facts: list[str] = []
+    excerpt: str | None = None
+    highlights: list[str] = []
     topics: list[str] = []
     published_at: str | None = None
     similarity: float = 0.0
+    hybrid_score: float = 0.0
 
 
 class AskRequest(BaseModel):
@@ -35,6 +38,23 @@ class AskResponse(BaseModel):
     answer: str
     bullets: list[str]
     citations: list[AskCitation]
+    llm: dict | None = None
+
+
+class AskRerankRequest(BaseModel):
+    query: str
+    candidates: list[AskCandidate]
+    top_k: int = 12
+    model: str | None = None
+
+
+class AskRerankItem(BaseModel):
+    item_id: str
+    reason: str = ""
+
+
+class AskRerankResponse(BaseModel):
+    items: list[AskRerankItem]
     llm: dict | None = None
 
 
@@ -61,3 +81,28 @@ async def ask_endpoint(req: AskRequest, request: Request):
         },
     )
     return AskResponse(**result)
+
+
+@router.post("/ask-rerank", response_model=AskRerankResponse)
+async def ask_rerank_endpoint(req: AskRerankRequest, request: Request):
+    candidates = [c.model_dump() for c in req.candidates]
+    top_k = max(1, min(int(req.top_k or 12), 20))
+    result = await run_observed_request_async(
+        request,
+        metadata={"model": req.model or "", "candidates_count": len(candidates), "top_k": top_k, "query_chars": len(req.query or "")},
+        input_payload={"query": req.query, "candidates_count": len(candidates), "top_k": top_k, "model": req.model},
+        call=lambda: dispatch_by_model_async(
+            request,
+            req.model,
+            handlers=build_handler_map_async(
+                "ask_rerank",
+                args_fn=lambda func, api_key: func(req.query, candidates, top_k, model=str(req.model), api_key=api_key or ""),
+                anthropic_args_fn=lambda func, api_key: func(req.query, candidates, top_k, api_key=api_key, model=req.model),
+            ),
+        ),
+        output_builder=lambda result: {
+            "reranked_count": len(result.get("items") or []),
+            **llm_usage_summary(result),
+        },
+    )
+    return AskRerankResponse(**result)

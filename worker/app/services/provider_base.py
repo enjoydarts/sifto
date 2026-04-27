@@ -38,8 +38,10 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    ASK_MAX_OUTPUT_TOKENS,
     build_ai_navigator_brief_task,
     build_audio_briefing_script_task,
+    build_ask_rerank_task,
     build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -51,6 +53,7 @@ from app.services.feed_task_common import (
     merge_llm_usage,
     parse_ai_navigator_brief_result,
     parse_audio_briefing_script_result,
+    parse_ask_rerank_result,
     parse_ask_result,
     parse_ask_navigator_result,
     parse_briefing_navigator_result,
@@ -534,11 +537,26 @@ class OpenAICompatProvider:
             model,
             api_key,
             system_instruction=task["system_instruction"],
-            max_output_tokens=3200,
+            max_output_tokens=ASK_MAX_OUTPUT_TOKENS,
             response_schema=task["schema"],
             schema_name="ask",
         )
         result = parse_ask_result(text, candidates, error_prefix=f"{self.config.provider_name} ask missing answer")
+        return {**result, "llm": self._llm_meta(model, "ask", usage)}
+
+    def ask_rerank(self, query: str, candidates: list[dict], top_k: int, model: str, api_key: str) -> dict:
+        if not candidates:
+            return {"items": [], "llm": self._llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0})}
+        task = build_ask_rerank_task(query, candidates, top_k)
+        text, usage = self._chat_json(
+            task["prompt"],
+            model,
+            api_key,
+            max_output_tokens=1600,
+            response_schema=task["schema"],
+            schema_name="ask_rerank",
+        )
+        result = parse_ask_rerank_result(text, candidates, task["top_k"])
         return {**result, "llm": self._llm_meta(model, "ask", usage)}
 
     def compose_digest_cluster_draft(self, cluster_label: str, item_count: int, topics: list[str], source_lines: list[str], model: str, api_key: str) -> dict:
@@ -839,11 +857,26 @@ class OpenAICompatProvider:
             model,
             api_key,
             system_instruction=task["system_instruction"],
-            max_output_tokens=3200,
+            max_output_tokens=ASK_MAX_OUTPUT_TOKENS,
             response_schema=task["schema"],
             schema_name="ask",
         )
         result = parse_ask_result(text, candidates, error_prefix=f"{self.config.provider_name} ask missing answer")
+        return {**result, "llm": self._llm_meta(model, "ask", usage)}
+
+    async def ask_rerank_async(self, query: str, candidates: list[dict], top_k: int, model: str, api_key: str) -> dict:
+        if not candidates:
+            return {"items": [], "llm": self._llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0})}
+        task = build_ask_rerank_task(query, candidates, top_k)
+        text, usage = await self._chat_json_async(
+            task["prompt"],
+            model,
+            api_key,
+            max_output_tokens=1600,
+            response_schema=task["schema"],
+            schema_name="ask_rerank",
+        )
+        result = parse_ask_rerank_result(text, candidates, task["top_k"])
         return {**result, "llm": self._llm_meta(model, "ask", usage)}
 
     async def compose_digest_cluster_draft_async(self, cluster_label: str, item_count: int, topics: list[str], source_lines: list[str], model: str, api_key: str) -> dict:

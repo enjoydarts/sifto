@@ -54,8 +54,10 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    ASK_MAX_OUTPUT_TOKENS,
     build_ai_navigator_brief_task,
     build_audio_briefing_script_task,
+    build_ask_rerank_task,
     build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -65,6 +67,7 @@ from app.services.feed_task_common import (
     build_seed_sites_task,
     parse_ai_navigator_brief_result,
     parse_audio_briefing_script_result,
+    parse_ask_rerank_result,
     parse_ask_result,
     parse_ask_navigator_result,
     parse_briefing_navigator_result,
@@ -757,12 +760,28 @@ def ask_question(query: str, candidates: list[dict], model: str, api_key: str) -
         task["prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=3200,
+        max_output_tokens=ASK_MAX_OUTPUT_TOKENS,
         response_schema=task["schema"],
         timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
         system_instruction=task["system_instruction"],
     )
     result = parse_ask_result(text, candidates, error_prefix="gemini ask missing answer")
+    return {**result, "llm": _llm_meta(model, "ask", usage)}
+
+
+def ask_rerank(query: str, candidates: list[dict], top_k: int, model: str, api_key: str) -> dict:
+    if not candidates:
+        return {"items": [], "llm": _llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0})}
+    task = build_ask_rerank_task(query, candidates, top_k)
+    text, usage = _generate_content(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=1600,
+        response_schema=task["schema"],
+        timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
+    )
+    result = parse_ask_rerank_result(text, candidates, task["top_k"])
     return {**result, "llm": _llm_meta(model, "ask", usage)}
 
 
@@ -1217,12 +1236,28 @@ async def ask_question_async(query: str, candidates: list[dict], model: str, api
         task["prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=3200,
+        max_output_tokens=ASK_MAX_OUTPUT_TOKENS,
         response_schema=task["schema"],
         timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
         system_instruction=task["system_instruction"],
     )
     result = parse_ask_result(text, candidates, error_prefix="gemini ask missing answer")
+    return {**result, "llm": _llm_meta(model, "ask", usage)}
+
+
+async def ask_rerank_async(query: str, candidates: list[dict], top_k: int, model: str, api_key: str) -> dict:
+    if not candidates:
+        return {"items": [], "llm": _llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0})}
+    task = build_ask_rerank_task(query, candidates, top_k)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=1600,
+        response_schema=task["schema"],
+        timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
+    )
+    result = parse_ask_rerank_result(text, candidates, task["top_k"])
     return {**result, "llm": _llm_meta(model, "ask", usage)}
 
 

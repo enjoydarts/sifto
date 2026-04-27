@@ -15,6 +15,9 @@ from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import apply_prompt_override
 
 
+ASK_MAX_OUTPUT_TOKENS = 5200
+
+
 ASK_SYSTEM_INSTRUCTION = """# Role
 あなたはRSSキュレーションアシスタントです。
 
@@ -25,12 +28,13 @@ ASK_SYSTEM_INSTRUCTION = """# Role
 - 根拠は候補記事だけに限定してください。
 - 候補記事から判断できないことは「候補記事からは判断できない」と明記してください。
 - 出力はJSONオブジェクトのみとし、余計な説明文は書かないでください。
-- answer は質問の複雑さに応じて3〜10文にしてください。
-- 短く答えられる質問では冗長にせず、比較・整理・時系列説明が必要な質問では十分な文数を使ってください。
+- answer は質問の複雑さに応じて6〜14文にしてください。
+- 短く答えられる質問でも、根拠・背景・留保を含めて最低限の文脈を補ってください。
+- 比較・整理・時系列説明が必要な質問では、主要論点、相違点、影響、未確定要素まで十分な文数を使ってください。
 - answer は読みやすさを優先し、話題や論点の切れ目で適時改行してください。
 - 1段落あたり1〜3文を目安にし、必要に応じて空行を入れてください。
-- bullets は3〜5件にしてください。
-- citations は3〜5件にしてください。
+- bullets は4〜7件にしてください。
+- citations は4〜7件にしてください。
 - citations は同じ話題に偏らせず、回答の主要な論点を支える記事を優先してください。
 - citations の reason は「その記事が回答のどの論点を支えるか」が分かるよう、1文で具体的に書いてください。
 - answer の各文末には対応する item_id を [[item_id]] 形式で付けてください。
@@ -58,6 +62,26 @@ ASK_SCHEMA = {
         },
     },
     "required": ["answer", "bullets", "citations"],
+    "additionalProperties": False,
+}
+
+ASK_RERANK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["item_id", "reason"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
     "additionalProperties": False,
 }
 
@@ -424,15 +448,18 @@ def build_ask_task(query: str, candidates: list[dict]) -> dict:
     for idx, item in enumerate(candidates, start=1):
         title = item.get("translated_title") or item.get("title") or "（タイトルなし）"
         facts = [str(v).strip() for v in (item.get("facts") or []) if str(v).strip()]
+        highlights = [str(v).strip() for v in (item.get("highlights") or []) if str(v).strip()]
+        summary = str(item.get("summary") or "").strip()
         lines.append(
             f"- item_id={item.get('item_id')} | rank={idx} | title={title} | published_at={item.get('published_at') or ''} | "
             f"topics={', '.join(item.get('topics') or [])} | similarity={item.get('similarity')} | "
-            f"summary={str(item.get('summary') or '')[:500]} | facts={' / '.join(facts[:4])[:400]}"
+            f"summary={summary[:1000]} | facts={' / '.join(facts[:8])[:900]} | "
+            f"highlights={' / '.join(highlights[:3])[:450]} | excerpt={str(item.get('excerpt') or '')[:700]}"
         )
     prompt = f"""# Output
 {{
-  "answer": "必要に応じて3〜10文の回答 [[item_id]]。話題の切れ目で適時改行する",
-  "bullets": ["補足ポイント1", "補足ポイント2", "補足ポイント3"],
+  "answer": "必要に応じて6〜14文の回答 [[item_id]]。論点、背景、比較、留保を含め、話題の切れ目で適時改行する",
+  "bullets": ["補足ポイント1", "補足ポイント2", "補足ポイント3", "補足ポイント4"],
   "citations": [
     {{"item_id": "uuid", "reason": "この観点を支える理由"}}
   ]
@@ -448,6 +475,49 @@ candidates:
         "prompt": prompt,
         "schema": ASK_SCHEMA,
     }
+
+
+def build_ask_rerank_task(query: str, candidates: list[dict], top_k: int) -> dict:
+    top_k = max(1, min(int(top_k or 12), 20))
+    lines: list[str] = []
+    for idx, item in enumerate(candidates, start=1):
+        title = item.get("translated_title") or item.get("title") or "（タイトルなし）"
+        facts = [str(v).strip() for v in (item.get("facts") or []) if str(v).strip()]
+        highlights = [str(v).strip() for v in (item.get("highlights") or []) if str(v).strip()]
+        lines.append(
+            f"- item_id={item.get('item_id')} | current_rank={idx} | title={title} | published_at={item.get('published_at') or ''} | "
+            f"topics={', '.join(item.get('topics') or [])} | similarity={item.get('similarity')} | hybrid_score={item.get('hybrid_score')} | "
+            f"summary={str(item.get('summary') or '')[:450]} | facts={' / '.join(facts[:5])[:450]} | "
+            f"highlights={' / '.join(highlights[:2])[:240]} | excerpt={str(item.get('excerpt') or '')[:350]}"
+        )
+    prompt = f"""# Role
+あなたはRAG検索結果のrerankerです。
+
+# Task
+質問に直接答える根拠として有用な順に、候補記事を並べ替えてください。
+
+# Rules
+- 候補記事以外の知識で補わないでください。
+- 質問の語句に表面的に近いだけの記事より、回答の主張・比較・因果・時系列を支える記事を優先してください。
+- ほぼ同じ内容の記事が複数ある場合は、より具体的で根拠が多い記事を上位にし、重複は下げてください。
+- 新しい記事、summary score、hybrid_score は補助情報として使い、質問への直接性を最優先してください。
+- items は最大 {top_k} 件にしてください。
+- item_id は候補に含まれるものだけを使ってください。
+- 出力はJSONオブジェクトのみとし、余計な説明文は書かないでください。
+
+# Output
+{{
+  "items": [
+    {{"item_id": "uuid", "reason": "質問への直接的な根拠になる理由"}}
+  ]
+}}
+
+# Input
+question: {query}
+candidates:
+{chr(10).join(lines)}
+"""
+    return {"prompt": prompt, "schema": ASK_RERANK_SCHEMA, "top_k": top_k}
 
 
 def parse_ask_result(text: str, candidates: list[dict], *, error_prefix: str) -> dict:
@@ -474,7 +544,7 @@ def parse_ask_result(text: str, candidates: list[dict], *, error_prefix: str) ->
             )
     if not answer:
         raise RuntimeError(f"{error_prefix}: response_snippet={text[:500]}")
-    if len(citations) < min(4, len(candidates)):
+    if len(citations) < min(5, len(candidates)):
         seen = {str(c.get('item_id') or '').strip() for c in citations}
         for item in candidates:
             item_id = str(item.get('item_id') or '').strip()
@@ -482,9 +552,36 @@ def parse_ask_result(text: str, candidates: list[dict], *, error_prefix: str) ->
                 continue
             citations.append({"item_id": item_id, "reason": "回答に関連する候補記事"})
             seen.add(item_id)
-            if len(citations) >= min(6, len(candidates)):
+            if len(citations) >= min(7, len(candidates)):
                 break
-    return {"answer": answer, "bullets": bullets[:5], "citations": citations[:5]}
+    return {"answer": answer, "bullets": bullets[:7], "citations": citations[:7]}
+
+
+def parse_ask_rerank_result(text: str, candidates: list[dict], top_k: int) -> dict:
+    data = extract_first_json_object(text) or {}
+    candidate_ids = [str(item.get("item_id") or "").strip() for item in candidates]
+    allowed = {item_id for item_id in candidate_ids if item_id}
+    seen: set[str] = set()
+    items: list[dict] = []
+    for raw in data.get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        item_id = str(raw.get("item_id") or "").strip()
+        if not item_id or item_id not in allowed or item_id in seen:
+            continue
+        seen.add(item_id)
+        items.append({"item_id": item_id, "reason": str(raw.get("reason") or "").strip()})
+        if len(items) >= top_k:
+            break
+    if len(items) < min(top_k, len(candidate_ids)):
+        for item_id in candidate_ids:
+            if not item_id or item_id in seen:
+                continue
+            items.append({"item_id": item_id, "reason": "hybrid retrieval fallback"})
+            seen.add(item_id)
+            if len(items) >= top_k:
+                break
+    return {"items": items}
 
 
 def build_rank_feed_task(

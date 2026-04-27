@@ -54,6 +54,7 @@ func NewAskHandler(
 
 const askCacheTTL = 2 * time.Minute
 const askNavigatorCacheTTL = 30 * time.Minute
+const askRerankCandidateLimit = 50
 
 func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
@@ -77,10 +78,10 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		body.Days = 30
 	}
 	if body.Limit <= 0 {
-		body.Limit = 12
+		body.Limit = 18
 	}
-	if body.Limit > 12 {
-		body.Limit = 12
+	if body.Limit > 18 {
+		body.Limit = 18
 	}
 
 	settings, err := h.settingsRepo.EnsureDefaults(r.Context(), userID)
@@ -158,7 +159,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	}
 	recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask", embResp.LLM, &userID)
 
-	candidates, err := h.itemRepo.AskCandidatesByEmbedding(r.Context(), userID, embResp.Embedding, body.Days, body.UnreadOnly, body.SourceIDs, body.Limit)
+	candidates, err := h.itemRepo.AskCandidatesByEmbedding(r.Context(), userID, query, embResp.Embedding, body.Days, body.UnreadOnly, body.SourceIDs, askRerankCandidateLimit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -194,25 +195,17 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	}
 	openAIChatKey := h.keyProvider.ResolveOpenAIKey(allKeys, modelName)
 
-	workerCandidates := make([]service.AskCandidate, 0, len(candidates))
-	for _, c := range candidates {
-		var publishedAt *string
-		if c.PublishedAt != nil {
-			v := c.PublishedAt.Format("2006-01-02T15:04:05Z07:00")
-			publishedAt = &v
-		}
-		workerCandidates = append(workerCandidates, service.AskCandidate{
-			ItemID:          c.ID,
-			Title:           c.Title,
-			TranslatedTitle: c.TranslatedTitle,
-			URL:             c.URL,
-			Summary:         c.Summary,
-			Facts:           c.Facts,
-			Topics:          c.SummaryTopics,
-			PublishedAt:     publishedAt,
-			Similarity:      c.Similarity,
-		})
+	workerCandidates := askWorkerCandidates(candidates)
+	rerankResp, err := h.worker.AskRerankWithModel(r.Context(), query, workerCandidates, body.Limit, navKeys.anthropicKey, navKeys.googleKey, navKeys.groqKey, navKeys.deepseekKey, navKeys.alibabaKey, navKeys.mistralKey, navKeys.xaiKey, navKeys.zaiKey, navKeys.fireworksKey, openAIChatKey, modelName)
+	if err != nil {
+		log.Printf("ask rerank failed user_id=%s candidates=%d err=%v", userID, len(candidates), err)
+		candidates = trimAskCandidates(candidates, body.Limit)
+	} else {
+		rerankResp.LLM = service.NormalizeCatalogPricedUsage("ask", rerankResp.LLM)
+		recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask", rerankResp.LLM, &userID)
+		candidates = reorderAskCandidates(candidates, rerankResp.Items, body.Limit)
 	}
+	workerCandidates = askWorkerCandidates(candidates)
 	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, navKeys.anthropicKey, navKeys.googleKey, navKeys.groqKey, navKeys.deepseekKey, navKeys.alibabaKey, navKeys.mistralKey, navKeys.xaiKey, navKeys.zaiKey, navKeys.fireworksKey, openAIChatKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
@@ -271,7 +264,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 				PublishedAt: askCitationPublishedAt(item),
 				Topics:      item.SummaryTopics,
 			})
-			if len(citations) >= minAskInt(5, len(candidates)) {
+			if len(citations) >= minAskInt(7, len(candidates)) {
 				break
 			}
 		}
@@ -459,6 +452,76 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	}
 	v := item.PublishedAt.Format("2006-01-02T15:04:05Z07:00")
 	return &v
+}
+
+func askWorkerCandidates(candidates []model.AskCandidate) []service.AskCandidate {
+	workerCandidates := make([]service.AskCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		var publishedAt *string
+		if c.PublishedAt != nil {
+			v := c.PublishedAt.Format("2006-01-02T15:04:05Z07:00")
+			publishedAt = &v
+		}
+		workerCandidates = append(workerCandidates, service.AskCandidate{
+			ItemID:          c.ID,
+			Title:           c.Title,
+			TranslatedTitle: c.TranslatedTitle,
+			URL:             c.URL,
+			Summary:         c.Summary,
+			Facts:           c.Facts,
+			Excerpt:         c.Excerpt,
+			Highlights:      c.Highlights,
+			Topics:          c.SummaryTopics,
+			PublishedAt:     publishedAt,
+			Similarity:      c.Similarity,
+			HybridScore:     c.HybridScore,
+		})
+	}
+	return workerCandidates
+}
+
+func reorderAskCandidates(candidates []model.AskCandidate, ranked []service.AskRerankItem, limit int) []model.AskCandidate {
+	if limit <= 0 {
+		return nil
+	}
+	byID := make(map[string]model.AskCandidate, len(candidates))
+	for _, candidate := range candidates {
+		byID[candidate.ID] = candidate
+	}
+	out := make([]model.AskCandidate, 0, minAskInt(limit, len(candidates)))
+	seen := map[string]struct{}{}
+	for _, item := range ranked {
+		id := strings.TrimSpace(item.ItemID)
+		candidate, ok := byID[id]
+		if !ok {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		out = append(out, candidate)
+		seen[id] = struct{}{}
+		if len(out) >= limit {
+			return out
+		}
+	}
+	for _, candidate := range candidates {
+		if _, dup := seen[candidate.ID]; dup {
+			continue
+		}
+		out = append(out, candidate)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func trimAskCandidates(candidates []model.AskCandidate, limit int) []model.AskCandidate {
+	if limit <= 0 || len(candidates) <= limit {
+		return candidates
+	}
+	return candidates[:limit]
 }
 
 func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXiaomiMiMoTokenPlan, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasDeepInfra, hasFeatherless, hasCerebras, hasOpenAI bool) *string {

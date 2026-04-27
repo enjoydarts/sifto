@@ -247,11 +247,11 @@ class _ConcurrentTrackingClient:
 
 
 class RunChatJsonTests(unittest.TestCase):
-    def test_featherless_user_concurrency_defaults_to_four(self):
+    def test_featherless_user_concurrency_defaults_to_one(self):
         previous = os.environ.get("FEATHERLESS_USER_MAX_CONCURRENCY")
         os.environ.pop("FEATHERLESS_USER_MAX_CONCURRENCY", None)
         try:
-            self.assertEqual(_provider_user_max_concurrency("featherless"), 4)
+            self.assertEqual(_provider_user_max_concurrency("featherless"), 1)
         finally:
             if previous is not None:
                 os.environ["FEATHERLESS_USER_MAX_CONCURRENCY"] = previous
@@ -745,7 +745,7 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_ConcurrentTrackingClient.max_active_count, 1)
 
     @patch("app.services.openai_compat_transport.httpx.Client", _ConcurrentTrackingClient)
-    def test_featherless_requests_are_limited_to_four(self):
+    def test_featherless_requests_are_limited_to_one(self):
         previous = os.environ.get("FEATHERLESS_MAX_CONCURRENCY")
         os.environ["FEATHERLESS_MAX_CONCURRENCY"] = "10"
         try:
@@ -779,7 +779,7 @@ class RunChatJsonTests(unittest.TestCase):
             else:
                 os.environ["FEATHERLESS_MAX_CONCURRENCY"] = previous
 
-        self.assertEqual(_ConcurrentTrackingClient.max_active_count, 4)
+        self.assertEqual(_ConcurrentTrackingClient.max_active_count, 1)
 
 
 if __name__ == "__main__":

@@ -107,10 +107,10 @@ def _provider_max_concurrency(provider_name: str) -> int | None:
     provider = str(provider_name or "").strip().lower()
     defaults = {
         "zai": 1,
-        "featherless": 4,
+        "featherless": 1,
     }
     maximums = {
-        "featherless": 4,
+        "featherless": 1,
     }
     default = defaults.get(provider)
     if default is None:
@@ -142,14 +142,14 @@ def _provider_user_max_concurrency(provider_name: str) -> int | None:
     provider = str(provider_name or "").strip().lower()
     if provider != "featherless":
         return None
-    raw = str(os.getenv("FEATHERLESS_USER_MAX_CONCURRENCY", "4") or "4").strip()
+    raw = str(os.getenv("FEATHERLESS_USER_MAX_CONCURRENCY", "1") or "1").strip()
     try:
         value = int(raw)
     except Exception:
-        value = 4
+        value = 1
     if value <= 0:
         return None
-    return min(value, 4)
+    return min(value, 1)
 
 
 def _redis_client(logger):

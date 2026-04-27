@@ -1,6 +1,9 @@
 from contextlib import contextmanager
 
+from fastapi import HTTPException
+
 from app.services.langfuse_client import bind_span, update_current
+from app.services.openai_compat_transport import ProviderConcurrencyBusy
 
 
 def observe_request_input(metadata: dict | None = None, input_payload: dict | None = None) -> None:
@@ -98,7 +101,10 @@ async def run_observed_request_async(
 ):
     with bind_request_span(request):
         observe_request_input(metadata=metadata, input_payload=input_payload)
-        result = await call()
+        try:
+            result = await call()
+        except ProviderConcurrencyBusy as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
         return observe_result(
             result,
             output_builder=output_builder,

@@ -20,6 +20,10 @@ _REDIS_CLIENT = None
 _REDIS_CLIENT_LOCK = threading.Lock()
 
 
+class ProviderConcurrencyBusy(RuntimeError):
+    pass
+
+
 @contextmanager
 def provider_request_context(user_id: str | None = None):
     token = _PROVIDER_REQUEST_USER_ID.set(str(user_id or "").strip())
@@ -235,7 +239,7 @@ def _acquire_redis_provider_lease(provider_name: str, logger) -> _RedisProviderL
         if acquired == 1:
             return _RedisProviderLease(client, key, member, ttl_ms)
         if time.time() >= deadline:
-            raise RuntimeError(f"{provider_name} user concurrency wait timeout user_id={user_id} limit={limit}")
+            raise ProviderConcurrencyBusy(f"{provider_name} user concurrency wait timeout user_id={user_id} limit={limit}")
         time.sleep(poll_sec)
 
 

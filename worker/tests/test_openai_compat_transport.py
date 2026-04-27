@@ -7,8 +7,11 @@ from unittest.mock import patch
 import httpx
 
 from app.services.openai_compat_transport import (
+    ProviderConcurrencyBusy,
+    _acquire_redis_provider_lease,
     _provider_user_concurrency_wait_sec,
     _provider_user_max_concurrency,
+    provider_request_context,
     run_chat_json,
 )
 
@@ -250,6 +253,11 @@ class _ConcurrentTrackingClient:
         )
 
 
+class _BusyRedisLeaseClient:
+    def eval(self, script, numkeys, *args):
+        return 0
+
+
 class RunChatJsonTests(unittest.TestCase):
     def test_featherless_user_concurrency_defaults_to_one(self):
         previous = os.environ.get("FEATHERLESS_USER_MAX_CONCURRENCY")
@@ -268,6 +276,27 @@ class RunChatJsonTests(unittest.TestCase):
         finally:
             if previous is not None:
                 os.environ["FEATHERLESS_USER_CONCURRENCY_WAIT_SEC"] = previous
+
+    def test_featherless_redis_wait_timeout_raises_provider_busy(self):
+        previous = {
+            "FEATHERLESS_USER_CONCURRENCY_WAIT_SEC": os.environ.get("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC"),
+            "FEATHERLESS_USER_CONCURRENCY_POLL_SEC": os.environ.get("FEATHERLESS_USER_CONCURRENCY_POLL_SEC"),
+        }
+        os.environ["FEATHERLESS_USER_CONCURRENCY_WAIT_SEC"] = "1"
+        os.environ["FEATHERLESS_USER_CONCURRENCY_POLL_SEC"] = "0.05"
+        try:
+            with (
+                patch("app.services.openai_compat_transport._redis_client", return_value=_BusyRedisLeaseClient()),
+                provider_request_context("user-1"),
+            ):
+                with self.assertRaises(ProviderConcurrencyBusy):
+                    _acquire_redis_provider_lease("featherless", None)
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def setUp(self):
         _FakeClient.last_json = None

@@ -2190,6 +2190,29 @@
       }
     },
     {
+      "id": "fireworks/deepseek-v4-pro",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["reasoning", "latest"],
+      "comment": "Fireworks Serverless の DeepSeek V4 Pro。複雑な要約、長文統合、Ask の品質比較に使う上位 DeepSeek 系モデル。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_model_page_2026_04",
+        "input_per_mtok_usd": 1.74,
+        "output_per_mtok_usd": 3.48,
+        "cache_read_per_mtok_usd": 0.15
+      }
+    },
+    {
       "id": "cogito/cogito-671b-v2-p1",
       "provider": "fireworks",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

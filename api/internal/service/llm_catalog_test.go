@@ -73,6 +73,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
 		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
 	}
+	if got := findModelCatalog("fireworks/deepseek-v4-pro"); got == nil {
+		t.Fatal("fireworks/deepseek-v4-pro not found in catalog")
+	}
 	if got := findModelCatalog("fireworks/kimi-k2p6"); got == nil {
 		t.Fatal("fireworks/kimi-k2p6 not found in catalog")
 	}
@@ -187,6 +190,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "fireworks/kimi-k2p6", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
+		{model: "fireworks/deepseek-v4-pro", provider: "fireworks"},
 		{model: "kimi-k2.6", provider: "moonshot"},
 		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "kimi-k2-0905-preview", provider: "moonshot"},

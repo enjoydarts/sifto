@@ -25,7 +25,7 @@ func TestIsTransientLLMWorkerError(t *testing.T) {
 	}
 }
 
-func TestCanUseLLMFallbackForAttempt(t *testing.T) {
+func TestCanUseLLMFallbackAfterRetry(t *testing.T) {
 	tests := []struct {
 		name          string
 		primaryModel  *string
@@ -34,7 +34,7 @@ func TestCanUseLLMFallbackForAttempt(t *testing.T) {
 		want          bool
 	}{
 		{
-			name:          "transient and different fallback",
+			name:          "retryable and different fallback",
 			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
 			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
 			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter chat.completions failed status=429"),
@@ -48,23 +48,43 @@ func TestCanUseLLMFallbackForAttempt(t *testing.T) {
 			want:          false,
 		},
 		{
-			name:          "non transient error does not fallback",
+			name:          "non retryable error does not fallback",
 			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
 			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
-			err:           assertErr("worker /summarize: status 500 detail=summarize failed: parse failed"),
+			err:           assertErr("model missing required capability for facts"),
 			want:          false,
 		},
 		{
-			name:          "structured parse failure with snippet falls back",
+			name:          "plain parse failure after retry falls back",
 			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
 			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
-			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter summarize parse failed: response_snippet="),
+			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter summarize parse failed"),
 			want:          true,
 		},
 	}
 	for _, tt := range tests {
-		if got := canUseLLMFallbackForAttempt(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
-			t.Fatalf("%s: canUseLLMFallbackForAttempt(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
+		if got := canUseLLMFallbackAfterRetry(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
+			t.Fatalf("%s: canUseLLMFallbackAfterRetry(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
+		}
+	}
+}
+
+func TestShouldRetrySameModelLLMAttempt(t *testing.T) {
+	tests := []struct {
+		name             string
+		err              error
+		sameModelRetried bool
+		want             bool
+	}{
+		{name: "structured parse failure retries same model first", err: assertErr("worker /summarize: status 500 detail=summarize failed: featherless summarize parse failed: response_snippet=本文"), sameModelRetried: false, want: true},
+		{name: "plain parse failure retries same model first", err: assertErr("worker /extract-facts: status 500 detail=featherless extract_facts parse failed"), sameModelRetried: false, want: true},
+		{name: "rate limit retries same model first", err: assertErr("worker /summarize: status 500 detail=featherless chat.completions failed status=429"), sameModelRetried: false, want: true},
+		{name: "already retried stops same model retry", err: assertErr("worker /summarize: status 500 detail=featherless chat.completions failed status=429"), sameModelRetried: true, want: false},
+		{name: "capability error does not retry", err: assertErr("model missing required capability for facts"), sameModelRetried: false, want: false},
+	}
+	for _, tt := range tests {
+		if got := shouldRetrySameModelLLMAttempt(tt.err, tt.sameModelRetried); got != tt.want {
+			t.Fatalf("%s: shouldRetrySameModelLLMAttempt(%v, %t) = %v, want %v", tt.name, tt.err, tt.sameModelRetried, got, tt.want)
 		}
 	}
 }
@@ -95,11 +115,19 @@ func TestShouldFallbackFactsAttempt(t *testing.T) {
 			want:             true,
 		},
 		{
-			name:             "structural parse failure falls back immediately",
+			name:             "structural parse failure retries same model first",
 			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
 			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
 			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
 			sameModelRetried: false,
+			want:             false,
+		},
+		{
+			name:             "structural parse failure after same model retry falls back",
+			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
+			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
+			sameModelRetried: true,
 			want:             true,
 		},
 		{

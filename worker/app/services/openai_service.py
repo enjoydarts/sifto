@@ -27,7 +27,7 @@ class _OpenAIProvider(OpenAICompatProvider):
             return None
         if family.endswith("-pro"):
             return None
-        if family.startswith("gpt-5.1") or family.startswith("gpt-5.2") or family.startswith("gpt-5.4"):
+        if family.startswith("gpt-5.1") or family.startswith("gpt-5.2") or family.startswith("gpt-5.4") or family.startswith("gpt-5.5"):
             return {"effort": "none"}
         return {"effort": "minimal"}
 
@@ -133,7 +133,7 @@ _config = ProviderConfig(
     default_model="gpt-5",
     default_translate_model="gpt-5-mini",
     model_families=[
-        "gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2",
+        "gpt-5.5-pro", "gpt-5.5", "gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2",
         "gpt-5.1", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5",
     ],
 )

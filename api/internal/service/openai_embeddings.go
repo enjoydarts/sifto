@@ -386,7 +386,7 @@ func responsesReasoning(model string) map[string]any {
 	if strings.HasSuffix(family, "-pro") {
 		return nil
 	}
-	if strings.HasPrefix(family, "gpt-5.1") || strings.HasPrefix(family, "gpt-5.2") || strings.HasPrefix(family, "gpt-5.4") {
+	if strings.HasPrefix(family, "gpt-5.1") || strings.HasPrefix(family, "gpt-5.2") || strings.HasPrefix(family, "gpt-5.4") || strings.HasPrefix(family, "gpt-5.5") {
 		return map[string]any{"effort": "none"}
 	}
 	return map[string]any{"effort": "minimal"}

@@ -10,6 +10,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-5.4-pro"); got == nil {
 		t.Fatal("gpt-5.4-pro not found in catalog")
 	}
+	if got := findModelCatalog("gpt-5.5"); got == nil {
+		t.Fatal("gpt-5.5 not found in catalog")
+	}
+	if got := findModelCatalog("gpt-5.5-pro"); got == nil {
+		t.Fatal("gpt-5.5-pro not found in catalog")
+	}
 	if got := findModelCatalog("gpt-5.4-mini"); got == nil {
 		t.Fatal("gpt-5.4-mini not found in catalog")
 	}
@@ -42,6 +48,15 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	}
 	if got := findModelCatalog("siliconflow::deepseek-ai/DeepSeek-V3.2"); got == nil {
 		t.Fatal("siliconflow::deepseek-ai/DeepSeek-V3.2 not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::deepseek-ai/DeepSeek-V4-Flash"); got == nil {
+		t.Fatal("siliconflow::deepseek-ai/DeepSeek-V4-Flash not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::deepseek-ai/DeepSeek-V4-Pro"); got == nil {
+		t.Fatal("siliconflow::deepseek-ai/DeepSeek-V4-Pro not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::moonshotai/Kimi-K2.6"); got == nil {
+		t.Fatal("siliconflow::moonshotai/Kimi-K2.6 not found in catalog")
 	}
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
@@ -118,6 +133,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("moonshotai/Kimi-K2.6")); got == nil {
 		t.Fatal("together::moonshotai/Kimi-K2.6 not found in catalog")
 	}
+	if got := findModelCatalog(TogetherAliasModelID("deepseek-ai/DeepSeek-V4-Pro")); got == nil {
+		t.Fatal("together::deepseek-ai/DeepSeek-V4-Pro not found in catalog")
+	}
 	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.1")); got == nil {
 		t.Fatal("together::zai-org/GLM-5.1 not found in catalog")
 	}
@@ -182,13 +200,17 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("google/gemma-4-31B-it"), provider: "together"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.6"), provider: "together"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
+		{model: TogetherAliasModelID("deepseek-ai/DeepSeek-V4-Pro"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
+		{model: "gpt-5.5", provider: "openai"},
+		{model: "gpt-5.5-pro", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
+		{model: "siliconflow::deepseek-ai/DeepSeek-V4-Pro", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
 		{model: CerebrasAliasModelID("llama-4-scout-17b-16e-instruct"), provider: "cerebras"},

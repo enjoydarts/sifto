@@ -243,6 +243,7 @@
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
         "LiquidAI/LFM2-24B-A2B",
+        "deepseek-ai/DeepSeek-V4-Pro",
         "deepseek-ai/DeepSeek-V3.1",
         "deepseek-ai/DeepSeek-R1",
         "deepseek-ai/DeepSeek-R1-0528",
@@ -531,6 +532,54 @@
       }
     },
     {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V4-Flash",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast", "latest"],
+      "comment": "SiliconFlow 経由の DeepSeek V4 軽量枠。1M context と低コストを活かし、抽出、要約、Ask の比較候補として使いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_04",
+        "input_per_mtok_usd": 0.14,
+        "output_per_mtok_usd": 0.28,
+        "cache_read_per_mtok_usd": 0.028
+      }
+    },
+    {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V4-Pro",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["reasoning", "latest"],
+      "comment": "SiliconFlow 経由の DeepSeek V4 上位枠。複雑な要約、長文統合、RAG回答の品質比較に使う候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_04",
+        "input_per_mtok_usd": 1.74,
+        "output_per_mtok_usd": 3.48,
+        "cache_read_per_mtok_usd": 0.145
+      }
+    },
+    {
       "id": "siliconflow::Qwen/Qwen3-235B-A22B-Instruct-2507",
       "provider": "siliconflow",
       "source_provider": "qwen",
@@ -574,6 +623,30 @@
         "pricing_source": "siliconflow_model_pages_2026_03",
         "input_per_mtok_usd": 0.09,
         "output_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "siliconflow::moonshotai/Kimi-K2.6",
+      "provider": "siliconflow",
+      "source_provider": "moonshotai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "SiliconFlow 経由の Kimi K2.6。長文 RAG、要約、ダイジェストの比較候補として使う最新枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_04",
+        "input_per_mtok_usd": 0.95,
+        "output_per_mtok_usd": 4.0,
+        "cache_read_per_mtok_usd": 0.16
       }
     },
     {
@@ -2830,6 +2903,52 @@
       }
     },
     {
+      "id": "gpt-5.5",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "OpenAI の GPT-5.5。複雑な推論、coding、RAG質問応答の上位比較候補。コストは高めなので常用前に実測したい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_04",
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 30.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "gpt-5.5-pro",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": ["latest"],
+      "comment": "GPT-5.5 の高精度版。非常に高価なため、難問や品質ベンチマーク向けの比較枠として扱う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_04",
+        "input_per_mtok_usd": 30.0,
+        "output_per_mtok_usd": 180.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
       "id": "together::moonshotai/Kimi-K2.6",
       "provider": "together",
       "source_provider": "moonshotai",
@@ -3034,6 +3153,29 @@
         "pricing_source": "together_serverless_models_2026_04",
         "input_per_mtok_usd": 0.6,
         "output_per_mtok_usd": 1.7
+      }
+    },
+    {
+      "id": "together::deepseek-ai/DeepSeek-V4-Pro",
+      "provider": "together",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": ["reasoning", "latest", "jsonStable"],
+      "comment": "Together AI 経由の DeepSeek V4 Pro。ユーザー提示価格に基づく追加枠で、複雑な要約やAskの比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_together_deepseek_v4_pro_2026_04",
+        "input_per_mtok_usd": 2.10,
+        "output_per_mtok_usd": 4.40
       }
     },
     {

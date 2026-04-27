@@ -6,7 +6,11 @@ from unittest.mock import patch
 
 import httpx
 
-from app.services.openai_compat_transport import _provider_user_max_concurrency, run_chat_json
+from app.services.openai_compat_transport import (
+    _provider_user_concurrency_wait_sec,
+    _provider_user_max_concurrency,
+    run_chat_json,
+)
 
 
 class _FakeClient:
@@ -255,6 +259,15 @@ class RunChatJsonTests(unittest.TestCase):
         finally:
             if previous is not None:
                 os.environ["FEATHERLESS_USER_MAX_CONCURRENCY"] = previous
+
+    def test_featherless_user_concurrency_wait_defaults_to_five_seconds(self):
+        previous = os.environ.get("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC")
+        os.environ.pop("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC", None)
+        try:
+            self.assertEqual(_provider_user_concurrency_wait_sec(), 5)
+        finally:
+            if previous is not None:
+                os.environ["FEATHERLESS_USER_CONCURRENCY_WAIT_SEC"] = previous
 
     def setUp(self):
         _FakeClient.last_json = None

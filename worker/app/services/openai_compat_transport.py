@@ -152,6 +152,10 @@ def _provider_user_max_concurrency(provider_name: str) -> int | None:
     return min(value, 1)
 
 
+def _provider_user_concurrency_wait_sec() -> int:
+    return _env_positive_int("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC", 5)
+
+
 def _redis_client(logger):
     global _REDIS_CLIENT
     if redis is None:
@@ -214,7 +218,7 @@ def _acquire_redis_provider_lease(provider_name: str, logger) -> _RedisProviderL
     if client is None:
         return None
     ttl_sec = _env_positive_int("FEATHERLESS_USER_CONCURRENCY_TTL_SEC", 900)
-    wait_sec = _env_positive_int("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC", 180)
+    wait_sec = _provider_user_concurrency_wait_sec()
     poll_sec = max(float(os.getenv("FEATHERLESS_USER_CONCURRENCY_POLL_SEC", "0.25") or "0.25"), 0.05)
     ttl_ms = ttl_sec * 1000
     key = f"sifto:llm-concurrency:{provider_name}:user:{user_id}"

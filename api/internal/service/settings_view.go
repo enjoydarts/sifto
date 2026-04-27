@@ -21,7 +21,9 @@ type LLMModelsView struct {
 	SourceSuggestion            *string `json:"source_suggestion"`
 	Embedding                   *string `json:"embedding"`
 	FactsCheck                  *string `json:"facts_check"`
+	FactsCheckFallback          *string `json:"facts_check_fallback"`
 	FaithfulnessCheck           *string `json:"faithfulness_check"`
+	FaithfulnessCheckFallback   *string `json:"faithfulness_check_fallback"`
 	NavigatorEnabled            bool    `json:"navigator_enabled"`
 	AINavigatorBriefEnabled     bool    `json:"ai_navigator_brief_enabled"`
 	NavigatorPersonaMode        string  `json:"navigator_persona_mode"`
@@ -165,7 +167,9 @@ func NewLLMModelsView(settings *model.UserSettings) LLMModelsView {
 		SourceSuggestion:            settings.SourceSuggestionModel,
 		Embedding:                   settings.EmbeddingModel,
 		FactsCheck:                  settings.FactsCheckModel,
+		FactsCheckFallback:          settings.FactsCheckFallbackModel,
 		FaithfulnessCheck:           settings.FaithfulnessCheckModel,
+		FaithfulnessCheckFallback:   settings.FaithfulnessCheckFallbackModel,
 		NavigatorEnabled:            settings.NavigatorEnabled,
 		AINavigatorBriefEnabled:     settings.AINavigatorBriefEnabled,
 		NavigatorPersonaMode:        NormalizePersonaMode(&settings.NavigatorPersonaMode),

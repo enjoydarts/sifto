@@ -112,7 +112,7 @@ func TestTTSMarkupPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 	openRouterModel := strptr("openrouter::openai/gpt-oss-120b")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, openRouterModel,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, openRouterModel,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestTTSMarkupPreprocessRejectsEmptyOutput(t *testing.T) {
 	openRouterModel := strptr("openrouter::openai/gpt-oss-120b")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, openRouterModel,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, openRouterModel,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -290,7 +290,7 @@ func TestTTSMarkupPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables(
 	modelName := strptr("openrouter::openai/gpt-oss-20b")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -391,7 +391,7 @@ func TestTTSMarkupPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) {
 	modelName := strptr("openrouter::openai/gpt-oss-20b")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -481,7 +481,7 @@ func TestTTSMarkupPreprocessGeminiPromptUsesGeminiPurpose(t *testing.T) {
 	modelName := strptr("openrouter::openai/gpt-oss-20b")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -559,7 +559,7 @@ func TestTTSMarkupPreprocessElevenLabsPromptUsesElevenLabsPurpose(t *testing.T) 
 	modelName := strptr("openrouter::openai/gpt-5.4-mini")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -637,7 +637,7 @@ func TestTTSMarkupPreprocessAzureSpeechPromptUsesAzurePurpose(t *testing.T) {
 	modelName := strptr("gpt-5.4-mini")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -718,7 +718,7 @@ func TestTTSMarkupPreprocessElevenLabsAudioBriefingSingleUsesPromptKeyAndPersona
 	modelName := strptr("openrouter::openai/gpt-5.4-mini")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}
@@ -801,7 +801,7 @@ func TestTTSMarkupPreprocessElevenLabsAudioBriefingDuoUsesPersonaVariables(t *te
 	modelName := strptr("openrouter::openai/gpt-5.4-mini")
 	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
 		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
-		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+		nil, nil, false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
 	); err != nil {
 		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
 	}

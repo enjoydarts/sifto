@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import Request
 
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
+from app.services.openai_compat_transport import provider_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,8 @@ def dispatch_by_model(
         raise RuntimeError(f"no handler registered for provider={provider}")
     api_key_header = provider_api_key_header(provider) or provider_api_key_header(default_provider)
     api_key = request.headers.get(api_key_header) if api_key_header else None
-    return handler(api_key or None)
+    with provider_request_context(request.headers.get("X-Sifto-User-Id")):
+        return handler(api_key or None)
 
 
 async def dispatch_by_model_async(
@@ -51,4 +53,5 @@ async def dispatch_by_model_async(
         raise RuntimeError(f"no handler registered for provider={provider}")
     api_key_header = provider_api_key_header(provider) or provider_api_key_header(default_provider)
     api_key = request.headers.get(api_key_header) if api_key_header else None
-    return await handler(api_key or None)
+    with provider_request_context(request.headers.get("X-Sifto-User-Id")):
+        return await handler(api_key or None)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -22,36 +22,33 @@ export function useItemsViewState() {
   );
   const urlQuery = useMemo(() => buildItemsSearchParams(urlState).toString(), [urlState]);
 
-  const initialState = useMemo(
-    () => parseItemsQueryState(new URLSearchParams(searchParamsString)),
-    []
+  const [state, dispatch] = useReducer(
+    itemsViewStateReducer,
+    searchParamsString,
+    (query) => parseItemsQueryState(new URLSearchParams(query))
   );
-  const [state, dispatch] = useReducer(itemsViewStateReducer, initialState);
-  const stateRef = useRef(initialState);
-  const stateQueryRef = useRef(buildItemsSearchParams(initialState).toString());
-  const intendedQueryRef = useRef<string | null>(null);
+  const [intendedQuery, setIntendedQuery] = useState<string | null>(null);
   const pendingUrlQueryRef = useRef<string | null>(null);
   const externalUrlQueryRef = useRef<string | null>(null);
 
-  stateRef.current = state;
-  stateQueryRef.current = buildItemsSearchParams(state).toString();
-  const localStateAheadOfURL = intendedQueryRef.current === stateQueryRef.current;
-  const renderState = localStateAheadOfURL || urlQuery === stateQueryRef.current ? state : urlState;
+  const stateQuery = useMemo(() => buildItemsSearchParams(state).toString(), [state]);
+  const localStateAheadOfURL = intendedQuery === stateQuery;
+  const renderState = localStateAheadOfURL || urlQuery === stateQuery ? state : urlState;
   const renderStateQuery = buildItemsSearchParams(renderState).toString();
 
   useEffect(() => {
     if (pendingUrlQueryRef.current === urlQuery) {
       pendingUrlQueryRef.current = null;
       externalUrlQueryRef.current = null;
-      intendedQueryRef.current = null;
+      window.setTimeout(() => setIntendedQuery(null), 0);
       return;
     }
-    if (urlQuery === stateQueryRef.current) {
+    if (urlQuery === stateQuery) {
       if (externalUrlQueryRef.current === urlQuery) {
         externalUrlQueryRef.current = null;
       }
-      if (intendedQueryRef.current === urlQuery) {
-        intendedQueryRef.current = null;
+      if (intendedQuery === urlQuery) {
+        window.setTimeout(() => setIntendedQuery(null), 0);
       }
       return;
     }
@@ -60,10 +57,10 @@ export function useItemsViewState() {
     }
     externalUrlQueryRef.current = urlQuery;
     dispatch({ type: "hydrate_from_url", state: urlState });
-  }, [localStateAheadOfURL, urlQuery, urlState]);
+  }, [intendedQuery, localStateAheadOfURL, stateQuery, urlQuery, urlState]);
 
   useEffect(() => {
-    const nextQuery = stateQueryRef.current;
+    const nextQuery = stateQuery;
     const currentQuery =
       typeof window === "undefined"
         ? searchParamsString
@@ -80,7 +77,7 @@ export function useItemsViewState() {
     const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
     pendingUrlQueryRef.current = nextQuery;
     router.replace(nextUrl, { scroll: false });
-  }, [pathname, router, searchParamsString, state]);
+  }, [pathname, router, searchParamsString, stateQuery]);
 
   const currentItemsHref = useMemo(() => {
     const query = renderStateQuery;
@@ -88,10 +85,10 @@ export function useItemsViewState() {
   }, [pathname, renderStateQuery]);
 
   const dispatchAction = useCallback((action: Parameters<typeof itemsViewStateReducer>[1]) => {
-    const nextState = itemsViewStateReducer(stateRef.current, action);
-    intendedQueryRef.current = buildItemsSearchParams(nextState).toString();
+    const nextState = itemsViewStateReducer(state, action);
+    setIntendedQuery(buildItemsSearchParams(nextState).toString());
     dispatch(action);
-  }, []);
+  }, [state]);
 
   const setFeed = useCallback((feed: import("./feed-tabs").FeedMode) => dispatchAction({ type: "set_feed", feed }), [dispatchAction]);
   const setSort = useCallback((sort: import("./feed-tabs").SortMode) => dispatchAction({ type: "set_sort", sort }), [dispatchAction]);

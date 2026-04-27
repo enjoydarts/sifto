@@ -484,8 +484,10 @@ func extractAndPersistFacts(
 		log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
 		var factsCheckModel *string
+		var factsCheckFallbackModel *string
 		if userModelSettings != nil {
 			factsCheckModel = ptrStringOrNil(userModelSettings.FactsCheckModel)
+			factsCheckFallbackModel = ptrStringOrNil(userModelSettings.FactsCheckFallbackModel)
 		}
 		factsCheck, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.FactsCheckResponse]{
 			baseStepName:   "check-facts",
@@ -496,6 +498,7 @@ func extractAndPersistFacts(
 			sourceID:       &data.SourceID,
 			itemID:         &itemID,
 			modelOverride:  factsCheckModel,
+			fallbackModel:  factsCheckFallbackModel,
 			defaultRuntime: factsAttempt.Runtime,
 			call: func(runtime *llmRuntime) (*service.FactsCheckResponse, error) {
 				workerCtx := service.WithWorkerTraceMetadata(ctx, "facts_check", userIDPtr, &data.SourceID, &itemID, nil)
@@ -694,8 +697,10 @@ func summarizeAndPersistItem(
 		service.RecordSplitPrimaryModelUsage(ctx, deps.cache, ptrStringValue(userIDPtr), "summary", summaryPrimaryModel, summarySecondaryModel, executionFailedModel(summaryAttempt.Runtime, primaryModelOverride))
 
 		var faithfulnessModel *string
+		var faithfulnessFallbackModel *string
 		if userModelSettings != nil {
 			faithfulnessModel = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
+			faithfulnessFallbackModel = ptrStringOrNil(userModelSettings.FaithfulnessCheckFallbackModel)
 		}
 		faithfulness, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.SummaryFaithfulnessResponse]{
 			baseStepName:   "check-summary-faithfulness",
@@ -706,6 +711,7 @@ func summarizeAndPersistItem(
 			sourceID:       &data.SourceID,
 			itemID:         &itemID,
 			modelOverride:  faithfulnessModel,
+			fallbackModel:  faithfulnessFallbackModel,
 			defaultRuntime: summaryAttempt.Runtime,
 			call: func(runtime *llmRuntime) (*service.SummaryFaithfulnessResponse, error) {
 				workerCtx := service.WithWorkerTraceMetadata(ctx, "faithfulness_check", userIDPtr, &data.SourceID, &itemID, nil)

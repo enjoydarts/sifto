@@ -365,7 +365,9 @@ export function useSettingsPageData() {
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
   const [factsCheckModel, setFactsCheckModel] = useState("");
+  const [factsCheckFallbackModel, setFactsCheckFallbackModel] = useState("");
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
+  const [faithfulnessCheckFallbackModel, setFaithfulnessCheckFallbackModel] = useState("");
   const [navigatorEnabled, setNavigatorEnabled] = useState(false);
   const [aiNavigatorBriefEnabled, setAINavigatorBriefEnabled] = useState(false);
   const [navigatorPersonaMode, setNavigatorPersonaMode] = useState<"fixed" | "random">("fixed");
@@ -600,7 +602,9 @@ export function useSettingsPageData() {
     setAnthropicSourceSuggestionModel(llmModels?.source_suggestion ?? "");
     setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
     setFactsCheckModel(llmModels?.facts_check ?? "");
+    setFactsCheckFallbackModel(llmModels?.facts_check_fallback ?? "");
     setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
+    setFaithfulnessCheckFallbackModel(llmModels?.faithfulness_check_fallback ?? "");
     setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
     setAINavigatorBriefEnabled(Boolean(llmModels?.ai_navigator_brief_enabled ?? false));
     setNavigatorPersonaMode(llmModels?.navigator_persona_mode === "random" ? "random" : "fixed");
@@ -635,7 +639,9 @@ export function useSettingsPageData() {
       source_suggestion: string | null;
       embedding: string | null;
       facts_check: string | null;
+      facts_check_fallback: string | null;
       faithfulness_check: string | null;
+      faithfulness_check_fallback: string | null;
       navigator_enabled: boolean;
       ai_navigator_brief_enabled: boolean;
       navigator_persona_mode: string | null;
@@ -672,7 +678,9 @@ export function useSettingsPageData() {
         source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
         embedding: emptyToNull(openAIEmbeddingModel),
         facts_check: emptyToNull(factsCheckModel),
+        facts_check_fallback: emptyToNull(factsCheckFallbackModel),
         faithfulness_check: emptyToNull(faithfulnessCheckModel),
+        faithfulness_check_fallback: emptyToNull(faithfulnessCheckFallbackModel),
         navigator_enabled: navigatorEnabled,
         ai_navigator_brief_enabled: aiNavigatorBriefEnabled,
         navigator_persona_mode: navigatorPersonaMode,
@@ -701,7 +709,9 @@ export function useSettingsPageData() {
       anthropicSummarySecondaryModel,
       anthropicSummarySecondaryRatePercent,
       factsCheckModel,
+      factsCheckFallbackModel,
       faithfulnessCheckModel,
+      faithfulnessCheckFallbackModel,
       aiNavigatorBriefEnabled,
       aiNavigatorBriefFallbackModel,
       aiNavigatorBriefModel,
@@ -1116,7 +1126,9 @@ export function useSettingsPageData() {
     setAnthropicSourceSuggestionModel(preset.source_suggestion ?? "");
     setOpenAIEmbeddingModel(preset.embedding ?? "");
     setFactsCheckModel(preset.facts_check ?? "");
+    setFactsCheckFallbackModel("");
     setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
+    setFaithfulnessCheckFallbackModel("");
     setTTSMarkupPreprocessModel(preset.tts_markup_preprocess_model ?? "");
   }, [catalog]);
 
@@ -2579,7 +2591,9 @@ export function useSettingsPageData() {
     },
     validation: {
       factsCheck: { value: factsCheckModel, options: optionsForPurpose("facts", factsCheckModel) },
+      factsCheckFallback: { value: factsCheckFallbackModel, options: optionsForPurpose("facts", factsCheckFallbackModel) },
       faithfulnessCheck: { value: faithfulnessCheckModel, options: optionsForPurpose("summary", faithfulnessCheckModel) },
+      faithfulnessCheckFallback: { value: faithfulnessCheckFallbackModel, options: optionsForPurpose("summary", faithfulnessCheckFallbackModel) },
     },
     other: {
       sourceSuggestion: { value: anthropicSourceSuggestionModel, options: sourceSuggestionModelOptions },
@@ -2603,7 +2617,9 @@ export function useSettingsPageData() {
         digestCluster: (next) => onChangeLLMModel(setAnthropicDigestClusterModel, next),
         digest: (next) => onChangeLLMModel(setAnthropicDigestModel, next),
         factsCheck: (next) => onChangeLLMModel(setFactsCheckModel, next),
+        factsCheckFallback: (next) => onChangeLLMModel(setFactsCheckFallbackModel, next),
         faithfulnessCheck: (next) => onChangeLLMModel(setFaithfulnessCheckModel, next),
+        faithfulnessCheckFallback: (next) => onChangeLLMModel(setFaithfulnessCheckFallbackModel, next),
         sourceSuggestion: (next) => onChangeLLMModel(setAnthropicSourceSuggestionModel, next),
         ask: (next) => onChangeLLMModel(setAnthropicAskModel, next),
         embeddings: (next) => onChangeLLMModel(setOpenAIEmbeddingModel, next),

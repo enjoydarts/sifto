@@ -187,7 +187,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   useEffect(() => {
     if (!watchOpenRouterSync) return;
     if (openRouterSyncRun?.status === "running") return;
-    setWatchOpenRouterSync(false);
+    const timer = window.setTimeout(() => setWatchOpenRouterSync(false), 0);
+    return () => window.clearTimeout(timer);
   }, [openRouterSyncRun, watchOpenRouterSync]);
 
   const handleForceRefresh = () => {

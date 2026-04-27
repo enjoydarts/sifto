@@ -59,12 +59,6 @@ export default function AudioBriefingPresetApplyModal({
     );
   }, [presets, query]);
 
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-    }
-  }, [open]);
-
   const selectedPreset = useMemo(() => {
     if (!filteredPresets.length) return null;
     return filteredPresets.find((preset) => preset.id === selectedPresetID) ?? filteredPresets[0];

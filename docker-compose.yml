@@ -73,6 +73,7 @@ services:
       INTERNAL_WORKER_SECRET: ${INTERNAL_WORKER_SECRET}
       TZ: ${TZ}
       ALLOW_DEV_EXTRACT_PLACEHOLDER: ${ALLOW_DEV_EXTRACT_PLACEHOLDER}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
       LLM_CATALOG_PATH: /shared/llm_catalog.json
     env_file:
       - .env

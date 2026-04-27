@@ -69,7 +69,9 @@ export default function ModelsSettingsSection({
     };
     validation: {
       factsCheck: ModelField;
+      factsCheckFallback: ModelField;
       faithfulnessCheck: ModelField;
+      faithfulnessCheckFallback: ModelField;
     };
     other: {
       sourceSuggestion: ModelField;
@@ -177,7 +179,9 @@ export default function ModelsSettingsSection({
               <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.validation")}</h4>
               <div className="mt-3 grid gap-4 md:grid-cols-2">
                 <ModelSelect label={t("settings.model.factsCheck")} value={validation.factsCheck.value} onChange={(value) => onChangeModel("factsCheck", value)} options={validation.factsCheck.options} labels={labels} variant="modal" />
+                <ModelSelect label={t("settings.model.factsCheckFallback")} value={validation.factsCheckFallback.value} onChange={(value) => onChangeModel("factsCheckFallback", value)} options={validation.factsCheckFallback.options} labels={labels} variant="modal" />
                 <ModelSelect label={t("settings.model.faithfulnessCheck")} value={validation.faithfulnessCheck.value} onChange={(value) => onChangeModel("faithfulnessCheck", value)} options={validation.faithfulnessCheck.options} labels={labels} variant="modal" />
+                <ModelSelect label={t("settings.model.faithfulnessCheckFallback")} value={validation.faithfulnessCheckFallback.value} onChange={(value) => onChangeModel("faithfulnessCheckFallback", value)} options={validation.faithfulnessCheckFallback.options} labels={labels} variant="modal" />
               </div>
             </section>
 

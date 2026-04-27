@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshCw, Search, X } from "lucide-react";
 import { ElevenLabsVoiceCatalogEntry } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
@@ -83,15 +83,6 @@ export default function ElevenLabsVoicePickerModal({
     );
   }, [japaneseVoices, query, voices]);
 
-  const selectedVoice = useMemo(() => {
-    const activeVoiceID = selectedVoiceID ?? currentVoiceID;
-    return (
-      filteredVoices.find((voice) => voice.voice_id === activeVoiceID) ??
-      voices.find((voice) => voice.voice_id === activeVoiceID) ??
-      null
-    );
-  }, [currentVoiceID, filteredVoices, selectedVoiceID, voices]);
-
   const pinnedCurrentSelection = useMemo(() => {
     if (!currentVoiceID.trim()) return null;
     if (voices.some((voice) => voice.voice_id === currentVoiceID)) return null;
@@ -105,25 +96,13 @@ export default function ElevenLabsVoicePickerModal({
     } satisfies ElevenLabsVoiceCatalogEntry;
   }, [currentVoiceID, t, voices]);
 
-  useEffect(() => {
-    if (!open) {
-      setSelectedVoiceID(null);
-      return;
-    }
-    setSelectedVoiceID(currentVoiceID || null);
-  }, [currentVoiceID, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (currentVoiceID.trim() && !voices.some((voice) => voice.voice_id === currentVoiceID)) return;
-    if (selectedVoiceID && voices.some((voice) => voice.voice_id === selectedVoiceID)) return;
-    if (filteredVoices[0]) {
-      setSelectedVoiceID(filteredVoices[0].voice_id);
-    }
-  }, [filteredVoices, open, selectedVoiceID, voices]);
-
   if (!open) return null;
 
+  const activeVoiceID = selectedVoiceID ?? currentVoiceID;
+  const selectedVoice =
+    filteredVoices.find((voice) => voice.voice_id === activeVoiceID) ??
+    voices.find((voice) => voice.voice_id === activeVoiceID) ??
+    null;
   const displayedVoice = selectedVoice ?? pinnedCurrentSelection ?? filteredVoices[0] ?? voices[0] ?? null;
 
   return (

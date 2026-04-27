@@ -215,6 +215,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS facts_check_fallback_model text`); err != nil {
+		t.Fatalf("ensure user_settings.facts_check_fallback_model: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS faithfulness_check_fallback_model text`); err != nil {
+		t.Fatalf("ensure user_settings.faithfulness_check_fallback_model: %v", err)
+	}
 }
 
 func TestValidateCatalogModelForPurpose(t *testing.T) {
@@ -421,6 +427,10 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 		SummarySecondaryModel:            strptr("openrouter::openai/gpt-oss-120b"),
 		SummarySecondaryRatePercent:      25,
 		SummaryFallbackModel:             strptr("openrouter::openai/gpt-oss-120b"),
+		FactsCheckModel:                  strptr("featherless::Qwen/Qwen3.5-9B"),
+		FactsCheckFallbackModel:          strptr("google/gemini-2.5-flash"),
+		FaithfulnessCheckModel:           strptr("featherless::Qwen/Qwen3.5-9B"),
+		FaithfulnessCheckFallbackModel:   strptr("gpt-5.4-mini"),
 		NavigatorPersonaMode:             PersonaModeRandom,
 		NavigatorPersona:                 "editor",
 		AINavigatorBriefModel:            strptr("kimi-k2.5"),
@@ -451,6 +461,12 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 	if got.SummarySecondaryRatePercent != 25 {
 		t.Fatalf("summary_secondary_rate_percent = %v, want 25", got.SummarySecondaryRatePercent)
+	}
+	if got.FactsCheckFallback == nil || *got.FactsCheckFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("facts_check_fallback = %v, want %q", got.FactsCheckFallback, "google/gemini-2.5-flash")
+	}
+	if got.FaithfulnessCheckFallback == nil || *got.FaithfulnessCheckFallback != "gpt-5.4-mini" {
+		t.Fatalf("faithfulness_check_fallback = %v, want %q", got.FaithfulnessCheckFallback, "gpt-5.4-mini")
 	}
 	if got.AudioBriefingScript == nil || *got.AudioBriefingScript != "gpt-5.4" {
 		t.Fatalf("audio_briefing_script = %v, want %q", got.AudioBriefingScript, "gpt-5.4")

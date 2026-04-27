@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import httpx
 import time
 import json
@@ -6,9 +7,26 @@ import os
 import threading
 from contextlib import asynccontextmanager, contextmanager
 
+try:
+    import redis
+except Exception:  # pragma: no cover
+    redis = None
+
 
 _PROVIDER_CONCURRENCY_LOCK = threading.Lock()
 _PROVIDER_CONCURRENCY_SEMAPHORES: dict[tuple[str, int], threading.Semaphore] = {}
+_PROVIDER_REQUEST_USER_ID = contextvars.ContextVar("provider_request_user_id", default="")
+_REDIS_CLIENT = None
+_REDIS_CLIENT_LOCK = threading.Lock()
+
+
+@contextmanager
+def provider_request_context(user_id: str | None = None):
+    token = _PROVIDER_REQUEST_USER_ID.set(str(user_id or "").strip())
+    try:
+        yield
+    finally:
+        _PROVIDER_REQUEST_USER_ID.reset(token)
 
 
 def _is_qwen_model(model: str) -> bool:
@@ -109,6 +127,136 @@ def _provider_max_concurrency(provider_name: str) -> int | None:
     if maximum is not None and value > maximum:
         return maximum
     return value
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = str(os.getenv(name, str(default)) or str(default)).strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = default
+    return value if value > 0 else default
+
+
+def _provider_user_max_concurrency(provider_name: str) -> int | None:
+    provider = str(provider_name or "").strip().lower()
+    if provider != "featherless":
+        return None
+    raw = str(os.getenv("FEATHERLESS_USER_MAX_CONCURRENCY", "4") or "4").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = 4
+    if value <= 0:
+        return None
+    return min(value, 4)
+
+
+def _redis_client(logger):
+    global _REDIS_CLIENT
+    if redis is None:
+        return None
+    with _REDIS_CLIENT_LOCK:
+        if _REDIS_CLIENT is not None:
+            return _REDIS_CLIENT
+        redis_url = os.getenv("REDIS_URL") or os.getenv("UPSTASH_REDIS_URL") or ""
+        if not redis_url:
+            return None
+        try:
+            _REDIS_CLIENT = redis.Redis.from_url(redis_url, decode_responses=True)
+        except Exception as exc:
+            if logger is not None and hasattr(logger, "warning"):
+                logger.warning("provider concurrency redis init failed: %s", exc)
+            _REDIS_CLIENT = None
+        return _REDIS_CLIENT
+
+
+_REDIS_ACQUIRE_SCRIPT = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+local count = redis.call('ZCARD', KEYS[1])
+if count < tonumber(ARGV[2]) then
+  redis.call('ZADD', KEYS[1], ARGV[3], ARGV[4])
+  redis.call('PEXPIRE', KEYS[1], ARGV[5])
+  return 1
+end
+return 0
+"""
+
+
+class _RedisProviderLease:
+    def __init__(self, client, key: str, member: str, ttl_ms: int):
+        self.client = client
+        self.key = key
+        self.member = member
+        self.ttl_ms = ttl_ms
+
+    def refresh(self) -> None:
+        now_ms = int(time.time() * 1000)
+        try:
+            self.client.zadd(self.key, {self.member: now_ms + self.ttl_ms})
+            self.client.pexpire(self.key, self.ttl_ms)
+        except Exception:
+            pass
+
+    def release(self) -> None:
+        try:
+            self.client.zrem(self.key, self.member)
+        except Exception:
+            pass
+
+
+def _acquire_redis_provider_lease(provider_name: str, logger) -> _RedisProviderLease | None:
+    limit = _provider_user_max_concurrency(provider_name)
+    user_id = str(_PROVIDER_REQUEST_USER_ID.get() or "").strip()
+    if limit is None or not user_id:
+        return None
+    client = _redis_client(logger)
+    if client is None:
+        return None
+    ttl_sec = _env_positive_int("FEATHERLESS_USER_CONCURRENCY_TTL_SEC", 900)
+    wait_sec = _env_positive_int("FEATHERLESS_USER_CONCURRENCY_WAIT_SEC", 180)
+    poll_sec = max(float(os.getenv("FEATHERLESS_USER_CONCURRENCY_POLL_SEC", "0.25") or "0.25"), 0.05)
+    ttl_ms = ttl_sec * 1000
+    key = f"sifto:llm-concurrency:{provider_name}:user:{user_id}"
+    member = f"{os.getpid()}:{threading.get_ident()}:{time.time_ns()}"
+    deadline = time.time() + wait_sec
+    while True:
+        now_ms = int(time.time() * 1000)
+        try:
+            acquired = int(client.eval(_REDIS_ACQUIRE_SCRIPT, 1, key, now_ms, limit, now_ms + ttl_ms, member, ttl_ms) or 0)
+        except Exception as exc:
+            if logger is not None and hasattr(logger, "warning"):
+                logger.warning("%s redis concurrency acquire failed user_id=%s: %s", provider_name, user_id, exc)
+            return None
+        if acquired == 1:
+            return _RedisProviderLease(client, key, member, ttl_ms)
+        if time.time() >= deadline:
+            raise RuntimeError(f"{provider_name} user concurrency wait timeout user_id={user_id} limit={limit}")
+        time.sleep(poll_sec)
+
+
+@contextmanager
+def _provider_user_concurrency_guard(provider_name: str, logger):
+    lease = _acquire_redis_provider_lease(provider_name, logger)
+    if lease is None:
+        yield
+        return
+    try:
+        yield
+    finally:
+        lease.release()
+
+
+@asynccontextmanager
+async def _provider_user_concurrency_guard_async(provider_name: str, logger):
+    lease = await asyncio.to_thread(_acquire_redis_provider_lease, provider_name, logger)
+    if lease is None:
+        yield
+        return
+    try:
+        yield
+    finally:
+        await asyncio.to_thread(lease.release)
 
 
 @contextmanager
@@ -283,7 +431,7 @@ def run_chat_json(
     def is_json_validation_error(response: httpx.Response) -> bool:
         return response.status_code == 400 and "json_validate_failed" in (response.text or "")
 
-    with _provider_concurrency_guard(provider_name):
+    with _provider_user_concurrency_guard(provider_name, logger), _provider_concurrency_guard(provider_name):
         for i in range(attempts):
             try:
                 with httpx.Client(timeout=timeout_sec) as client:
@@ -474,7 +622,7 @@ async def run_chat_json_async(
     def is_json_validation_error(response: httpx.Response) -> bool:
         return response.status_code == 400 and "json_validate_failed" in (response.text or "")
 
-    async with _provider_concurrency_guard_async(provider_name):
+    async with _provider_user_concurrency_guard_async(provider_name, logger), _provider_concurrency_guard_async(provider_name):
         for i in range(attempts):
             try:
                 # Per-request client is intentional: timeout_sec varies across

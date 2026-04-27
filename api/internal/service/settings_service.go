@@ -119,7 +119,9 @@ type UpdateLLMModelsInput struct {
 	SourceSuggestion            *string
 	Embedding                   *string
 	FactsCheck                  *string
+	FactsCheckFallback          *string
 	FaithfulnessCheck           *string
+	FaithfulnessCheckFallback   *string
 	NavigatorEnabled            bool
 	AINavigatorBriefEnabled     bool
 	NavigatorPersonaMode        *string
@@ -223,7 +225,9 @@ var modelSettingPurposes = map[string]string{
 	"ask":                            "ask",
 	"source_suggestion":              "source_suggestion",
 	"facts_check":                    "facts",
+	"facts_check_fallback":           "facts",
 	"faithfulness_check":             "summary",
+	"faithfulness_check_fallback":    "summary",
 	"navigator":                      "summary",
 	"navigator_fallback":             "summary",
 	"ai_navigator_brief":             "summary",
@@ -244,7 +248,9 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"ask":                            {"structured_output"},
 	"source_suggestion":              {"structured_output"},
 	"facts_check":                    {"structured_output"},
+	"facts_check_fallback":           {"structured_output"},
 	"faithfulness_check":             {"structured_output"},
+	"faithfulness_check_fallback":    {"structured_output"},
 	"navigator":                      {"structured_output"},
 	"navigator_fallback":             {"structured_output"},
 	"ai_navigator_brief":             {"structured_output"},
@@ -921,7 +927,9 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"source_suggestion":              normalizeOptionalModel(in.SourceSuggestion),
 		"embedding":                      normalizeOptionalModel(in.Embedding),
 		"facts_check":                    normalizeOptionalModel(in.FactsCheck),
+		"facts_check_fallback":           normalizeOptionalModel(in.FactsCheckFallback),
 		"faithfulness_check":             normalizeOptionalModel(in.FaithfulnessCheck),
+		"faithfulness_check_fallback":    normalizeOptionalModel(in.FaithfulnessCheckFallback),
 		"navigator":                      normalizeOptionalModel(in.Navigator),
 		"navigator_fallback":             normalizeOptionalModel(in.NavigatorFallback),
 		"ai_navigator_brief":             normalizeOptionalModel(in.AINavigatorBrief),
@@ -962,7 +970,9 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalized["source_suggestion"],
 		embeddingModel,
 		normalized["facts_check"],
+		normalized["facts_check_fallback"],
 		normalized["faithfulness_check"],
+		normalized["faithfulness_check_fallback"],
 		in.NavigatorEnabled,
 		in.AINavigatorBriefEnabled,
 		NormalizePersonaMode(in.NavigatorPersonaMode),

@@ -915,7 +915,9 @@ export const api = {
     source_suggestion?: string | null;
     embedding?: string | null;
     facts_check?: string | null;
+    facts_check_fallback?: string | null;
     faithfulness_check?: string | null;
+    faithfulness_check_fallback?: string | null;
     navigator_enabled?: boolean;
     ai_navigator_brief_enabled?: boolean;
     navigator_persona_mode?: string | null;

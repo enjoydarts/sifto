@@ -177,9 +177,11 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       digest_model,
 		       ask_model,
 		       source_suggestion_model,
-	       embedding_model,
+		       embedding_model,
 		       facts_check_model,
+		       facts_check_fallback_model,
 		       faithfulness_check_model,
+		       faithfulness_check_fallback_model,
 		       navigator_enabled,
 	       ai_navigator_brief_enabled,
 	       navigator_persona_mode,
@@ -284,7 +286,9 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.SourceSuggestionModel,
 		&v.EmbeddingModel,
 		&v.FactsCheckModel,
+		&v.FactsCheckFallbackModel,
 		&v.FaithfulnessCheckModel,
+		&v.FaithfulnessCheckFallbackModel,
 		&v.NavigatorEnabled,
 		&v.AINavigatorBriefEnabled,
 		&v.NavigatorPersonaMode,
@@ -547,7 +551,7 @@ func (r *UserSettingsRepo) UpsertUIFontConfig(ctx context.Context, userID, sansK
 func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
-	factsModel, factsSecondaryModel *string, factsSecondaryRatePercent int, factsFallbackModel, summaryModel, summarySecondaryModel *string, summarySecondaryRatePercent int, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
+	factsModel, factsSecondaryModel *string, factsSecondaryRatePercent int, factsFallbackModel, summaryModel, summarySecondaryModel *string, summarySecondaryRatePercent int, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, factsCheckFallbackModel, faithfulnessCheckModel, faithfulnessCheckFallbackModel *string,
 	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, aiNavigatorBriefModel, aiNavigatorBriefFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel, ttsMarkupPreprocessModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
@@ -567,7 +571,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				source_suggestion_model,
 				embedding_model,
 				facts_check_model,
+				facts_check_fallback_model,
 				faithfulness_check_model,
+				faithfulness_check_fallback_model,
 				navigator_enabled,
 				ai_navigator_brief_enabled,
 				navigator_persona_mode,
@@ -579,7 +585,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				audio_briefing_script_model,
 				audio_briefing_script_fallback_model,
 				tts_markup_preprocess_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_secondary_model = EXCLUDED.facts_secondary_model,
@@ -595,7 +601,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    source_suggestion_model = EXCLUDED.source_suggestion_model,
 			    embedding_model = EXCLUDED.embedding_model,
 			    facts_check_model = EXCLUDED.facts_check_model,
+			    facts_check_fallback_model = EXCLUDED.facts_check_fallback_model,
 			    faithfulness_check_model = EXCLUDED.faithfulness_check_model,
+			    faithfulness_check_fallback_model = EXCLUDED.faithfulness_check_fallback_model,
 			    navigator_enabled = EXCLUDED.navigator_enabled,
 			    ai_navigator_brief_enabled = EXCLUDED.ai_navigator_brief_enabled,
 			    navigator_persona_mode = EXCLUDED.navigator_persona_mode,
@@ -623,7 +631,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		sourceSuggestionModel,
 		embeddingModel,
 		factsCheckModel,
+		factsCheckFallbackModel,
 		faithfulnessCheckModel,
+		faithfulnessCheckFallbackModel,
 		navigatorEnabled,
 		aiNavigatorBriefEnabled,
 		navigatorPersonaMode,

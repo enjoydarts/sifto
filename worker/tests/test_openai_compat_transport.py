@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import httpx
 
-from app.services.openai_compat_transport import run_chat_json
+from app.services.openai_compat_transport import _provider_user_max_concurrency, run_chat_json
 
 
 class _FakeClient:
@@ -247,6 +247,15 @@ class _ConcurrentTrackingClient:
 
 
 class RunChatJsonTests(unittest.TestCase):
+    def test_featherless_user_concurrency_defaults_to_four(self):
+        previous = os.environ.get("FEATHERLESS_USER_MAX_CONCURRENCY")
+        os.environ.pop("FEATHERLESS_USER_MAX_CONCURRENCY", None)
+        try:
+            self.assertEqual(_provider_user_max_concurrency("featherless"), 4)
+        finally:
+            if previous is not None:
+                os.environ["FEATHERLESS_USER_MAX_CONCURRENCY"] = previous
+
     def setUp(self):
         _FakeClient.last_json = None
         _RetryThenSuccessClient.call_count = 0

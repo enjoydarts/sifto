@@ -106,7 +106,9 @@ type UserSettings struct {
 	SourceSuggestionModel            *string    `json:"source_suggestion_model,omitempty"`
 	EmbeddingModel                   *string    `json:"embedding_model,omitempty"`
 	FactsCheckModel                  *string    `json:"facts_check_model,omitempty"`
+	FactsCheckFallbackModel          *string    `json:"facts_check_fallback_model,omitempty"`
 	FaithfulnessCheckModel           *string    `json:"faithfulness_check_model,omitempty"`
+	FaithfulnessCheckFallbackModel   *string    `json:"faithfulness_check_fallback_model,omitempty"`
 	NavigatorEnabled                 bool       `json:"navigator_enabled"`
 	AINavigatorBriefEnabled          bool       `json:"ai_navigator_brief_enabled"`
 	NavigatorPersonaMode             string     `json:"navigator_persona_mode"`

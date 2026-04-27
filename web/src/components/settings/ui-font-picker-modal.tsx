@@ -35,12 +35,6 @@ export default function UIFontPickerModal({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-    }
-  }, [open]);
-
   const currentFont = useMemo(
     () => fonts.find((font) => font.key === currentKey) ?? fonts.find((font) => font.key === defaultKey) ?? fonts[0] ?? null,
     [currentKey, defaultKey, fonts],

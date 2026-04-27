@@ -175,8 +175,12 @@ export function localizeLLMSettingKey(settingKey: string, t: Translate): string 
       return t("settings.model.sourceSuggestion");
     case "facts_check":
       return t("settings.model.factsCheck");
+    case "facts_check_fallback":
+      return t("settings.model.factsCheckFallback");
     case "faithfulness_check":
       return t("settings.model.faithfulnessCheck");
+    case "faithfulness_check_fallback":
+      return t("settings.model.faithfulnessCheckFallback");
     case "navigator":
       return t("settings.model.navigator");
     case "navigator_fallback":

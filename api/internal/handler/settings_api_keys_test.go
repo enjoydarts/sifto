@@ -66,6 +66,12 @@ func lockSettingsHandlerTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS facts_check_fallback_model text`); err != nil {
+		t.Fatalf("ensure user_settings.facts_check_fallback_model: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS faithfulness_check_fallback_model text`); err != nil {
+		t.Fatalf("ensure user_settings.faithfulness_check_fallback_model: %v", err)
+	}
 }
 
 func newSettingsHandlerForAPIKeyTest(t *testing.T) *SettingsHandler {

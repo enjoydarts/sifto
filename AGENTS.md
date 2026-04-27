@@ -14,6 +14,14 @@
   - DB migration適用: `make migrate-up`
   - DB migration確認: `make migrate-version`
 
+## Superpowers 運用
+
+- 実装・調査・デバッグ・設計・レビューでは、原則として Superpowers plugin / skill の該当ワークフローを使う。
+- 変更が小さい場合でも、最低限「状況確認 → 方針 → 実装 → 検証 → 報告」の流れで進める。
+- TDD が適する変更では TDD ワークフローを優先する。
+- バグ調査では debugging workflow を優先する。
+- 設計や大きめの変更では planning workflow を優先する。
+
 ## 編集ルール
 
 - 既存のユーザー変更を勝手に巻き戻さない。

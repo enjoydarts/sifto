@@ -3,6 +3,7 @@ package inngest
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/service"
@@ -59,6 +60,7 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, failedModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, err)
 		if shouldRetrySameModelLLMAttempt(err, false) {
 			retryStepName := stepName + "-retry"
+			log.Printf("process-item %s retry-same-model item_id=%s attempt=%d model=%s err=%v", cfg.purpose, ptrStringValue(cfg.itemID), cfg.attempt+1, ptrStringValue(failedModel), err)
 			retryResult, retryErr := step.Run(ctx, retryStepName, func(ctx context.Context) (*T, error) {
 				runtime := cfg.defaultRuntime
 				if chooseModelOverride(cfg.modelOverride, nil) != nil {
@@ -87,6 +89,7 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 		}
 		if canUseLLMFallbackAfterRetry(failedModel, cfg.fallbackModel, err) {
 			fallbackStepName := stepName + "-fallback"
+			log.Printf("process-item %s fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s err=%v", cfg.purpose, ptrStringValue(cfg.itemID), cfg.attempt+1, ptrStringValue(failedModel), ptrStringValue(cfg.fallbackModel), err)
 			fallbackResult, fallbackErr := step.Run(ctx, fallbackStepName, func(ctx context.Context) (*T, error) {
 				runtime, resolveErr := resolveLLMRuntime(ctx, deps.keyProvider, cfg.userID, cfg.fallbackModel, cfg.resolvePurpose)
 				if resolveErr != nil {

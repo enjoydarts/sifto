@@ -1,5 +1,7 @@
 # Sifto
 
+[English](README.en.md)
+
 RSS フィードと単発 URL を収集し、本文抽出、事実抽出、要約、品質チェック、Digest 配信まで自動化するパーソナル情報収集服务体系です。ブリーフィング、クイックトリアージ、インラインリーダー、トピックパルス、AI Ask、復習導線、LLM 使用量可視化、音声ブリーフィング、Podcast 配信、AI Navigator Briefs、Prompt Admin などで、日々のインプット整理を支援します。
 
 ## 現在の主な機能

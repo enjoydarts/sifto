@@ -259,6 +259,7 @@
         "Qwen/Qwen2.5-7B-Instruct-Turbo",
         "Qwen/Qwen3.5-397B-A17B",
         "Qwen/Qwen3.5-9B",
+        "Qwen/Qwen3.6-Plus",
         "Qwen/Qwen3-Coder-Next-FP8"
       ],
       "default_models": {
@@ -3522,6 +3523,29 @@
         "pricing_source": "together_serverless_models_2026_04",
         "input_per_mtok_usd": 0.5,
         "output_per_mtok_usd": 1.2
+      }
+    },
+    {
+      "id": "together::Qwen/Qwen3.6-Plus",
+      "provider": "together",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["jsonStable", "latest"],
+      "comment": "Together AI 上の Qwen3.6 Plus。要約、事実抽出、Ask の比較候補として使う最新 Qwen 系モデル。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_page_2026_04",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 3.0
       }
     }
   ],

@@ -179,3 +179,12 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 		})
 	}
 }
+
+func TestSourceSuggestionLLMStageTimeoutsAreLongEnoughForReasoningModels(t *testing.T) {
+	if sourceSuggestionSeedGenerationTimeout != 120*time.Second {
+		t.Fatalf("sourceSuggestionSeedGenerationTimeout = %s, want 120s", sourceSuggestionSeedGenerationTimeout)
+	}
+	if sourceSuggestionRankTimeout != 120*time.Second {
+		t.Fatalf("sourceSuggestionRankTimeout = %s, want 120s", sourceSuggestionRankTimeout)
+	}
+}

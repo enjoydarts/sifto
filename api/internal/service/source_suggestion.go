@@ -29,6 +29,11 @@ var (
 	reTitleAttr = regexp.MustCompile(`(?i)\btitle="([^"]+)"`)
 )
 
+const (
+	sourceSuggestionSeedGenerationTimeout = 120 * time.Second
+	sourceSuggestionRankTimeout           = 120 * time.Second
+)
+
 func DiscoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, error) {
 	fp := gofeed.NewParser()
 	if feed, err := fp.ParseURLWithContext(rawURL, ctx); err == nil {
@@ -466,7 +471,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 		})
 		byID[id] = &suggestions[i]
 	}
-	rankBudget := capDuration(20*time.Second, remainingSuggestionBudget())
+	rankBudget := capDuration(sourceSuggestionRankTimeout, remainingSuggestionBudget())
 	if rankBudget <= 0 {
 		return map[string]any{
 			"warning": "source suggestion rank skipped due timeout budget",
@@ -876,7 +881,7 @@ func (s *SourceSuggestionService) expandSourceSuggestionsWithLLMSeeds(
 	for _, src := range sources {
 		existing = append(existing, RankFeedSuggestionsExistingSource{URL: src.URL, Title: src.Title})
 	}
-	seedBudget := capDuration(25*time.Second, remainingSuggestionBudget())
+	seedBudget := capDuration(sourceSuggestionSeedGenerationTimeout, remainingSuggestionBudget())
 	if seedBudget <= 0 {
 		return map[string]any{
 			"warning": "source suggestion seed skipped due timeout budget",

@@ -181,6 +181,9 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 }
 
 func TestSourceSuggestionLLMStageTimeoutsAreLongEnoughForReasoningModels(t *testing.T) {
+	if sourceSuggestionMaxLatency != 300*time.Second {
+		t.Fatalf("sourceSuggestionMaxLatency = %s, want 300s", sourceSuggestionMaxLatency)
+	}
 	if sourceSuggestionSeedGenerationTimeout != 120*time.Second {
 		t.Fatalf("sourceSuggestionSeedGenerationTimeout = %s, want 120s", sourceSuggestionSeedGenerationTimeout)
 	}

@@ -30,6 +30,7 @@ var (
 )
 
 const (
+	sourceSuggestionMaxLatency           = 300 * time.Second
 	sourceSuggestionSeedGenerationTimeout = 120 * time.Second
 	sourceSuggestionRankTimeout           = 120 * time.Second
 )
@@ -224,10 +225,9 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 
 	registered := map[string]bool{}
 	startAt := time.Now()
-	const suggestionMaxLatency = 60 * time.Second
-	isOverBudget := func() bool { return time.Since(startAt) >= suggestionMaxLatency }
+	isOverBudget := func() bool { return time.Since(startAt) >= sourceSuggestionMaxLatency }
 	remainingSuggestionBudget := func() time.Duration {
-		if d := suggestionMaxLatency - time.Since(startAt); d > 0 {
+		if d := sourceSuggestionMaxLatency - time.Since(startAt); d > 0 {
 			return d
 		}
 		return 0

@@ -94,6 +94,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("mistral-small-2603"); got == nil {
 		t.Fatal("mistral-small-2603 not found in catalog")
 	}
+	if got := findModelCatalog("mistral-medium-3.5"); got == nil {
+		t.Fatal("mistral-medium-3.5 not found in catalog")
+	}
 	if got := findModelCatalog("MiniMax-M2.7"); got == nil {
 		t.Fatal("MiniMax-M2.7 not found in catalog")
 	}
@@ -180,6 +183,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.6-35b-a3b", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "mistral-small-2603", provider: "mistral"},
+		{model: "mistral-medium-3.5", provider: "mistral"},
 		{model: "MiniMax-M2.7", provider: "minimax"},
 		{model: MiniMaxAliasModelID("MiniMax-M2.7"), provider: "minimax"},
 		{model: "minimax/MiniMax-M2.7", provider: "minimax"},

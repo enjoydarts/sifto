@@ -82,6 +82,7 @@
       "match_exact": [
         "mistral-small-2603",
         "mistral-large-2512",
+        "mistral-medium-3.5",
         "mistral-medium-2508",
         "mistral-small-2506",
         "ministral-14b-2512",
@@ -1330,6 +1331,28 @@
         "pricing_source": "mistral_static_2026_03",
         "input_per_mtok_usd": 0.5,
         "output_per_mtok_usd": 1.5
+      }
+    },
+    {
+      "id": "mistral-medium-3.5",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "Mistral Medium 3.5。agentic・coding用途に最適化されたMistralの最新medium枠で、要約、Ask、ダイジェストの品質比較に使いやすい候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_docs_2026_05",
+        "input_per_mtok_usd": 1.5,
+        "output_per_mtok_usd": 7.5
       }
     },
     {

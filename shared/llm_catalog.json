@@ -186,7 +186,8 @@
         "grok-4-1-fast-reasoning",
         "grok-4-1-fast-non-reasoning",
         "grok-4.20-0309-non-reasoning",
-        "grok-4.20-0309-reasoning"
+        "grok-4.20-0309-reasoning",
+        "grok-4.3"
       ],
       "default_models": {
         "facts": "grok-4-fast-non-reasoning",
@@ -1982,6 +1983,28 @@
         "pricing_source": "xai_docs_2026_04",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 6.0
+      }
+    },
+    {
+      "id": "grok-4.3",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest"],
+      "comment": "xAI の Grok 4.3。公式モデルページで推奨される最新 Grok 系として、要約、事実抽出、Ask、ダイジェストの比較候補に追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_docs_2026_05",
+        "input_per_mtok_usd": 1.25,
+        "output_per_mtok_usd": 2.5
       }
     },
     {

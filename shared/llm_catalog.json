@@ -2004,7 +2004,8 @@
       "pricing": {
         "pricing_source": "xai_docs_2026_05",
         "input_per_mtok_usd": 1.25,
-        "output_per_mtok_usd": 2.5
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.2
       }
     },
     {

@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from app.services.minimax_service import (
     _llm_meta,
     _require_model,
     summarize,
+    summarize_async,
 )
 
 
@@ -89,6 +91,27 @@ class MiniMaxServiceTests(unittest.TestCase):
             source_text_chars=1200,
             model="MiniMax-M2.5",
             api_key="minimax-key",
+        )
+
+        self.assertEqual(result["genre"], "research")
+        self.assertEqual(result["other_label"], "")
+
+    @patch("app.services.minimax_service._llm_meta", return_value={"provider": "minimax", "model": "MiniMax-M2.5"})
+    @patch("app.services.minimax_service._message_text")
+    @patch("app.services.minimax_service._call_with_model_fallback_async")
+    @patch("app.services.minimax_service._async_client_for_api_key", return_value=object())
+    def test_summarize_async_keeps_taxonomy_genre_from_structured_output(self, _async_client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
+        call_with_model_fallback.return_value = (object(), "MiniMax-M2.5", [])
+        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+
+        result = asyncio.run(
+            summarize_async(
+                title="Example title",
+                facts=["Fact 1"],
+                source_text_chars=1200,
+                model="MiniMax-M2.5",
+                api_key="minimax-key",
+            )
         )
 
         self.assertEqual(result["genre"], "research")

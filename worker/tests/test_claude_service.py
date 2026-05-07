@@ -84,6 +84,27 @@ class ClaudeServiceTests(unittest.TestCase):
         self.assertEqual(result["genre"], "research")
         self.assertEqual(result["other_label"], "")
 
+    @patch("app.services.claude_service._llm_meta", return_value={"provider": "anthropic", "model": "claude-sonnet-4-6"})
+    @patch("app.services.claude_service._message_text")
+    @patch("app.services.claude_service._call_with_model_fallback_async")
+    @patch("app.services.claude_service._async_client_for_api_key", return_value=object())
+    def test_summarize_async_keeps_taxonomy_genre_from_structured_output(self, _async_client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
+        call_with_model_fallback.return_value = (object(), "claude-sonnet-4-6", [])
+        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+
+        result = asyncio.run(
+            summarize_async(
+                title="Example title",
+                facts=["Fact 1"],
+                source_text_chars=1200,
+                model="claude-sonnet-4-6",
+                api_key="anthropic-key",
+            )
+        )
+
+        self.assertEqual(result["genre"], "research")
+        self.assertEqual(result["other_label"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

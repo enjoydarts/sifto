@@ -96,7 +96,12 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         body["thinking"] = {"type": "disabled"}
         return
     if provider_name == "deepinfra":
-        if _is_kimi_k2x_model(normalized_model) or _is_glm_model(normalized_model):
+        if _is_kimi_k2x_model(normalized_model):
+            body["thinking"] = {"type": "disabled"}
+            body["reasoning"] = {"enabled": False}
+            body["chat_template_kwargs"] = {"enable_thinking": False}
+            return
+        if _is_glm_model(normalized_model):
             body["thinking"] = {"type": "disabled"}
             return
         if _is_qwen_model(normalized_model):

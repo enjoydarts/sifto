@@ -419,10 +419,10 @@ class RunChatJsonTests(unittest.TestCase):
         )
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
-    def test_deepinfra_requests_disable_kimi_k26_thinking_via_top_level_thinking(self):
+    def test_deepinfra_requests_disable_kimi_thinking_via_all_supported_switches(self):
         run_chat_json(
             "Return JSON",
-            "moonshotai/Kimi-K2.6",
+            "moonshotai/Kimi-K2.5",
             "test-key",
             url="https://example.com/chat/completions",
             normalize_model_name=lambda model: model,
@@ -437,7 +437,11 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIsNotNone(_FakeClient.last_json)
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
-        self.assertNotIn("reasoning", _FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("reasoning"), {"enabled": False})
+        self.assertEqual(
+            _FakeClient.last_json.get("chat_template_kwargs"),
+            {"enable_thinking": False},
+        )
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_deepinfra_requests_disable_qwen_thinking_via_chat_template_kwargs(self):

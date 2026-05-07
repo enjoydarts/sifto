@@ -7,6 +7,10 @@ def _chat_completions_url(raw_base_url: str) -> str:
     base = (raw_base_url or "").strip().rstrip("/")
     if not base:
         return "https://api.minimax.io/v1/chat/completions"
+    for suffix in ("/anthropic/v1", "/anthropic"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
     if base.endswith("/v1/chat/completions") or base.endswith("/chat/completions"):
         return base
     if base.endswith("/v1"):

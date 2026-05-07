@@ -35,6 +35,8 @@ class MiniMaxServiceTests(unittest.TestCase):
         self.assertEqual(_chat_completions_url("https://api.minimax.io"), "https://api.minimax.io/v1/chat/completions")
         self.assertEqual(_chat_completions_url("https://api.minimax.io/v1"), "https://api.minimax.io/v1/chat/completions")
         self.assertEqual(_chat_completions_url("https://api.minimax.io/v1/chat/completions"), "https://api.minimax.io/v1/chat/completions")
+        self.assertEqual(_chat_completions_url("https://api.minimax.io/anthropic"), "https://api.minimax.io/v1/chat/completions")
+        self.assertEqual(_chat_completions_url("https://api.minimax.io/anthropic/v1"), "https://api.minimax.io/v1/chat/completions")
 
     @patch("app.services.provider_base.run_chat_json", return_value=("{}", {"input_tokens": 1, "output_tokens": 2}))
     def test_chat_json_uses_minimax_openai_compatible_url(self, chat_json):

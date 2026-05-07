@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -28,16 +27,6 @@ type ProviderModelsResult struct {
 	Models   []string
 	Error    *string
 }
-
-var (
-	miniMaxDiscoveryDocsURLs = []string{
-		"https://platform.minimax.io/docs/api-reference/api-overview",
-		"https://platform.minimax.io/docs/guides/models-intro",
-		"https://platform.minimax.io/docs/guides/text-generation",
-		"https://platform.minimax.io/docs/release-notes/models",
-	}
-	miniMaxModelIDPattern = regexp.MustCompile(`MiniMax-M2(?:\.\d+)?(?:-highspeed|-her)?`)
-)
 
 type ProviderModelDiscoveryKeys struct {
 	OpenAI              string
@@ -1070,40 +1059,34 @@ func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) 
 }
 
 func (s *ProviderModelDiscoveryService) fetchMiniMaxModels(ctx context.Context) ([]string, error) {
-	models := make([]string, 0, 8)
-	for _, rawURL := range miniMaxDiscoveryDocsURLs {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("User-Agent", "sifto-provider-model-discovery/1.0")
-		var body []byte
-		if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
-			defer resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				payload, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-				if len(payload) > 0 {
-					return fmt.Errorf("status %d body=%s", resp.StatusCode, string(payload))
-				}
-				return fmt.Errorf("status %d", resp.StatusCode)
-			}
-			var readErr error
-			body, readErr = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			return readErr
-		}); err != nil {
-			continue
-		}
-		models = append(models, extractMiniMaxModelIDs(string(body))...)
+	apiKey := strings.TrimSpace(s.keys.MiniMax)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("MINIMAX_API_KEY"))
 	}
-	models = normalizeModelIDs(models)
-	if len(models) == 0 {
-		return nil, fmt.Errorf("no models found in MiniMax docs")
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
 	}
-	return models, nil
-}
-
-func extractMiniMaxModelIDs(body string) []string {
-	return miniMaxModelIDPattern.FindAllString(body, -1)
+	base := normalizeMiniMaxAPIBaseURL(os.Getenv("MINIMAX_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var decoded struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(decoded.Data))
+	for _, item := range decoded.Data {
+		models = append(models, item.ID)
+	}
+	return normalizeModelIDs(models), nil
 }
 
 func (s *ProviderModelDiscoveryService) fetchXAIModels(ctx context.Context) ([]string, error) {

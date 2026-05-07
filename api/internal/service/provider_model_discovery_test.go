@@ -299,33 +299,35 @@ func TestProviderModelDiscoveryFetchDeepInfraSnapshots(t *testing.T) {
 	}
 }
 
-func TestProviderModelDiscoveryFetchMiniMaxModelsFromDocs(t *testing.T) {
+func TestProviderModelDiscoveryFetchMiniMaxModelsFromOpenAICompatibleAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
 		}
-		if r.URL.Path != "/docs/api-reference/api-overview" {
-			t.Fatalf("path = %s, want %s", r.URL.Path, "/docs/api-reference/api-overview")
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/v1/models")
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`
-			<html>
-				<body>
-					<div>MiniMax-M2.7</div>
-					<div>MiniMax-M2.7-highspeed</div>
-					<div>MiniMax-M2.5</div>
-					<div>MiniMax-M2.7</div>
-				</body>
-			</html>
-		`))
+		if got := r.Header.Get("Authorization"); got != "Bearer test-minimax-key" {
+			t.Fatalf("Authorization = %q, want Bearer test-minimax-key", got)
+		}
+		_ = json.NewEncoder(w).Encode(struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}{Data: []struct {
+			ID string `json:"id"`
+		}{
+			{ID: "MiniMax-M2.7"},
+			{ID: "MiniMax-M2.7-highspeed"},
+			{ID: "MiniMax-M2.5"},
+			{ID: "MiniMax-M2.7"},
+		}})
 	}))
 	defer server.Close()
 
-	svc := NewProviderModelDiscoveryService()
+	svc := NewProviderModelDiscoveryServiceWithKeys(ProviderModelDiscoveryKeys{MiniMax: "test-minimax-key"})
 	svc.http = server.Client()
-	original := miniMaxDiscoveryDocsURLs
-	miniMaxDiscoveryDocsURLs = []string{server.URL + "/docs/api-reference/api-overview"}
-	defer func() { miniMaxDiscoveryDocsURLs = original }()
+	t.Setenv("MINIMAX_API_BASE_URL", server.URL+"/v1/chat/completions")
 
 	models, err := svc.fetchMiniMaxModels(context.Background())
 	if err != nil {
@@ -358,22 +360,6 @@ func TestNormalizeMiniMaxAPIBaseURL(t *testing.T) {
 				t.Fatalf("normalizeMiniMaxAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestExtractMiniMaxModelIDs(t *testing.T) {
-	body := `
-		<div>MiniMax-M2.7</div>
-		<div>MiniMax-M2.7-highspeed</div>
-		<div>MiniMax-M2.5</div>
-		<div>MiniMax-M2-her</div>
-		<div>MiniMax-M2</div>
-	`
-
-	got := normalizeModelIDs(extractMiniMaxModelIDs(body))
-	want := []string{"MiniMax-M2", "MiniMax-M2-her", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("extractMiniMaxModelIDs() = %#v, want %#v", got, want)
 	}
 }
 
@@ -448,6 +434,7 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	siliconFlowKey := "test-siliconflow-key"
 	xiaomiKey := "test-mimo-key"
 	featherlessKey := "test-featherless-key"
+	miniMaxKey := "test-minimax-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -501,16 +488,17 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "featherless-model-1"}}})
+			case r.Header.Get("Authorization") == "Bearer "+miniMaxKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
+					ID string `json:"id"`
+				}{{ID: "MiniMax-M2.5"}}})
 			default:
 				t.Fatalf("unexpected auth for /v1/models: authorization=%q api-key=%q", r.Header.Get("Authorization"), r.Header.Get("api-key"))
 			}
-		case "/docs/api-reference/api-overview":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(`
-				<div>MiniMax-M2.7</div>
-				<div>MiniMax-M2.7-highspeed</div>
-				<div>MiniMax-M2.5</div>
-			`))
 		case "/api/paas/v4/models":
 			_ = json.NewEncoder(w).Encode(struct {
 				Data []struct {
@@ -547,12 +535,11 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("ZAI_API_BASE_URL", server.URL+"/api/paas/v4/chat/completions")
 	t.Setenv("FEATHERLESS_API_KEY", featherlessKey)
 	t.Setenv("FEATHERLESS_API_BASE_URL", server.URL+"/v1/chat/completions")
+	t.Setenv("MINIMAX_API_KEY", miniMaxKey)
+	t.Setenv("MINIMAX_API_BASE_URL", server.URL+"/v1/chat/completions")
 
 	svc := NewProviderModelDiscoveryService()
 	svc.http = server.Client()
-	originalMiniMaxURLs := miniMaxDiscoveryDocsURLs
-	miniMaxDiscoveryDocsURLs = []string{server.URL + "/docs/api-reference/api-overview"}
-	defer func() { miniMaxDiscoveryDocsURLs = originalMiniMaxURLs }()
 	results, err := svc.DiscoverAll(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)

@@ -366,6 +366,31 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_featherless_deepseek_v4_flash_requests_disable_thinking(self):
+        run_chat_json(
+            "Return JSON",
+            "deepseek-ai/DeepSeek-V4-Flash",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="featherless",
+            logger=None,
+            response_schema={"type": "object"},
+        )
+
+        self.assertIsNotNone(_FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
+        self.assertEqual(_FakeClient.last_json.get("reasoning"), {"enabled": False})
+        self.assertEqual(
+            _FakeClient.last_json.get("chat_template_kwargs"),
+            {"enable_thinking": False},
+        )
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_featherless_requests_disable_qwen_thinking_via_chat_template_kwargs(self):
         run_chat_json(
             "Return JSON",

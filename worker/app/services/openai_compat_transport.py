@@ -59,7 +59,12 @@ def _is_glm_model(model: str) -> bool:
 
 def _is_deepseek_v4_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
-    return normalized in {"deepseek-v4-flash", "deepseek-v4-pro"}
+    return normalized in {
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-ai/deepseek-v4-flash",
+        "deepseek-ai/deepseek-v4-pro",
+    }
 
 
 def _is_gpt_oss_model(model: str) -> bool:
@@ -108,6 +113,11 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
             body["chat_template_kwargs"] = {"enable_thinking": False}
             return
     if provider_name != "featherless":
+        return
+    if _is_deepseek_v4_model(normalized_model):
+        body["thinking"] = {"type": "disabled"}
+        body["reasoning"] = {"enabled": False}
+        body["chat_template_kwargs"] = {"enable_thinking": False}
         return
     if _is_kimi_k2x_model(normalized_model):
         body["thinking"] = {"type": "disabled"}

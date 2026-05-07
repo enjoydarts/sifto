@@ -1,14 +1,12 @@
 import asyncio
+import os
 import unittest
 from unittest.mock import patch
 
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
 from app.services.minimax_service import (
-    _api_base_url,
-    _call_with_model_fallback,
-    _call_with_model_fallback_async,
-    _client_for_api_key,
-    _async_client_for_api_key,
+    _chat_completions_url,
+    _p,
     _llm_meta,
     _require_model,
     summarize,
@@ -30,60 +28,39 @@ class MiniMaxServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "minimax model is required for summary"):
             _require_model(None, "summary")
 
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/custom-anthropic")
-    def test_api_base_url_uses_env_override(self, getenv):
-        self.assertEqual(_api_base_url(), "https://api.minimax.io/custom-anthropic")
-        getenv.assert_called_with("MINIMAX_API_BASE_URL")
+    def test_chat_completions_url_defaults_to_openai_compatible_endpoint(self):
+        self.assertEqual(_chat_completions_url(""), "https://api.minimax.io/v1/chat/completions")
 
-    @patch("app.services.minimax_service._transport_client_for_api_key", return_value=object())
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
-    def test_client_uses_minimax_anthropic_base_url(self, getenv, client_for_api_key):
-        self.assertIsNotNone(_client_for_api_key("minimax-key"))
-        client_for_api_key.assert_called_once_with("minimax-key", base_url="https://api.minimax.io/anthropic")
-        getenv.assert_called_with("MINIMAX_API_BASE_URL")
+    def test_chat_completions_url_normalizes_env_override(self):
+        self.assertEqual(_chat_completions_url("https://api.minimax.io"), "https://api.minimax.io/v1/chat/completions")
+        self.assertEqual(_chat_completions_url("https://api.minimax.io/v1"), "https://api.minimax.io/v1/chat/completions")
+        self.assertEqual(_chat_completions_url("https://api.minimax.io/v1/chat/completions"), "https://api.minimax.io/v1/chat/completions")
 
-    @patch("app.services.minimax_service._transport_async_client_for_api_key", return_value=object())
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
-    def test_async_client_uses_minimax_anthropic_base_url(self, getenv, async_client_for_api_key):
-        self.assertIsNotNone(_async_client_for_api_key("minimax-key"))
-        async_client_for_api_key.assert_called_once_with("minimax-key", base_url="https://api.minimax.io/anthropic")
-        getenv.assert_called_with("MINIMAX_API_BASE_URL")
-
-    @patch("app.services.minimax_service._anthropic_call_with_model_fallback", return_value=(None, None, []))
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
-    def test_transport_uses_minimax_anthropic_base_url(self, getenv, transport):
-        _call_with_model_fallback("prompt", "MiniMax-M2.7", "MiniMax-M2.5", api_key="minimax-key")
-        transport.assert_called_once()
-        self.assertEqual(transport.call_args.kwargs.get("base_url"), "https://api.minimax.io/anthropic")
-        getenv.assert_called_with("MINIMAX_API_BASE_URL")
-
-    @patch("app.services.minimax_service._anthropic_call_with_model_fallback_async", return_value=(None, None, []))
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
-    def test_async_transport_uses_minimax_anthropic_base_url(self, getenv, transport):
-        import asyncio
-
-        asyncio.run(_call_with_model_fallback_async("prompt", "MiniMax-M2.7", "MiniMax-M2.5", api_key="minimax-key"))
-        transport.assert_called_once()
-        self.assertEqual(transport.call_args.kwargs.get("base_url"), "https://api.minimax.io/anthropic")
-        getenv.assert_called_with("MINIMAX_API_BASE_URL")
+    @patch("app.services.provider_base.run_chat_json", return_value=("{}", {"input_tokens": 1, "output_tokens": 2}))
+    def test_chat_json_uses_minimax_openai_compatible_url(self, chat_json):
+        with patch.dict(os.environ, {"MINIMAX_API_BASE_URL": "https://api.minimax.io"}, clear=False):
+            _p._chat_json("prompt", "MiniMax-M2.7", "minimax-key", max_output_tokens=128)
+        self.assertEqual(chat_json.call_args.kwargs.get("url"), "https://api.minimax.io/v1/chat/completions")
+        self.assertEqual(chat_json.call_args.kwargs.get("provider_name"), "minimax")
+        self.assertEqual(chat_json.call_args.kwargs.get("auth_header_name"), "Authorization")
+        self.assertEqual(chat_json.call_args.kwargs.get("auth_scheme"), "Bearer")
 
     def test_llm_meta_preserves_minimax_provider_identity(self):
         llm = _llm_meta(
-            None,
-            "summary",
             "MiniMax-M2.5",
+            "summary",
+            {"input_tokens": 0, "output_tokens": 0},
         )
 
         self.assertEqual(llm.get("provider"), "minimax")
         self.assertEqual(llm.get("model"), "MiniMax-M2.5")
 
-    @patch("app.services.minimax_service._llm_meta", return_value={"provider": "minimax", "model": "MiniMax-M2.5"})
-    @patch("app.services.minimax_service._message_text")
-    @patch("app.services.minimax_service._call_with_model_fallback")
-    @patch("app.services.minimax_service._client_for_api_key", return_value=object())
-    def test_summarize_keeps_taxonomy_genre_from_structured_output(self, _client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
-        call_with_model_fallback.return_value = (object(), "MiniMax-M2.5", [])
-        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+    @patch("app.services.minimax_service._p._chat_json")
+    def test_summarize_keeps_taxonomy_genre_from_structured_output(self, chat_json):
+        chat_json.return_value = (
+            '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}',
+            {"input_tokens": 10, "output_tokens": 20},
+        )
 
         result = summarize(
             title="Example title",
@@ -96,13 +73,12 @@ class MiniMaxServiceTests(unittest.TestCase):
         self.assertEqual(result["genre"], "research")
         self.assertEqual(result["other_label"], "")
 
-    @patch("app.services.minimax_service._llm_meta", return_value={"provider": "minimax", "model": "MiniMax-M2.5"})
-    @patch("app.services.minimax_service._message_text")
-    @patch("app.services.minimax_service._call_with_model_fallback_async")
-    @patch("app.services.minimax_service._async_client_for_api_key", return_value=object())
-    def test_summarize_async_keeps_taxonomy_genre_from_structured_output(self, _async_client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
-        call_with_model_fallback.return_value = (object(), "MiniMax-M2.5", [])
-        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+    @patch("app.services.minimax_service._p._chat_json_async")
+    def test_summarize_async_keeps_taxonomy_genre_from_structured_output(self, chat_json):
+        chat_json.return_value = (
+            '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}',
+            {"input_tokens": 10, "output_tokens": 20},
+        )
 
         result = asyncio.run(
             summarize_async(

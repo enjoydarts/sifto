@@ -775,7 +775,8 @@ func TestIsRetryableAudioBriefingScriptWorkerError(t *testing.T) {
 		want bool
 	}{
 		{name: "worker 502", err: fmt.Errorf("worker /audio-briefing-script: status 502"), want: true},
-		{name: "worker 422", err: fmt.Errorf("worker /audio-briefing-script: status 422"), want: false},
+		{name: "retryable worker 422 validation", err: fmt.Errorf("worker /audio-briefing-script: status 422 detail=audio briefing script missing turns state=missing"), want: true},
+		{name: "generic worker 422", err: fmt.Errorf("worker /audio-briefing-script: status 422 detail=validation failed"), want: false},
 		{name: "timeout", err: fmt.Errorf("Post \"x\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"), want: true},
 	}
 	for _, tt := range tests {

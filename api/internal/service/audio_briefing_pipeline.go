@@ -1970,12 +1970,41 @@ func isRetryableAudioBriefingScriptWorkerError(err error) bool {
 		strings.Contains(message, "worker /audio-briefing-script: status 504") {
 		return true
 	}
+	if strings.Contains(message, "worker /audio-briefing-script: status 422") &&
+		isRetryableAudioBriefingScriptValidationMessage(message) {
+		return true
+	}
 	if strings.Contains(message, "client.timeout exceeded") ||
 		strings.Contains(message, "context deadline exceeded") ||
 		strings.Contains(message, "request canceled") ||
 		strings.Contains(message, "connection reset by peer") ||
 		strings.Contains(message, "server disconnected without sending a response") {
 		return true
+	}
+	return false
+}
+
+func isRetryableAudioBriefingScriptValidationMessage(message string) bool {
+	for _, marker := range []string{
+		"audio briefing script missing opening",
+		"audio briefing script missing overall_summary",
+		"audio briefing script missing ending",
+		"audio briefing script article_segments count mismatch",
+		"audio briefing script segment must be an object",
+		"audio briefing script turn must be an object",
+		"audio briefing script missing turns",
+		"audio briefing script missing speaker for turn index:",
+		"audio briefing script missing section for turn index:",
+		"audio briefing script missing text for turn index:",
+		"audio briefing script embedded turns payload for turn index:",
+		"audio briefing script missing item_id for article turn index:",
+		"audio briefing script missing headline for item_id:",
+		"audio briefing script missing summary_intro for item_id:",
+		"audio briefing script missing commentary for item_id:",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
 	}
 	return false
 }

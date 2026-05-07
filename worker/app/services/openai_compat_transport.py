@@ -66,6 +66,17 @@ def _is_gpt_oss_model(model: str) -> bool:
     return str(model or "").strip().lower() == "gpt-oss-120b"
 
 
+def _normalize_openai_compat_max_tokens(provider_name: str, max_output_tokens: int) -> int:
+    try:
+        value = int(max_output_tokens)
+    except Exception:
+        value = 1200
+    if str(provider_name or "").strip().lower() == "fireworks":
+        # Fireworks rejects non-streaming chat.completions requests above 4096.
+        return max(1, min(value, 4096))
+    return max(1, value)
+
+
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
     if provider_name == "cerebras":
         if _is_gpt_oss_model(normalized_model):
@@ -399,7 +410,7 @@ def run_chat_json(
     body: dict = {
         "model": normalize_model_name(model),
         "messages": [],
-        "max_tokens": max_output_tokens,
+        "max_tokens": _normalize_openai_compat_max_tokens(provider_name, max_output_tokens),
     }
     if include_temperature:
         body["temperature"] = temperature if temperature is not None else 0.2
@@ -590,7 +601,7 @@ async def run_chat_json_async(
     body: dict = {
         "model": normalize_model_name(model),
         "messages": [],
-        "max_tokens": max_output_tokens,
+        "max_tokens": _normalize_openai_compat_max_tokens(provider_name, max_output_tokens),
     }
     if include_temperature:
         body["temperature"] = temperature if temperature is not None else 0.2

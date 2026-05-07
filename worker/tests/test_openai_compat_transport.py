@@ -547,6 +547,27 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_FakeClient.last_json.get("temperature"), 0.7)
         self.assertEqual(_FakeClient.last_json.get("top_p"), 0.98)
 
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_fireworks_caps_non_streaming_max_tokens_at_provider_limit(self):
+        run_chat_json(
+            "Return JSON",
+            "fireworks/kimi-k2p5",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="fireworks",
+            logger=None,
+            response_schema={"type": "object"},
+            max_output_tokens=60000,
+        )
+
+        self.assertIsNotNone(_FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("max_tokens"), 4096)
+
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyChoicesClient)
     def test_empty_choices_error_includes_response_snippet(self):
         with self.assertRaises(RuntimeError) as ctx:

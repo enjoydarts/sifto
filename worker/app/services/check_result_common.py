@@ -15,6 +15,27 @@ CHECK_RESULT_SCHEMA = {
 }
 
 
+def append_check_output_contract(text: str, *, comment_rule: str) -> str:
+    base = (text or "").strip()
+    contract = f"""# JSON 出力契約
+- JSON オブジェクト 1 つのみを返す
+- 必須キーは verdict と short_comment の 2 つ
+- verdict は pass / warn / fail のいずれか
+- short_comment は必ず空でない文字列にする
+- short_comment は {comment_rule}
+- verdict だけの JSON、short_comment 欠落、空文字、null は禁止
+- 前置き、後置き、Markdown コードフェンスは禁止
+
+必ず次の形で返す:
+{{
+  "verdict": "pass",
+  "short_comment": "本文で裏付けられた判定理由です。"
+}}"""
+    if not base:
+        return contract
+    return f"{base}\n\n{contract}"
+
+
 def extract_first_json_object(text: str) -> dict | None:
     s = (text or "").strip().lstrip("\ufeff")
     if s.startswith("```"):

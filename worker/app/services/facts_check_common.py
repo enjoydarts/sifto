@@ -1,6 +1,6 @@
 import re
 from app.services.facts_task_common import is_placeholder_fact
-from app.services.check_result_common import CHECK_RESULT_SCHEMA, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
+from app.services.check_result_common import CHECK_RESULT_SCHEMA, append_check_output_contract, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
 from app.services.langfuse_client import get_prompt_text
 
 
@@ -27,7 +27,8 @@ facts が元記事本文に忠実かを判定してください。
 - verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 長い説明や言い訳は不要
 - 応答に迷ったら short_comment を省略せず warn を返す"""
-    return get_prompt_text("facts_check.system", fallback)
+    text = get_prompt_text("facts_check.system", fallback)
+    return append_check_output_contract(text, comment_rule="日本語 1 文、80 文字以内")
 
 
 def facts_check_prompt(title: str | None, content: str, facts: list[str]) -> str:
@@ -76,7 +77,7 @@ article:
 facts:
 {facts_text}
 """
-    return get_prompt_text(
+    text = get_prompt_text(
         "facts_check.primary",
         fallback,
         variables={
@@ -86,6 +87,7 @@ facts:
             "expected_min_facts": expected_min_facts,
         },
     )
+    return append_check_output_contract(text, comment_rule="日本語 1 文、80 文字以内")
 
 
 def facts_check_retry_prompt(title: str | None, content: str, facts: list[str]) -> str:
@@ -118,7 +120,7 @@ article:
 facts:
 {facts_text}
 """
-    return get_prompt_text(
+    text = get_prompt_text(
         "facts_check.retry",
         fallback,
         variables={
@@ -128,6 +130,7 @@ facts:
             "expected_min_facts": expected_min_facts,
         },
     )
+    return append_check_output_contract(text, comment_rule="日本語 1 文、80 文字以内")
 
 
 def _coverage_hint_text(content: str, facts: list[str]) -> str:

@@ -1,4 +1,4 @@
-from app.services.check_result_common import CHECK_RESULT_SCHEMA, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
+from app.services.check_result_common import CHECK_RESULT_SCHEMA, append_check_output_contract, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
 from app.services.langfuse_client import get_prompt_text
 
 
@@ -22,7 +22,8 @@ summary が facts に忠実かを判定してください。
 - short_comment は今回の summary と facts を踏まえた具体的な寸評を書く
 - verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 汎用的な定型文だけで済ませない"""
-    return get_prompt_text("faithfulness_check.system", fallback)
+    text = get_prompt_text("faithfulness_check.system", fallback)
+    return append_check_output_contract(text, comment_rule="日本語で 1〜2 文、120 文字以内")
 
 
 def summary_faithfulness_prompt(title: str | None, facts: list[str], summary: str) -> str:
@@ -52,11 +53,12 @@ facts:
 summary:
 {summary}
 """
-    return get_prompt_text(
+    text = get_prompt_text(
         "faithfulness_check.primary",
         fallback,
         variables={"title": title or "（不明）", "facts_text": facts_text, "summary": summary},
     )
+    return append_check_output_contract(text, comment_rule="日本語で 1〜2 文、120 文字以内")
 
 
 def summary_faithfulness_retry_prompt(title: str | None, facts: list[str], summary: str) -> str:
@@ -84,11 +86,12 @@ facts:
 summary:
 {summary}
 """
-    return get_prompt_text(
+    text = get_prompt_text(
         "faithfulness_check.retry",
         fallback,
         variables={"title": title or "（不明）", "facts_text": facts_text, "summary": summary},
     )
+    return append_check_output_contract(text, comment_rule="日本語で 1〜2 文、120 文字以内")
 
 
 def normalize_summary_faithfulness_result(data: dict | None) -> dict:

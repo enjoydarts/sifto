@@ -131,6 +131,54 @@ func TestPodcastsFeedGetReturnsBody(t *testing.T) {
 	if rec.Body.String() != string(body) {
 		t.Fatalf("expected body %q, got %q", string(body), rec.Body.String())
 	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=300, s-maxage=600, stale-while-revalidate=1800" {
+		t.Fatalf("unexpected cache-control header: %q", got)
+	}
+}
+
+func TestPodcastsFeedIfNoneMatchReturnsNotModified(t *testing.T) {
+	body := []byte(`<rss version="2.0"></rss>`)
+	h := NewPodcastsHandler(&stubPodcastFeedBuilder{body: body}, nil)
+
+	first := httptest.NewRecorder()
+	h.Feed(first, newPodcastsRequest(http.MethodGet))
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("expected etag header")
+	}
+
+	req := newPodcastsRequest(http.MethodGet)
+	req.Header.Set("If-None-Match", etag)
+	rec := httptest.NewRecorder()
+	h.Feed(rec, req)
+
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("expected status 304, got %d", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("expected no body for 304, got %q", rec.Body.String())
+	}
+	if got := rec.Header().Get("ETag"); got != etag {
+		t.Fatalf("expected etag %q, got %q", etag, got)
+	}
+}
+
+func TestPodcastsFeedIfModifiedSinceReturnsNotModified(t *testing.T) {
+	lastModified := time.Date(2026, 3, 27, 12, 34, 56, 0, time.UTC)
+	body := []byte(`<rss version="2.0"></rss>`)
+	h := NewPodcastsHandler(&stubPodcastFeedBuilder{body: body, lastModified: lastModified}, nil)
+
+	req := newPodcastsRequest(http.MethodGet)
+	req.Header.Set("If-Modified-Since", lastModified.Format(http.TimeFormat))
+	rec := httptest.NewRecorder()
+	h.Feed(rec, req)
+
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("expected status 304, got %d", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("expected no body for 304, got %q", rec.Body.String())
+	}
 }
 
 func TestPodcastsFeedNotFound(t *testing.T) {

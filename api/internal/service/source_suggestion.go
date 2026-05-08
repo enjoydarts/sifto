@@ -30,7 +30,7 @@ var (
 )
 
 const (
-	sourceSuggestionMaxLatency           = 300 * time.Second
+	sourceSuggestionMaxLatency            = 300 * time.Second
 	sourceSuggestionSeedGenerationTimeout = 120 * time.Second
 	sourceSuggestionRankTimeout           = 120 * time.Second
 )

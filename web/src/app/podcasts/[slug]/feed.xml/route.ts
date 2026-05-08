@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
 
+export const revalidate = 300;
+export const dynamicParams = true;
+
+const PODCAST_FEED_CACHE_CONTROL = "public, max-age=300, s-maxage=600, stale-while-revalidate=1800";
+
 function resolveAPIBaseURL(): string {
   const explicit = process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL;
   if (explicit && explicit.trim()) {
@@ -11,11 +16,11 @@ function resolveAPIBaseURL(): string {
   return "http://api:8080";
 }
 
-async function fetchPodcastFeed(slug: string): Promise<Response> {
+async function fetchPodcastFeed(slug: string, method: "GET" | "HEAD"): Promise<Response> {
   const upstreamURL = `${resolveAPIBaseURL()}/podcasts/${encodeURIComponent(slug)}/feed.xml`;
   const upstream = await fetch(upstreamURL, {
-    method: "GET",
-    cache: "no-store",
+    method,
+    next: { revalidate },
     headers: {
       Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1",
     },
@@ -35,7 +40,7 @@ async function fetchPodcastFeed(slug: string): Promise<Response> {
   if (lastModified) {
     headers.set("Last-Modified", lastModified);
   }
-  headers.set("Cache-Control", upstream.headers.get("Cache-Control") || "public, max-age=300");
+  headers.set("Cache-Control", upstream.headers.get("Cache-Control") || PODCAST_FEED_CACHE_CONTROL);
 
   return new Response(upstream.body, {
     status: upstream.status,
@@ -45,12 +50,12 @@ async function fetchPodcastFeed(slug: string): Promise<Response> {
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
-  return fetchPodcastFeed(slug);
+  return fetchPodcastFeed(slug, "GET");
 }
 
 export async function HEAD(_req: NextRequest, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
-  const response = await fetchPodcastFeed(slug);
+  const response = await fetchPodcastFeed(slug, "HEAD");
   return new Response(null, {
     status: response.status,
     headers: response.headers,

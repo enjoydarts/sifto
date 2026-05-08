@@ -18,4 +18,4 @@ ENV LLM_CATALOG_PATH=/app/shared/llm_catalog.json
 EXPOSE 8000
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "::", "--port", "8000"]

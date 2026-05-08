@@ -51,7 +51,27 @@ def extract_first_json_object(text: str) -> dict | None:
         except Exception:
             pass
         idx = s.find("{", idx + 1)
+    repaired = _repair_missing_opening_brace_json(s)
+    if repaired is not None:
+        try:
+            obj = json.loads(repaired)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
     return None
+
+
+def _repair_missing_opening_brace_json(text: str) -> str | None:
+    s = (text or "").strip()
+    if s.startswith("{") or "{" in s:
+        return None
+    if '"verdict"' not in s or '"short_comment"' not in s:
+        return None
+    end = s.rfind("}")
+    if end < 0:
+        return None
+    return "{" + s[:end + 1]
 
 
 def normalize_check_result(data: dict | None, *, max_comment_len: int = 240) -> dict:

@@ -60,6 +60,17 @@ class CheckRunnerShortCommentTests(unittest.TestCase):
         self.assertEqual(result["short_comment"], "本文で裏付けられています。")
         self.assertEqual(result["llm"], {"provider": "test"})
 
+    def test_check_runners_accept_response_missing_opening_brace(self):
+        result = run_facts_check(
+            lambda: ('"verdict": "pass", "short_comment": "本文の内容を正確に抽出しています。" }', {"provider": "test"}),
+            retry_call=lambda: ("fail", {"provider": "retry"}),
+            retry_attempts=1,
+        )
+
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(result["short_comment"], "本文の内容を正確に抽出しています。")
+        self.assertEqual(result["llm"], {"provider": "test"})
+
 
 if __name__ == "__main__":
     unittest.main()

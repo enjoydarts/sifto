@@ -39,10 +39,7 @@ def run_facts_check(
                 except RuntimeError as retry_exc:
                     last_exc = retry_exc
             if result is None:
-                result = {
-                    "verdict": "warn",
-                    "short_comment": "事実抽出チェックの判定応答を取得できなかったため未確認です。再試行してください。",
-                }
+                raise last_exc
     result["llm"] = llm
     record_check_score("facts_check_verdict", result)
     return result

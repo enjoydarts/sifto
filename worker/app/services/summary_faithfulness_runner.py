@@ -3,16 +3,12 @@ from collections.abc import Callable
 from app.services.summary_faithfulness_common import (
     extract_first_json_object,
     normalize_summary_faithfulness_result,
-    parse_summary_faithfulness_line,
     require_summary_faithfulness_comment,
 )
 from app.services.check_result_common import record_check_score
 
 
 def _parse_summary_faithfulness_response(text: str) -> dict:
-    line_result = parse_summary_faithfulness_line(text)
-    if line_result is not None:
-        return line_result
     return require_summary_faithfulness_comment(
         normalize_summary_faithfulness_result(extract_first_json_object(text)),
         text,

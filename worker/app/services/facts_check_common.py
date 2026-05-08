@@ -24,6 +24,7 @@ facts が元記事本文に忠実かを判定してください。
 - verdict は pass / warn / fail のいずれか
 - short_comment は日本語 1 文、80 文字以内
 - short_comment は verdict の理由を短く直接述べる
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 長い説明や言い訳は不要
 - 応答に迷ったら short_comment を省略せず warn を返す"""
     return get_prompt_text("facts_check.system", fallback)
@@ -60,6 +61,7 @@ def facts_check_prompt(title: str | None, content: str, facts: list[str]) -> str
 # 注意
 - まず verdict を決め、その理由を short_comment に 1 文で書く
 - short_comment を空にしない
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - JSON 以外は出力しない
 
 # 補助判定
@@ -101,6 +103,7 @@ def facts_check_retry_prompt(title: str | None, content: str, facts: list[str]) 
 - verdict は pass / warn / fail のいずれか
 - short_comment は日本語 1 文、80 文字以内
 - short_comment を空にしない
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 前置き、後置き、コードフェンス禁止
 - JSON 以外は出力しない
 - `facts` が空、または記事サイズに対して `facts` が少なすぎる場合は fail に近い扱いを優先する

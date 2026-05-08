@@ -20,6 +20,7 @@ summary が facts に忠実かを判定してください。
 - verdict は pass / warn / fail のいずれか
 - short_comment は日本語で 1〜2 文、120 文字以内
 - short_comment は今回の summary と facts を踏まえた具体的な寸評を書く
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 汎用的な定型文だけで済ませない"""
     return get_prompt_text("faithfulness_check.system", fallback)
 
@@ -36,6 +37,11 @@ def summary_faithfulness_prompt(title: str | None, facts: list[str], summary: st
 - pass: 主要内容が facts に忠実で、明確な unsupported claim がない
 - warn: おおむね忠実だが、やや強い表現や重要事実の軽い欠落がある
 - fail: facts にない断定、矛盾、重大な欠落がある
+
+# 注意
+- short_comment を空にしない
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
+- JSON 以外は出力しない
 
 # Input
 タイトル: {title or "（不明）"}
@@ -55,13 +61,20 @@ summary:
 
 def summary_faithfulness_retry_prompt(title: str | None, facts: list[str], summary: str) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    fallback = f"""1行のみで返してください。
-形式は verdict のみです。
+    fallback = f"""JSON オブジェクト 1 つのみで返してください。
+形式:
+{{
+  "verdict": "pass",
+  "short_comment": "facts で裏付けられた自然な要約です。"
+}}
 
 条件:
 - verdict は pass / warn / fail のいずれか
+- short_comment は日本語で 1〜2 文、120 文字以内
+- short_comment を空にしない
+- verdict だけの応答は禁止。必ず short_comment 付き JSON を返す
 - 前置き、後置き、コードフェンス禁止
-- 例: pass
+- JSON 以外は出力しない
 
 タイトル: {title or "（不明）"}
 

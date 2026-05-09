@@ -57,8 +57,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
-	r.Use(chimiddleware.Logger)
-	r.Use(chimiddleware.Recoverer)
+	useCommonMiddleware(r)
 
 	registerHealthEndpoint(r)
 
@@ -94,4 +93,10 @@ func main() {
 	if err := http.ListenAndServe(":"+port, sentryHandler.Handle(r)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func useCommonMiddleware(r chi.Router) {
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Compress(5, "application/json", "application/rss+xml", "text/*"))
 }

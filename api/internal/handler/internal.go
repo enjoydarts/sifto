@@ -1216,8 +1216,8 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 		if h.db == nil {
 			return "", 0, nil, fmt.Errorf("db not configured")
 		}
-		err := h.db.Ping(ctx)
-		return "ping", 0, nil, err
+		meta, err := measureDBSelectLatency(ctx, pgxPoolLatencyQuerier{pool: h.db}, 5)
+		return "SELECT 1", 0, meta, err
 	})
 	run("redis", func(ctx context.Context) (string, int, map[string]any, error) {
 		if h.cache == nil {
@@ -1330,6 +1330,84 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 		"cache_metrics_user_id":      metricUserID,
 		"cache_stats_by_window_user": cacheWindowsUser,
 	})
+}
+
+type dbLatencyRow interface {
+	Scan(dest ...any) error
+}
+
+type dbLatencyQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) dbLatencyRow
+}
+
+type pgxPoolLatencyQuerier struct {
+	pool *pgxpool.Pool
+}
+
+func (q pgxPoolLatencyQuerier) QueryRow(ctx context.Context, sql string, args ...any) dbLatencyRow {
+	return q.pool.QueryRow(ctx, sql, args...)
+}
+
+func measureDBSelectLatency(ctx context.Context, db dbLatencyQuerier, samples int) (map[string]any, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db not configured")
+	}
+	if samples <= 0 {
+		samples = 1
+	}
+	latencies := make([]int64, 0, samples)
+	for i := 0; i < samples; i++ {
+		start := time.Now()
+		var one int
+		if err := db.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil {
+			return map[string]any{
+				"query":   "SELECT 1",
+				"samples": len(latencies),
+			}, err
+		}
+		latencies = append(latencies, time.Since(start).Milliseconds())
+	}
+	min := latencies[0]
+	max := latencies[0]
+	var sum int64
+	for _, v := range latencies {
+		if v < min {
+			min = v
+		}
+		if v > max {
+			max = v
+		}
+		sum += v
+	}
+	p95 := latencies[len(latencies)-1]
+	if len(latencies) > 1 {
+		sorted := append([]int64(nil), latencies...)
+		for i := 1; i < len(sorted); i++ {
+			v := sorted[i]
+			j := i - 1
+			for j >= 0 && sorted[j] > v {
+				sorted[j+1] = sorted[j]
+				j--
+			}
+			sorted[j+1] = v
+		}
+		idx := (95*len(sorted) + 99) / 100
+		if idx < 1 {
+			idx = 1
+		}
+		if idx > len(sorted) {
+			idx = len(sorted)
+		}
+		p95 = sorted[idx-1]
+	}
+	return map[string]any{
+		"query":   "SELECT 1",
+		"samples": samples,
+		"min_ms":  min,
+		"avg_ms":  float64(sum) / float64(len(latencies)),
+		"max_ms":  max,
+		"p95_ms":  p95,
+	}, nil
 }
 
 func cacheWindowStats(sums map[string]int64, prefix string) map[string]any {

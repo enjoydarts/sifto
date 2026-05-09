@@ -1,5 +1,5 @@
 app = "sifto-api"
-primary_region = "iad"
+primary_region = "nrt"
 
 [deploy]
   strategy = "bluegreen"

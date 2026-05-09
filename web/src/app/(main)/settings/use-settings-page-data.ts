@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, AzureSpeechVoicesResponse, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, AzureSpeechVoicesResponse, CartesiaTTSCatalogResponse, CartesiaVoiceCatalogEntry, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -111,6 +111,7 @@ import {
   getAudioBriefingVoiceStatus,
   getSummaryAudioVoiceStatus,
   resolveAivisVoiceSelection,
+  resolveCartesiaVoiceSelection,
   resolveElevenLabsVoiceSelection,
   resolveGeminiTTSVoiceSelection,
   resolveOpenAITTSVoiceSelection,
@@ -207,6 +208,8 @@ export function useSettingsPageData() {
   const [deletingAivisKey, setDeletingAivisKey] = useState(false);
   const [savingElevenLabsKey, setSavingElevenLabsKey] = useState(false);
   const [deletingElevenLabsKey, setDeletingElevenLabsKey] = useState(false);
+  const [savingCartesiaKey, setSavingCartesiaKey] = useState(false);
+  const [deletingCartesiaKey, setDeletingCartesiaKey] = useState(false);
   const [savingFishKey, setSavingFishKey] = useState(false);
   const [deletingFishKey, setDeletingFishKey] = useState(false);
   const [savingAivisDictionary, setSavingAivisDictionary] = useState(false);
@@ -251,6 +254,7 @@ export function useSettingsPageData() {
   const [featherlessApiKeyInput, setFeatherlessApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
   const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
+  const [cartesiaApiKeyInput, setCartesiaApiKeyInput] = useState("");
   const [fishApiKeyInput, setFishApiKeyInput] = useState("");
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
@@ -324,6 +328,9 @@ export function useSettingsPageData() {
   const [elevenLabsVoicesData, setElevenLabsVoicesData] = useState<ElevenLabsVoicesResponse | null>(null);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
+  const [cartesiaTTSCatalogData, setCartesiaTTSCatalogData] = useState<CartesiaTTSCatalogResponse | null>(null);
+  const [cartesiaTTSCatalogLoading, setCartesiaTTSCatalogLoading] = useState(false);
+  const [cartesiaTTSCatalogError, setCartesiaTTSCatalogError] = useState<string | null>(null);
   const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
   const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
   const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
@@ -409,6 +416,7 @@ export function useSettingsPageData() {
       openAITTSVoicesData?.voices ?? [],
       geminiTTSVoicesData?.voices ?? [],
       elevenLabsVoicesData?.voices ?? [],
+      cartesiaTTSCatalogData?.voices ?? [],
       azureSpeechVoicesData?.voices ?? [],
       Boolean(settings?.has_aivis_api_key),
       Boolean(settings?.has_fish_api_key),
@@ -416,6 +424,7 @@ export function useSettingsPageData() {
       Boolean(settings?.has_openai_api_key),
       Boolean(settings?.has_elevenlabs_api_key),
       Boolean(settings?.has_azure_speech_api_key),
+      Boolean(settings?.has_cartesia_api_key),
       settings?.azure_speech_region ?? "",
       Boolean(settings?.gemini_tts_enabled),
       t
@@ -423,12 +432,14 @@ export function useSettingsPageData() {
   }, [
     aivisModelsData?.models,
     azureSpeechVoicesData?.voices,
+    cartesiaTTSCatalogData?.voices,
     elevenLabsVoicesData?.voices,
     geminiTTSVoicesData?.voices,
     openAITTSVoicesData?.voices,
     settings?.has_fish_api_key,
     settings?.has_elevenlabs_api_key,
     settings?.has_azure_speech_api_key,
+    settings?.has_cartesia_api_key,
     settings?.gemini_tts_enabled,
     settings?.has_aivis_api_key,
     settings?.has_openai_api_key,
@@ -439,6 +450,8 @@ export function useSettingsPageData() {
     summaryAudioLineBreakSilenceSeconds,
     summaryAudioPitch,
     summaryAudioProvider,
+    summaryAudioProviderVoiceDescription,
+    summaryAudioProviderVoiceLabel,
     summaryAudioSpeechRate,
     summaryAudioTempoDynamics,
     summaryAudioTTSModel,
@@ -795,6 +808,15 @@ export function useSettingsPageData() {
     });
   }, []);
 
+  const loadCartesiaTTSCatalog = useCallback(async () => {
+    return loadResourceAction({
+      setLoading: setCartesiaTTSCatalogLoading,
+      fetch: api.getCartesiaTTSCatalog,
+      setData: setCartesiaTTSCatalogData,
+      setError: setCartesiaTTSCatalogError,
+    });
+  }, []);
+
   const loadGeminiTTSVoices = useCallback(async () => {
     return loadResourceAction({
       setLoading: setGeminiTTSVoicesLoading,
@@ -904,6 +926,10 @@ export function useSettingsPageData() {
           setElevenLabsVoicesData(null);
           setElevenLabsVoicesError(null);
         }
+        if (!data.has_cartesia_api_key) {
+          setCartesiaTTSCatalogData(null);
+          setCartesiaTTSCatalogError(null);
+        }
         if (!data.has_xai_api_key) {
           setXAIVoicesData(null);
           setXAIVoicesError(null);
@@ -1012,6 +1038,24 @@ export function useSettingsPageData() {
     elevenLabsVoicesLoading,
     loadElevenLabsVoices,
     settings?.has_elevenlabs_api_key,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeSection !== "summary-audio"
+      || !settings?.has_cartesia_api_key
+      || cartesiaTTSCatalogData != null
+      || cartesiaTTSCatalogLoading
+    ) {
+      return;
+    }
+    void loadCartesiaTTSCatalog().catch(() => undefined);
+  }, [
+    activeSection,
+    cartesiaTTSCatalogData,
+    cartesiaTTSCatalogLoading,
+    loadCartesiaTTSCatalog,
+    settings?.has_cartesia_api_key,
   ]);
 
   useEffect(() => {
@@ -1315,6 +1359,12 @@ export function useSettingsPageData() {
         afterSave: () => { setElevenLabsVoicesData(null); setElevenLabsVoicesError(null); },
         afterDelete: () => { setElevenLabsVoicesData(null); setElevenLabsVoicesError(null); },
       },
+      cartesia: {
+        value: cartesiaApiKeyInput, setValue: setCartesiaApiKeyInput, setSaving: setSavingCartesiaKey, setDeleting: setDeletingCartesiaKey,
+        save: api.setCartesiaApiKey, remove: api.deleteCartesiaApiKey,
+        deleteTitle: t("settings.cartesiaDeleteTitle"), deleteMessage: t("settings.cartesiaDeleteMessage"),
+        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cartesiaSaved"), deleteSuccessMessage: t("settings.toast.cartesiaDeleted"),
+      },
       fish: {
         value: fishApiKeyInput, setValue: setFishApiKeyInput, setSaving: setSavingFishKey, setDeleting: setDeletingFishKey,
         save: api.setFishApiKey, remove: api.deleteFishApiKey,
@@ -1402,6 +1452,7 @@ export function useSettingsPageData() {
       featherless: createAccessCardRuntime(featherlessApiKeyInput, setFeatherlessApiKeyInput, apiKeyHandlers.featherless!.submit, apiKeyHandlers.featherless!.remove, savingFeatherlessKey, deletingFeatherlessKey),
       aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis!.submit, apiKeyHandlers.aivis!.remove, savingAivisKey, deletingAivisKey),
       elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs!.submit, apiKeyHandlers.elevenlabs!.remove, savingElevenLabsKey, deletingElevenLabsKey),
+      cartesia: createAccessCardRuntime(cartesiaApiKeyInput, setCartesiaApiKeyInput, apiKeyHandlers.cartesia!.submit, apiKeyHandlers.cartesia!.remove, savingCartesiaKey, deletingCartesiaKey),
       fish: createAccessCardRuntime(fishApiKeyInput, setFishApiKeyInput, apiKeyHandlers.fish!.submit, apiKeyHandlers.fish!.remove, savingFishKey, deletingFishKey),
     },
     t,
@@ -2002,13 +2053,16 @@ export function useSettingsPageData() {
     summaryAudioOpenAITTSVoices,
     summaryAudioGeminiTTSVoices,
     summaryAudioAzureSpeechVoices,
-  } = buildVoicePickerCatalogData(aivisModelsData, xaiVoicesData, elevenLabsVoicesData, openAITTSVoicesData, geminiTTSVoicesData, azureSpeechVoicesData);
+    summaryAudioCartesiaVoices,
+    summaryAudioCartesiaTTSModels,
+  } = buildVoicePickerCatalogData(aivisModelsData, xaiVoicesData, elevenLabsVoicesData, openAITTSVoicesData, geminiTTSVoicesData, azureSpeechVoicesData, cartesiaTTSCatalogData);
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
   const hasUserFishAPIKey = Boolean(settings?.has_fish_api_key);
   const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
   const hasUserElevenLabsAPIKey = Boolean(settings?.has_elevenlabs_api_key);
   const hasUserOpenAIAPIKey = Boolean(settings?.has_openai_api_key);
   const hasUserAzureSpeechAPIKey = Boolean(settings?.has_azure_speech_api_key);
+  const hasUserCartesiaAPIKey = Boolean(settings?.has_cartesia_api_key);
   const azureSpeechRegion = settings?.azure_speech_region?.trim() || "";
   const geminiTTSEnabled = Boolean(settings?.gemini_tts_enabled);
   const summaryAudioProviderCapabilities = getAudioBriefingProviderCapabilities(summaryAudioProvider);
@@ -2019,6 +2073,8 @@ export function useSettingsPageData() {
       })
     : summaryAudioProvider === "fish"
       ? null
+      : summaryAudioProvider === "cartesia"
+        ? resolveCartesiaVoiceSelection(summaryAudioCartesiaVoices, { voice_model: summaryAudioVoiceModel })
       : summaryAudioProvider === "xai"
         ? resolveXAIVoiceSelection(summaryAudioXAIVoices, { voice_model: summaryAudioVoiceModel })
         : summaryAudioProvider === "elevenlabs"
@@ -2038,6 +2094,9 @@ export function useSettingsPageData() {
     : null;
   const summaryAudioResolvedElevenLabsVoice = summaryAudioProvider === "elevenlabs"
     ? (summaryAudioResolvedVoice as ElevenLabsVoiceCatalogEntry | null)
+    : null;
+  const summaryAudioResolvedCartesiaVoice = summaryAudioProvider === "cartesia"
+    ? (summaryAudioResolvedVoice as CartesiaVoiceCatalogEntry | null)
     : null;
   const summaryAudioResolvedOpenAIVoice = summaryAudioProvider === "openai"
     ? (summaryAudioResolvedVoice as OpenAITTSVoiceSnapshot | null)
@@ -2102,6 +2161,7 @@ export function useSettingsPageData() {
     openAIResolved: summaryAudioResolvedOpenAIVoice,
     geminiResolved: summaryAudioResolvedGeminiVoice,
     elevenLabsResolved: summaryAudioResolvedElevenLabsVoice,
+    cartesiaResolved: summaryAudioResolvedCartesiaVoice,
     azureSpeechResolved: summaryAudioResolvedAzureSpeechVoice,
   });
   const summaryAudioResolvedVoiceLabel = summaryAudioVoiceDisplay.label;
@@ -2444,9 +2504,13 @@ export function useSettingsPageData() {
     provider: summaryAudioProvider,
     providerCapabilities: summaryAudioProviderCapabilities,
     ttsModel: summaryAudioTTSModel,
+    voiceModel: summaryAudioVoiceModel,
+    cartesiaTTSModels: summaryAudioCartesiaTTSModels,
     resolvedVoiceLabel: summaryAudioResolvedVoiceLabel,
     resolvedVoiceDetail: summaryAudioResolvedVoiceDetail,
-    voicePickerDisabled: summaryAudioProvider === "elevenlabs" && !hasUserElevenLabsAPIKey && !summaryAudioElevenLabsVoices.length,
+    voicePickerDisabled:
+      (summaryAudioProvider === "elevenlabs" && !hasUserElevenLabsAPIKey && !summaryAudioElevenLabsVoices.length)
+      || (summaryAudioProvider === "cartesia" && !hasUserCartesiaAPIKey && !summaryAudioCartesiaVoices.length),
     voiceStyle: summaryAudioVoiceStyle,
     voiceInputDrafts: summaryAudioVoiceInputDrafts,
   });
@@ -2454,6 +2518,7 @@ export function useSettingsPageData() {
   const summaryAudioActions = {
     onChangeProvider: updateSummaryAudioProvider,
     onChangeTTSModel: setSummaryAudioTTSModel,
+    onChangeVoiceModel: setSummaryAudioVoiceModel,
     onOpenVoicePicker: buildSummaryAudioPickerOpenAction({
       provider: summaryAudioProvider,
       openers: {
@@ -2464,6 +2529,7 @@ export function useSettingsPageData() {
         setSummaryAudioOpenAITTPickerOpen: summaryAudioPickers.setSummaryAudioOpenAITTPickerOpen,
         setSummaryAudioGeminiTTSPickerOpen: summaryAudioPickers.setSummaryAudioGeminiTTSPickerOpen,
         setSummaryAudioAzureSpeechPickerOpen: summaryAudioPickers.setSummaryAudioAzureSpeechPickerOpen,
+        setSummaryAudioCartesiaPickerOpen: summaryAudioPickers.setSummaryAudioCartesiaPickerOpen,
       },
       aivisModelsData,
       xaiVoicesData,
@@ -2471,12 +2537,14 @@ export function useSettingsPageData() {
       openAITTSVoicesData,
       geminiTTSVoicesData,
       azureSpeechVoicesData,
+      cartesiaTTSCatalogData,
       loadAivisModels,
       loadXAIVoices,
       loadElevenLabsVoices,
       loadOpenAITTSVoices,
       loadGeminiTTSVoices,
       loadAzureSpeechVoices,
+      loadCartesiaTTSCatalog,
     }),
     onChangeVoiceStyle: setSummaryAudioVoiceStyle,
     onChangeNumberInput: (field: "speech_rate" | "tempo_dynamics" | "emotional_intensity" | "line_break_silence_seconds" | "pitch" | "volume_gain", raw: string) => {
@@ -2518,6 +2586,7 @@ export function useSettingsPageData() {
   const summaryAudioIntegrations = buildSummaryAudioIntegrations({
     hasAivisAPIKey: Boolean(settings?.has_aivis_api_key),
     hasFishAPIKey: Boolean(settings?.has_fish_api_key),
+    hasCartesiaAPIKey: hasUserCartesiaAPIKey,
     aivisUserDictionaryUUID: summaryAudioAivisUserDictionaryUUID,
     aivisUserDictionariesLoading,
     aivisUserDictionaries,
@@ -2851,6 +2920,8 @@ export function useSettingsPageData() {
     openAITTSVoicesError,
     elevenLabsVoicesLoading,
     elevenLabsVoicesError,
+    cartesiaTTSCatalogLoading,
+    cartesiaTTSCatalogError,
     geminiTTSVoicesLoading,
     geminiTTSVoicesError,
     azureSpeechVoicesLoading,
@@ -2866,6 +2937,7 @@ export function useSettingsPageData() {
     syncXAIVoices,
     syncOpenAITTSVoices,
     loadElevenLabsVoices,
+    loadCartesiaTTSCatalog,
     loadGeminiTTSVoices,
     loadAzureSpeechVoices,
     audioBriefingPickerSelectActions,
@@ -2893,6 +2965,8 @@ export function useSettingsPageData() {
     summaryAudioAivisModels,
     summaryAudioXAIVoices,
     summaryAudioElevenLabsVoices,
+    summaryAudioCartesiaVoices,
+    summaryAudioCartesiaTTSModels,
     summaryAudioOpenAITTSVoices,
     summaryAudioGeminiTTSVoices,
     summaryAudioAzureSpeechVoices,

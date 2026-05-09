@@ -1,6 +1,7 @@
 "use client";
 
 import type { ModelOption } from "@/components/settings/model-select";
+import type { CartesiaTTSModelCatalogEntry } from "@/lib/api";
 
 const OPENAI_TTS_MODEL_OPTIONS: ModelOption[] = [
   {
@@ -98,6 +99,30 @@ const ELEVENLABS_TTS_MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
+const CARTESIA_TTS_MODEL_OPTIONS: ModelOption[] = [
+  {
+    value: "sonic-3.5",
+    label: "sonic-3.5",
+    selectedLabel: "Cartesia / sonic-3.5",
+    note: "Recommended stable Cartesia Sonic model",
+    provider: "Cartesia",
+  },
+  {
+    value: "sonic-3",
+    label: "sonic-3",
+    selectedLabel: "Cartesia / sonic-3",
+    note: "Stable Sonic model with speed, volume, and emotion controls",
+    provider: "Cartesia",
+  },
+  {
+    value: "sonic-turbo",
+    label: "sonic-turbo",
+    selectedLabel: "Cartesia / sonic-turbo",
+    note: "Stable low-latency Sonic model for Japanese",
+    provider: "Cartesia",
+  },
+];
+
 function withCurrentModel(currentValue: string, provider: string, options: ModelOption[]): ModelOption[] {
   const trimmed = currentValue.trim();
   if (!trimmed || options.some((option) => option.value === trimmed)) {
@@ -134,4 +159,20 @@ export function buildElevenLabsTTSModelOptions(
     return ELEVENLABS_TTS_MODEL_OPTIONS.filter((option) => option.value === "eleven_v3");
   }
   return withCurrentModel(currentValue, "ElevenLabs", ELEVENLABS_TTS_MODEL_OPTIONS);
+}
+
+export function buildCartesiaTTSModelOptions(
+  currentValue: string,
+  catalogModels: CartesiaTTSModelCatalogEntry[] = [],
+): ModelOption[] {
+  const catalogOptions = catalogModels
+    .filter((model) => model.model_id.trim())
+    .map((model) => ({
+      value: model.model_id,
+      label: model.model_id,
+      selectedLabel: `Cartesia / ${model.model_id}`,
+      note: model.description || model.name,
+      provider: "Cartesia",
+    }));
+  return withCurrentModel(currentValue, "Cartesia", catalogOptions.length > 0 ? catalogOptions : CARTESIA_TTS_MODEL_OPTIONS);
 }

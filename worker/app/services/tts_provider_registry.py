@@ -1,4 +1,5 @@
 from app.services.azure_speech_tts import synthesize_azure_speech_tts
+from app.services.cartesia_tts import synthesize_cartesia_tts
 from app.services.elevenlabs_tts import synthesize_elevenlabs_tts
 from app.services.fish_tts import synthesize_fish_tts
 from app.services.gemini_tts import synthesize_gemini_tts
@@ -114,4 +115,14 @@ def synthesize_single_speaker_tts(
             text=text,
             timeout_sec=timeout_sec,
         )
-        raise RuntimeError(f"unsupported single-speaker tts provider: {provider}")
+    if normalized_provider == "cartesia":
+        return synthesize_cartesia_tts(
+            endpoint=endpoint,
+            api_key=api_key,
+            model=tts_model,
+            voice_id=voice_id,
+            text=text,
+            speech_rate=speech_rate,
+            timeout_sec=timeout_sec,
+        )
+    raise RuntimeError(f"unsupported single-speaker tts provider: {provider}")

@@ -108,6 +108,8 @@ export interface UserSettings {
   aivis_api_key_last4: string | null;
   has_elevenlabs_api_key?: boolean;
   elevenlabs_api_key_last4?: string | null;
+  has_cartesia_api_key?: boolean;
+  cartesia_api_key_last4?: string | null;
   has_fish_api_key?: boolean;
   fish_api_key_last4?: string | null;
   ui_font_sans_key?: string;

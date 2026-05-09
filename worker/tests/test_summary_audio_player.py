@@ -4,6 +4,7 @@ from unittest.mock import patch
 import httpx
 
 from app.services import summary_audio_player
+from app.services.cartesia_tts import synthesize_cartesia_tts
 from app.services.openai_tts import synthesize_openai_tts
 
 
@@ -291,6 +292,47 @@ class SummaryAudioPlayerTests(unittest.TestCase):
         self.assertEqual(duration_sec, 7)
         self.assertEqual(resolved_text, "summary text")
 
+    def test_synthesize_uses_cartesia_provider(self):
+        service = summary_audio_player.SummaryAudioPlayerService()
+
+        with patch("app.services.summary_audio_player.synthesize_single_speaker_tts", return_value=(b"audio", "audio/mpeg", ".mp3", 8)) as synth:
+            audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
+                provider="cartesia",
+                voice_model="6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+                voice_style="",
+                tts_model="sonic-3.5",
+                text="summary text",
+                speech_rate=1.0,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.25,
+                pitch=0.0,
+                volume_gain=0.0,
+                user_dictionary_uuid=None,
+                aivis_api_key=None,
+                cartesia_api_key="cartesia-key",
+            )
+
+        synth.assert_called_once_with(
+            "cartesia",
+            endpoint=service.single_speaker_provider_runtime["cartesia"].endpoint,
+            api_key="cartesia-key",
+            region="",
+            voice_id="6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+            tts_model="sonic-3.5",
+            text="summary text",
+            speech_rate=1.0,
+            timeout_sec=service.single_speaker_provider_runtime["cartesia"].timeout_sec,
+            volume_gain=0.0,
+            line_break_silence_seconds=0.4,
+            pitch=0.0,
+        )
+        self.assertEqual(audio_base64, "YXVkaW8=")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(duration_sec, 8)
+        self.assertEqual(resolved_text, "summary text")
+
     def test_synthesize_dispatches_by_provider_key(self):
         service = summary_audio_player.SummaryAudioPlayerService()
         cases = [
@@ -334,6 +376,14 @@ class SummaryAudioPlayerTests(unittest.TestCase):
                 "patch_args": ("elevenlabs",),
                 "call_kwargs": {"elevenlabs_api_key": "eleven-key"},
             },
+            {
+                "provider": "cartesia",
+                "voice_model": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+                "tts_model": "sonic-3.5",
+                "patch_target": "app.services.summary_audio_player.synthesize_single_speaker_tts",
+                "patch_args": ("cartesia",),
+                "call_kwargs": {"cartesia_api_key": "cartesia-key"},
+            },
         ]
 
         for case in cases:
@@ -359,6 +409,7 @@ class SummaryAudioPlayerTests(unittest.TestCase):
                         "openai_api_key": None,
                         "fish_api_key": None,
                         "elevenlabs_api_key": None,
+                        "cartesia_api_key": None,
                     }
                     kwargs.update(case["call_kwargs"])
                     audio_base64, content_type, duration_sec, resolved_text = service.synthesize(**kwargs)
@@ -407,5 +458,51 @@ class SummaryAudioPlayerTests(unittest.TestCase):
                 "input": "summary text",
                 "language": "ja",
                 "response_format": "mp3",
+            },
+        )
+
+    def test_synthesize_cartesia_tts_uses_current_payload_shape(self):
+        captured: dict[str, object] = {}
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            captured["timeout"] = timeout
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, content=b"audio", request=request)
+
+        with patch("app.services.cartesia_tts.httpx.post", side_effect=fake_post):
+            audio_bytes, content_type, suffix, duration_sec = synthesize_cartesia_tts(
+                endpoint="https://api.cartesia.ai",
+                api_key="cartesia-key",
+                model="sonic-3.5",
+                voice_id="6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+                text="summary text",
+                speech_rate=1.0,
+                timeout_sec=30.0,
+            )
+
+        self.assertEqual(audio_bytes, b"audio")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(suffix, ".mp3")
+        self.assertEqual(duration_sec, 1)
+        self.assertEqual(captured["url"], "https://api.cartesia.ai/tts/bytes")
+        self.assertEqual(
+            captured["headers"],
+            {
+                "Authorization": "Bearer cartesia-key",
+                "Cartesia-Version": "2026-03-01",
+            },
+        )
+        self.assertEqual(
+            captured["json"],
+            {
+                "model_id": "sonic-3.5",
+                "transcript": "summary text",
+                "voice": {"mode": "id", "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b"},
+                "output_format": {"container": "mp3", "sample_rate": 44100, "bit_rate": 128000},
+                "language": "ja",
+                "save": False,
             },
         )

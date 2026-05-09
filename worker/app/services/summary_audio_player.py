@@ -23,7 +23,7 @@ class SummaryAudioPlayerService:
         self.aivis = AivisSpeechService()
         self.single_speaker_provider_runtime = {
             provider: load_single_speaker_tts_provider_runtime_metadata(provider)
-            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech")
+            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech", "cartesia")
         }
         self.gemini_tts_endpoint = self.single_speaker_provider_runtime["gemini_tts"].endpoint
         self.gemini_timeout_sec = self.single_speaker_provider_runtime["gemini_tts"].timeout_sec
@@ -57,6 +57,7 @@ class SummaryAudioPlayerService:
         openai_api_key: str | None = None,
         azure_speech_api_key: str | None = None,
         azure_speech_region: str | None = None,
+        cartesia_api_key: str | None = None,
     ) -> tuple[str, str, int, str]:
         normalized_provider = (provider or "").strip().lower()
         if normalized_provider == "mock":
@@ -76,7 +77,7 @@ class SummaryAudioPlayerService:
                 user_dictionary_uuid=user_dictionary_uuid,
                 api_key_override=aivis_api_key,
             )
-        elif normalized_provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech"}:
+        elif normalized_provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech", "cartesia"}:
             runtime = self.single_speaker_provider_runtime[normalized_provider]
             api_key = runtime.api_key
             region = runtime.region
@@ -93,6 +94,8 @@ class SummaryAudioPlayerService:
             elif normalized_provider == "azure_speech":
                 api_key = (azure_speech_api_key or "").strip() or api_key
                 region = (azure_speech_region or "").strip() or region
+            elif normalized_provider == "cartesia":
+                api_key = (cartesia_api_key or "").strip() or api_key
             audio_bytes, content_type, _, duration_sec = synthesize_single_speaker_tts(
                 normalized_provider,
                 endpoint=runtime.endpoint,

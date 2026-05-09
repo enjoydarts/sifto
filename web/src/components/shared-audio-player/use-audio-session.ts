@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { api, type Item, type PlaybackSession } from "@/lib/api";
+import { playbackSessionSecond } from "./playback-session-values";
 import { swallowPlaybackSessionError } from "./playback-session-guard";
 import { progressRatio } from "./use-audio-playback";
 import type {
@@ -82,15 +83,17 @@ export function useAudioSession(
       return;
     }
     const current = queue[0];
+    const effectivePosition = playbackSessionSecond(offsetSec);
+    const effectiveDuration = playbackSessionSecond(getDurationSec());
     const session = await swallowPlaybackSessionError(
       () => api.createPlaybackSession({
         mode: "summary_queue",
         title: current?.translated_title || current?.title || "",
         subtitle: current?.source_title || "",
-        current_position_sec: offsetSec,
-        duration_sec: getDurationSec(),
-        progress_ratio: progressRatio(offsetSec, getDurationSec()),
-        resume_payload: buildSummaryResumePayload(queueKind, queueQuery, queue, currentIndex, excludedItemIDs, offsetSec),
+        current_position_sec: effectivePosition,
+        duration_sec: effectiveDuration,
+        progress_ratio: progressRatio(effectivePosition, effectiveDuration),
+        resume_payload: buildSummaryResumePayload(queueKind, queueQuery, queue, currentIndex, excludedItemIDs, effectivePosition),
       }),
       reportPlaybackSessionError,
     );
@@ -99,19 +102,21 @@ export function useAudioSession(
       return;
     }
     remoteSessionIDRef.current = session.id;
-    lastPersistedPositionSecRef.current = offsetSec;
+    lastPersistedPositionSecRef.current = effectivePosition;
   }
 
   async function createAudioBriefingPlaybackSession(payload: SharedAudioBriefingPayload, offsetSec: number) {
+    const effectivePosition = playbackSessionSecond(offsetSec);
+    const effectiveDuration = playbackSessionSecond(getDurationSec());
     const session = await swallowPlaybackSessionError(
       () => api.createPlaybackSession({
         mode: "audio_briefing",
         title: payload.title,
         subtitle: payload.summary ?? "",
-        current_position_sec: offsetSec,
-        duration_sec: getDurationSec(),
-        progress_ratio: progressRatio(offsetSec, getDurationSec()),
-        resume_payload: buildAudioBriefingResumePayload(payload, offsetSec),
+        current_position_sec: effectivePosition,
+        duration_sec: effectiveDuration,
+        progress_ratio: progressRatio(effectivePosition, effectiveDuration),
+        resume_payload: buildAudioBriefingResumePayload(payload, effectivePosition),
       }),
       reportPlaybackSessionError,
     );
@@ -120,7 +125,7 @@ export function useAudioSession(
       return;
     }
     remoteSessionIDRef.current = session.id;
-    lastPersistedPositionSecRef.current = offsetSec;
+    lastPersistedPositionSecRef.current = effectivePosition;
   }
 
   async function persistRemoteSession(
@@ -136,8 +141,8 @@ export function useAudioSession(
     const sessionID = remoteSessionIDRef.current;
     if (!sessionID) return;
     const effectiveMode = options?.modeOverride ?? getMode();
-    const effectivePosition = Math.max(0, Math.floor(options?.positionSec ?? getCurrentTimeSec()));
-    const effectiveDuration = Math.max(0, Math.floor(options?.durationSec ?? getDurationSec()));
+    const effectivePosition = playbackSessionSecond(options?.positionSec ?? getCurrentTimeSec());
+    const effectiveDuration = playbackSessionSecond(options?.durationSec ?? getDurationSec());
     if (effectiveMode === "summary_queue") {
       const state = options?.summaryQueueState ?? getSummaryQueue();
       if (!state.queueKind || state.queue.length === 0) return;

@@ -121,6 +121,8 @@ export default function SettingsPage() {
     openAITTSVoicesError,
     elevenLabsVoicesLoading,
     elevenLabsVoicesError,
+    cartesiaTTSCatalogLoading,
+    cartesiaTTSCatalogError,
     geminiTTSVoicesLoading,
     geminiTTSVoicesError,
     azureSpeechVoicesLoading,
@@ -135,6 +137,7 @@ export default function SettingsPage() {
     syncXAIVoices,
     syncOpenAITTSVoices,
     loadElevenLabsVoices,
+    loadCartesiaTTSCatalog,
     loadGeminiTTSVoices,
     loadAzureSpeechVoices,
     audioBriefingPickerSelectActions,
@@ -159,6 +162,7 @@ export default function SettingsPage() {
     audioBriefingElevenLabsVoices,
     summaryAudioXAIVoices,
     summaryAudioElevenLabsVoices,
+    summaryAudioCartesiaVoices,
     summaryAudioOpenAITTSVoices,
     summaryAudioGeminiTTSVoices,
     summaryAudioAzureSpeechVoices,
@@ -407,6 +411,7 @@ export default function SettingsPage() {
           summaryAudioOpenAITTPickerOpen: summaryAudioPickers.summaryAudioOpenAITTPickerOpen,
           summaryAudioGeminiTTSPickerOpen: summaryAudioPickers.summaryAudioGeminiTTSPickerOpen,
           summaryAudioAzureSpeechPickerOpen: summaryAudioPickers.summaryAudioAzureSpeechPickerOpen,
+          summaryAudioCartesiaPickerOpen: summaryAudioPickers.summaryAudioCartesiaPickerOpen,
           summaryAudioVoiceModel,
           summaryAudioVoiceStyle,
         }}
@@ -432,6 +437,9 @@ export default function SettingsPage() {
           azureSpeechVoices: summaryAudioAzureSpeechVoices,
           azureSpeechVoicesLoading,
           azureSpeechVoicesError,
+          cartesiaVoices: summaryAudioCartesiaVoices,
+          cartesiaVoicesLoading: cartesiaTTSCatalogLoading,
+          cartesiaVoicesError: cartesiaTTSCatalogError,
         }}
         actions={{
           onCloseAivis: summaryAudioPickers.closeAivisPicker,
@@ -441,6 +449,7 @@ export default function SettingsPage() {
           onCloseOpenAI: summaryAudioPickers.closeOpenAITTPicker,
           onCloseGemini: summaryAudioPickers.closeGeminiTTSPicker,
           onCloseAzureSpeech: summaryAudioPickers.closeAzureSpeechPicker,
+          onCloseCartesia: summaryAudioPickers.closeCartesiaPicker,
           onSyncAivis: () => {
             void syncAivisModels();
           },
@@ -459,6 +468,9 @@ export default function SettingsPage() {
           onRefreshAzureSpeech: () => {
             void loadAzureSpeechVoices().catch(() => undefined);
           },
+          onRefreshCartesia: () => {
+            void loadCartesiaTTSCatalog().catch(() => undefined);
+          },
           onSelectAivis: summaryAudioPickerSelectActions.onSelectAivis,
           onSelectFish: summaryAudioPickerSelectActions.onSelectFish,
           onSelectElevenLabs: summaryAudioPickerSelectActions.onSelectElevenLabs,
@@ -466,6 +478,7 @@ export default function SettingsPage() {
           onSelectOpenAI: summaryAudioPickerSelectActions.onSelectOpenAI,
           onSelectGemini: summaryAudioPickerSelectActions.onSelectGemini,
           onSelectAzureSpeech: summaryAudioPickerSelectActions.onSelectAzureSpeech,
+          onSelectCartesia: summaryAudioPickerSelectActions.onSelectCartesia,
         }}
       />
 

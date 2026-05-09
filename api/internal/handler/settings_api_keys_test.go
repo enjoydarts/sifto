@@ -66,6 +66,12 @@ func lockSettingsHandlerTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cartesia_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.cartesia_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cartesia_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.cartesia_api_key_last4: %v", err)
+	}
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS facts_check_fallback_model text`); err != nil {
 		t.Fatalf("ensure user_settings.facts_check_fallback_model: %v", err)
 	}
@@ -422,5 +428,71 @@ func TestSettingsHandlerDeleteCerebrasAPIKey(t *testing.T) {
 	}
 	if resp.CerebrasAPIKeyLast4 != nil {
 		t.Fatalf("cerebras_api_key_last4 = %#v, want nil", resp.CerebrasAPIKeyLast4)
+	}
+}
+
+func TestSettingsHandlerSetCartesiaAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/cartesia-key", bytes.NewBufferString(`{"api_key":"cartesia-handler-key"}`))
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "00000000-0000-4000-8000-000000000051"))
+	rec := httptest.NewRecorder()
+
+	handler.SetCartesiaAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		UserID              string  `json:"user_id"`
+		HasCartesiaAPIKey   bool    `json:"has_cartesia_api_key"`
+		CartesiaAPIKeyLast4 *string `json:"cartesia_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.HasCartesiaAPIKey {
+		t.Fatal("has_cartesia_api_key = false, want true")
+	}
+	if resp.CartesiaAPIKeyLast4 == nil || *resp.CartesiaAPIKeyLast4 != "-key" {
+		t.Fatalf("cartesia_api_key_last4 = %#v, want %q", resp.CartesiaAPIKeyLast4, "-key")
+	}
+}
+
+func TestSettingsHandlerDeleteCartesiaAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+	userID := "00000000-0000-4000-8000-000000000051"
+
+	setReq := httptest.NewRequest(http.MethodPost, "/api/settings/cartesia-key", bytes.NewBufferString(`{"api_key":"cartesia-handler-key"}`))
+	setReq = setReq.WithContext(context.WithValue(setReq.Context(), middleware.UserIDKey, userID))
+	setRec := httptest.NewRecorder()
+	handler.SetCartesiaAPIKey(setRec, setReq)
+	if setRec.Code != http.StatusOK {
+		t.Fatalf("setup status = %d, want 200 body=%s", setRec.Code, setRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/settings/cartesia-key", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.DeleteCartesiaAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		HasCartesiaAPIKey   bool    `json:"has_cartesia_api_key"`
+		CartesiaAPIKeyLast4 *string `json:"cartesia_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.HasCartesiaAPIKey {
+		t.Fatal("has_cartesia_api_key = true, want false")
+	}
+	if resp.CartesiaAPIKeyLast4 != nil {
+		t.Fatalf("cartesia_api_key_last4 = %#v, want nil", resp.CartesiaAPIKeyLast4)
 	}
 }

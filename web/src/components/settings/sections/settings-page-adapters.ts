@@ -134,6 +134,7 @@ export function buildSummaryAudioState<T extends {
   provider: string;
   providerCapabilities: unknown;
   ttsModel: string;
+  voiceModel: string;
   resolvedVoiceLabel: string;
   resolvedVoiceDetail: string;
   voicePickerDisabled: boolean;
@@ -146,6 +147,7 @@ export function buildSummaryAudioState<T extends {
 export function buildSummaryAudioIntegrations<T extends {
   hasAivisAPIKey: boolean;
   hasFishAPIKey: boolean;
+  hasCartesiaAPIKey: boolean;
   aivisUserDictionaryUUID: string;
   aivisUserDictionariesLoading: boolean;
   aivisUserDictionaries: unknown[];

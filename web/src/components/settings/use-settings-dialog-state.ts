@@ -26,6 +26,7 @@ export function useSettingsDialogState() {
   const [summaryAudioOpenAITTPickerOpen, setSummaryAudioOpenAITTPickerOpen] = useState(false);
   const [summaryAudioGeminiTTSPickerOpen, setSummaryAudioGeminiTTSPickerOpen] = useState(false);
   const [summaryAudioAzureSpeechPickerOpen, setSummaryAudioAzureSpeechPickerOpen] = useState(false);
+  const [summaryAudioCartesiaPickerOpen, setSummaryAudioCartesiaPickerOpen] = useState(false);
 
   return {
     uiFonts: {
@@ -86,6 +87,7 @@ export function useSettingsDialogState() {
       summaryAudioOpenAITTPickerOpen,
       summaryAudioGeminiTTSPickerOpen,
       summaryAudioAzureSpeechPickerOpen,
+      summaryAudioCartesiaPickerOpen,
       setSummaryAudioAivisPickerOpen,
       setSummaryAudioFishPickerOpen,
       setSummaryAudioElevenLabsPickerOpen,
@@ -93,6 +95,7 @@ export function useSettingsDialogState() {
       setSummaryAudioOpenAITTPickerOpen,
       setSummaryAudioGeminiTTSPickerOpen,
       setSummaryAudioAzureSpeechPickerOpen,
+      setSummaryAudioCartesiaPickerOpen,
       closeAivisPicker: () => setSummaryAudioAivisPickerOpen(false),
       closeFishPicker: () => setSummaryAudioFishPickerOpen(false),
       closeElevenLabsPicker: () => setSummaryAudioElevenLabsPickerOpen(false),
@@ -100,6 +103,7 @@ export function useSettingsDialogState() {
       closeOpenAITTPicker: () => setSummaryAudioOpenAITTPickerOpen(false),
       closeGeminiTTSPicker: () => setSummaryAudioGeminiTTSPickerOpen(false),
       closeAzureSpeechPicker: () => setSummaryAudioAzureSpeechPickerOpen(false),
+      closeCartesiaPicker: () => setSummaryAudioCartesiaPickerOpen(false),
     },
   };
 }

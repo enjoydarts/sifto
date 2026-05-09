@@ -61,6 +61,7 @@ type summaryAudioSynthesizer interface {
 		xaiAPIKey *string,
 		openAIAPIKey *string,
 		azureSpeechAPIKey *string,
+		cartesiaAPIKey *string,
 	) (*SummaryAudioSynthesizeResponse, error)
 }
 
@@ -139,6 +140,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	var xaiAPIKey *string
 	var openAIAPIKey *string
 	var azureSpeechAPIKey *string
+	var cartesiaAPIKey *string
 	azureSpeechRegion := ""
 	if strings.EqualFold(provider, "aivis") {
 		aivisAPIKey, err = s.loadAivisAPIKey(ctx, userID)
@@ -238,6 +240,14 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			preprocessedText = stringPtrOrNil(preprocessed.Text)
 			narration = preprocessed.Text
 		}
+	} else if strings.EqualFold(provider, "cartesia") {
+		if providerMetadata.SummaryRequiresTTSModel && ttsModel == "" {
+			return nil, ErrSummaryAudioMissingModel
+		}
+		cartesiaAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetCartesiaAPIKeyEncrypted, s.cipher, userID, "cartesia api key is not configured")
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp, err := s.worker.SynthesizeSummaryAudio(
 		ctx,
@@ -262,6 +272,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		xaiAPIKey,
 		openAIAPIKey,
 		azureSpeechAPIKey,
+		cartesiaAPIKey,
 	)
 	if err != nil {
 		return nil, err

@@ -215,6 +215,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cerebras_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.cerebras_api_key_last4: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cartesia_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.cartesia_api_key_enc: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS cartesia_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.cartesia_api_key_last4: %v", err)
+	}
 	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS facts_check_fallback_model text`); err != nil {
 		t.Fatalf("ensure user_settings.facts_check_fallback_model: %v", err)
 	}

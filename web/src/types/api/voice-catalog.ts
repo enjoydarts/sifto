@@ -169,6 +169,28 @@ export interface ElevenLabsVoicesResponse {
   voices: ElevenLabsVoiceCatalogEntry[];
 }
 
+export interface CartesiaTTSModelCatalogEntry {
+  model_id: string;
+  name: string;
+  description: string;
+}
+
+export interface CartesiaVoiceCatalogEntry {
+  voice_id: string;
+  name: string;
+  description: string;
+  language: string;
+  preview_url: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CartesiaTTSCatalogResponse {
+  provider: string;
+  source: string;
+  models: CartesiaTTSModelCatalogEntry[];
+  voices: CartesiaVoiceCatalogEntry[];
+}
+
 export interface AzureSpeechVoiceCatalogEntry {
   voice_id: string;
   label: string;

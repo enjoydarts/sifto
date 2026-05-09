@@ -2,6 +2,7 @@ import type {
   AudioBriefingPersonaVoice,
   AivisModelsResponse,
   AzureSpeechVoicesResponse,
+  CartesiaTTSCatalogResponse,
   ElevenLabsVoicesResponse,
   GeminiTTSVoicesResponse,
   OpenAITTSVoicesResponse,
@@ -21,6 +22,7 @@ export function buildVoicePickerCatalogData(
   openAITTSVoicesData: OpenAITTSVoicesResponse | null,
   geminiTTSVoicesData: GeminiTTSVoicesResponse | null,
   azureSpeechVoicesData: AzureSpeechVoicesResponse | null,
+  cartesiaTTSCatalogData: CartesiaTTSCatalogResponse | null,
 ) {
   const audioBriefingAivisModels = aivisModelsData?.models ?? [];
   const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
@@ -28,6 +30,8 @@ export function buildVoicePickerCatalogData(
   const audioBriefingOpenAITTSVoices = openAITTSVoicesData?.voices ?? [];
   const audioBriefingGeminiTTSVoices = geminiTTSVoicesData?.voices ?? [];
   const audioBriefingAzureSpeechVoices = azureSpeechVoicesData?.voices ?? [];
+  const summaryAudioCartesiaVoices = cartesiaTTSCatalogData?.voices ?? [];
+  const summaryAudioCartesiaTTSModels = cartesiaTTSCatalogData?.models ?? [];
   return {
     audioBriefingAivisModels,
     audioBriefingXAIVoices,
@@ -41,6 +45,8 @@ export function buildVoicePickerCatalogData(
     summaryAudioOpenAITTSVoices: audioBriefingOpenAITTSVoices,
     summaryAudioGeminiTTSVoices: audioBriefingGeminiTTSVoices,
     summaryAudioAzureSpeechVoices: audioBriefingAzureSpeechVoices,
+    summaryAudioCartesiaVoices,
+    summaryAudioCartesiaTTSModels,
   };
 }
 
@@ -156,6 +162,7 @@ export function buildSummaryAudioPickerOpenAction(params: {
     setSummaryAudioOpenAITTPickerOpen: (open: boolean) => void;
     setSummaryAudioGeminiTTSPickerOpen: (open: boolean) => void;
     setSummaryAudioAzureSpeechPickerOpen: (open: boolean) => void;
+    setSummaryAudioCartesiaPickerOpen: (open: boolean) => void;
   };
   aivisModelsData: AivisModelsResponse | null;
   xaiVoicesData: XAIVoicesResponse | null;
@@ -163,12 +170,14 @@ export function buildSummaryAudioPickerOpenAction(params: {
   openAITTSVoicesData: OpenAITTSVoicesResponse | null;
   geminiTTSVoicesData: GeminiTTSVoicesResponse | null;
   azureSpeechVoicesData: AzureSpeechVoicesResponse | null;
+  cartesiaTTSCatalogData: CartesiaTTSCatalogResponse | null;
   loadAivisModels: () => Promise<unknown>;
   loadXAIVoices: () => Promise<unknown>;
   loadElevenLabsVoices: () => Promise<unknown>;
   loadOpenAITTSVoices: () => Promise<unknown>;
   loadGeminiTTSVoices: () => Promise<unknown>;
   loadAzureSpeechVoices: () => Promise<unknown>;
+  loadCartesiaTTSCatalog: () => Promise<unknown>;
 }) {
   return () => {
     if (params.provider === "aivis") {
@@ -191,6 +200,9 @@ export function buildSummaryAudioPickerOpenAction(params: {
     } else if (params.provider === "azure_speech") {
       params.openers.setSummaryAudioAzureSpeechPickerOpen(true);
       if (params.azureSpeechVoicesData == null) void params.loadAzureSpeechVoices().catch(() => undefined);
+    } else if (params.provider === "cartesia") {
+      params.openers.setSummaryAudioCartesiaPickerOpen(true);
+      if (params.cartesiaTTSCatalogData == null) void params.loadCartesiaTTSCatalog().catch(() => undefined);
     }
   };
 }
@@ -333,6 +345,14 @@ export function buildSummaryAudioPickerSelectActions(params: {
     },
     onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => {
       params.setSummaryAudioProvider("azure_speech");
+      params.setSummaryAudioVoiceModel(selection.voice_id);
+      params.setSummaryAudioVoiceStyle("");
+      params.setSummaryAudioProviderVoiceLabel(selection.label);
+      params.setSummaryAudioProviderVoiceDescription(selection.description);
+    },
+    onSelectCartesia: (selection: { voice_id: string; label: string; description: string }) => {
+      params.setSummaryAudioProvider("cartesia");
+      params.setSummaryAudioTTSModel(params.summaryAudioTTSModel.trim() || getAudioBriefingTTSProviderDefaultModel("cartesia", "single"));
       params.setSummaryAudioVoiceModel(selection.voice_id);
       params.setSummaryAudioVoiceStyle("");
       params.setSummaryAudioProviderVoiceLabel(selection.label);

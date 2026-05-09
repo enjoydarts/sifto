@@ -1,11 +1,12 @@
 "use client";
 
 import type { FormEvent } from "react";
-import type { AivisUserDictionary } from "@/lib/api";
+import type { AivisUserDictionary, CartesiaTTSModelCatalogEntry } from "@/lib/api";
 import { SectionCard } from "@/components/ui/section-card";
-import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
+import ModelSelect from "@/components/settings/model-select";
 import ProviderVoiceSelectionCard from "@/components/settings/providers/provider-voice-selection-card";
 import {
+  buildCartesiaTTSModelOptions,
   buildElevenLabsTTSModelOptions,
   buildFishTTSModelOptions,
   buildGeminiTTSModelOptions,
@@ -66,6 +67,8 @@ export default function SummaryAudioSettingsSection({
     provider: string;
     providerCapabilities: TTSProviderCapabilities;
     ttsModel: string;
+    cartesiaTTSModels: CartesiaTTSModelCatalogEntry[];
+    voiceModel: string;
     resolvedVoiceLabel: string;
     resolvedVoiceDetail: string;
     voicePickerDisabled: boolean;
@@ -75,6 +78,7 @@ export default function SummaryAudioSettingsSection({
   actions: {
     onChangeProvider: (provider: string) => void;
     onChangeTTSModel: (value: string) => void;
+    onChangeVoiceModel: (value: string) => void;
     onOpenVoicePicker: () => void;
     onChangeVoiceStyle: (value: string) => void;
     onChangeNumberInput: (field: SummaryAudioNumericInputField, value: string) => void;
@@ -85,6 +89,7 @@ export default function SummaryAudioSettingsSection({
   integrations: {
     hasAivisAPIKey: boolean;
     hasFishAPIKey: boolean;
+    hasCartesiaAPIKey: boolean;
     aivisUserDictionaryUUID: string;
     aivisUserDictionariesLoading: boolean;
     aivisUserDictionaries: AivisUserDictionary[];
@@ -97,6 +102,8 @@ export default function SummaryAudioSettingsSection({
     provider,
     providerCapabilities,
     ttsModel,
+    cartesiaTTSModels,
+    voiceModel,
     resolvedVoiceLabel,
     resolvedVoiceDetail,
     voicePickerDisabled,
@@ -106,6 +113,7 @@ export default function SummaryAudioSettingsSection({
   const {
     onChangeProvider,
     onChangeTTSModel,
+    onChangeVoiceModel,
     onOpenVoicePicker,
     onChangeVoiceStyle,
     onChangeNumberInput,
@@ -116,6 +124,7 @@ export default function SummaryAudioSettingsSection({
   const {
     hasAivisAPIKey,
     hasFishAPIKey,
+    hasCartesiaAPIKey,
     aivisUserDictionaryUUID,
     aivisUserDictionariesLoading,
     aivisUserDictionaries,
@@ -144,16 +153,22 @@ export default function SummaryAudioSettingsSection({
           ? buildOpenAITTSModelOptions(ttsModel)
           : provider === "gemini_tts"
             ? buildGeminiTTSModelOptions(ttsModel)
-            : [];
+            : provider === "cartesia"
+              ? buildCartesiaTTSModelOptions(ttsModel, cartesiaTTSModels)
+              : [];
 
   const voiceLabel =
     provider === "elevenlabs"
       ? t("settings.summaryAudio.elevenlabsVoice")
+      : provider === "cartesia"
+        ? t("settings.summaryAudio.cartesiaVoice")
       : t("settings.summaryAudio.voiceModel");
 
   const voiceHelp =
     provider === "elevenlabs"
       ? t("settings.summaryAudio.elevenlabsVoiceHelp")
+      : provider === "cartesia"
+        ? t("settings.summaryAudio.cartesiaVoiceHelp")
       : t("settings.summaryAudio.voiceModelHelp");
 
   const voicePickerLabel =
@@ -169,7 +184,9 @@ export default function SummaryAudioSettingsSection({
               ? t("settings.audioBriefing.pickOpenAITTSVoice")
               : provider === "azure_speech"
                 ? t("settings.summaryAudio.pickAzureSpeechVoice")
-                : t("settings.audioBriefing.pickGeminiTTSVoice");
+                : provider === "cartesia"
+                  ? t("settings.summaryAudio.pickCartesiaVoice")
+                  : t("settings.audioBriefing.pickGeminiTTSVoice");
 
   const renderNumberField = (
     field: SummaryAudioNumericInputField,
@@ -236,6 +253,7 @@ export default function SummaryAudioSettingsSection({
               <option value="openai">{t("settings.summaryAudio.provider.openai")}</option>
               <option value="gemini_tts">{t("settings.summaryAudio.provider.gemini_tts")}</option>
               <option value="elevenlabs">{t("settings.summaryAudio.provider.elevenlabs")}</option>
+              <option value="cartesia">{t("settings.summaryAudio.provider.cartesia")}</option>
               <option value="azure_speech">{t("settings.summaryAudio.provider.azure_speech")}</option>
             </select>
           </label>
@@ -260,14 +278,29 @@ export default function SummaryAudioSettingsSection({
           )}
         </div>
 
-        <ProviderVoiceSelectionCard
-          label={voiceLabel}
-          selectedLabel={resolvedVoiceLabel}
-          selectedDetail={resolvedVoiceDetail}
-          actionLabel={voicePickerLabel}
-          onAction={onOpenVoicePicker}
-          actionDisabled={voicePickerDisabled}
-        />
+        {providerCapabilities.supportsCatalogPicker ? (
+          <ProviderVoiceSelectionCard
+            label={voiceLabel}
+            selectedLabel={resolvedVoiceLabel}
+            selectedDetail={resolvedVoiceDetail}
+            actionLabel={voicePickerLabel}
+            onAction={onOpenVoicePicker}
+            actionDisabled={voicePickerDisabled}
+          />
+        ) : (
+          <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+              {voiceLabel}
+            </div>
+            <input
+              value={voiceModel}
+              onChange={(e) => onChangeVoiceModel(e.target.value)}
+              placeholder={provider === "cartesia" ? "6ccbfb76-1fc6-48f7-b71d-91ac6298247b" : ""}
+              className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+            />
+            <p className="mt-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">{voiceHelp}</p>
+          </label>
+        )}
 
         {providerCapabilities.requiresVoiceStyle ? (
           <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
@@ -366,6 +399,27 @@ export default function SummaryAudioSettingsSection({
             <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
               <div className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.summaryAudio.fishVoiceTitle")}</div>
               <p className="mt-2">{t("settings.summaryAudio.fishVoiceDetail")}</p>
+            </div>
+          )
+        ) : provider === "cartesia" ? (
+          !hasCartesiaAPIKey ? (
+            <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="font-semibold">{t("settings.summaryAudio.cartesiaApiKeyWarningTitle")}</div>
+                <div className="mt-1 leading-6">{t("settings.summaryAudio.cartesiaApiKeyWarningDetail")}</div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenSystem}
+                className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+              >
+                {t("settings.summaryAudio.openApiKeys")}
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+              <div className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.summaryAudio.cartesiaVoiceTitle")}</div>
+              <p className="mt-2">{t("settings.summaryAudio.cartesiaVoiceDetail")}</p>
             </div>
           )
         ) : null}

@@ -27,6 +27,7 @@ export type AccessProviderID =
   | "azure_speech"
   | "aivis"
   | "elevenlabs"
+  | "cartesia"
   | "fish";
 
 export type AccessCardRuntime = {
@@ -285,6 +286,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.elevenlabsNotSet",
     placeholder: "sk_...",
     selectStatus: (settings) => ({ configured: Boolean(settings.has_elevenlabs_api_key), last4: settings.elevenlabs_api_key_last4 ?? null }),
+  },
+  {
+    id: "cartesia",
+    titleKey: "settings.cartesiaTitle",
+    descriptionKey: "settings.cartesiaDescription",
+    notSetKey: "settings.cartesiaNotSet",
+    placeholder: "sk_car_...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_cartesia_api_key), last4: settings.cartesia_api_key_last4 ?? null }),
   },
   {
     id: "fish",

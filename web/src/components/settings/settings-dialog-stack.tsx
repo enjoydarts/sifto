@@ -5,6 +5,7 @@ import {
   AudioBriefingPreset,
   AivisModelSnapshot,
   AzureSpeechVoiceCatalogEntry,
+  CartesiaVoiceCatalogEntry,
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   LLMCatalogModel,
@@ -15,6 +16,7 @@ import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-moda
 import AudioBriefingPresetApplyModal from "@/components/settings/audio-briefing-preset-apply-modal";
 import AudioBriefingPresetSaveModal from "@/components/settings/audio-briefing-preset-save-modal";
 import AzureSpeechVoicePickerModal from "@/components/settings/azure-speech-voice-picker-modal";
+import CartesiaVoicePickerModal from "@/components/settings/cartesia-voice-picker-modal";
 import ElevenLabsVoicePickerModalExternal from "@/components/settings/elevenlabs-voice-picker-modal";
 import FishVoicePickerModal from "@/components/settings/fish-voice-picker-modal";
 import GeminiTTSVoicePickerModal from "@/components/settings/gemini-tts-voice-picker-modal";
@@ -180,6 +182,7 @@ type SummaryAudioVoicePickerStackProps = {
     summaryAudioOpenAITTPickerOpen: boolean;
     summaryAudioGeminiTTSPickerOpen: boolean;
     summaryAudioAzureSpeechPickerOpen: boolean;
+    summaryAudioCartesiaPickerOpen: boolean;
     summaryAudioVoiceModel: string;
     summaryAudioVoiceStyle: string;
   };
@@ -205,6 +208,9 @@ type SummaryAudioVoicePickerStackProps = {
     azureSpeechVoices: AzureSpeechVoiceCatalogEntry[];
     azureSpeechVoicesLoading: boolean;
     azureSpeechVoicesError: string | null;
+    cartesiaVoices: CartesiaVoiceCatalogEntry[];
+    cartesiaVoicesLoading: boolean;
+    cartesiaVoicesError: string | null;
   };
   actions: {
     onCloseAivis: () => void;
@@ -214,12 +220,14 @@ type SummaryAudioVoicePickerStackProps = {
     onCloseOpenAI: () => void;
     onCloseGemini: () => void;
     onCloseAzureSpeech: () => void;
+    onCloseCartesia: () => void;
     onSyncAivis: () => void;
     onSyncXAI: () => void;
     onSyncOpenAI: () => void;
     onRefreshElevenLabs: () => void;
     onRefreshGemini: () => void;
     onRefreshAzureSpeech: () => void;
+    onRefreshCartesia: () => void;
     onSelectAivis: (selection: { voice_model: string; voice_style: string }) => void;
     onSelectFish: (selection: { voice_model: string; provider_voice_label: string; provider_voice_description: string }) => void;
     onSelectElevenLabs: (selection: { voice_id: string; label: string; description: string }) => void;
@@ -227,6 +235,7 @@ type SummaryAudioVoicePickerStackProps = {
     onSelectOpenAI: (selection: { voice_id: string }) => void;
     onSelectGemini: (selection: { voice_name: string }) => void;
     onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => void;
+    onSelectCartesia: (selection: { voice_id: string; label: string; description: string }) => void;
   };
 };
 
@@ -308,6 +317,17 @@ export function SummaryAudioVoicePickerStack({ pickerState, catalogs, actions }:
         onClose={actions.onCloseAzureSpeech}
         onRefresh={actions.onRefreshAzureSpeech}
         onSelect={actions.onSelectAzureSpeech}
+      />
+
+      <CartesiaVoicePickerModal
+        open={pickerState.summaryAudioCartesiaPickerOpen}
+        loading={catalogs.cartesiaVoicesLoading}
+        error={catalogs.cartesiaVoicesError}
+        voices={catalogs.cartesiaVoices}
+        currentVoiceID={pickerState.summaryAudioVoiceModel}
+        onClose={actions.onCloseCartesia}
+        onRefresh={actions.onRefreshCartesia}
+        onSelect={actions.onSelectCartesia}
       />
     </>
   );

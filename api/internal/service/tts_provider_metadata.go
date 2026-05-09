@@ -81,6 +81,14 @@ var ttsProviderMetadataByProvider = map[string]TTSProviderMetadata{
 		AudioBriefingDuoPreprocessPromptKey:    elevenLabsAudioBriefingDuoPreprocessPromptKey,
 		PreprocessUsagePurpose:                 elevenLabsTTSPreprocessPurpose,
 	},
+	"cartesia": {
+		Capabilities: TTSProviderCapabilities{
+			SupportsCatalogPicker:    true,
+			SupportsSeparateTTSModel: true,
+			RequiresUserAPIKey:       true,
+		},
+		SummaryRequiresTTSModel: true,
+	},
 	"gemini_tts": {
 		Capabilities: TTSProviderCapabilities{
 			SupportsCatalogPicker:    true,

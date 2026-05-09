@@ -64,4 +64,11 @@ def load_single_speaker_tts_provider_runtime_metadata(provider: str) -> SingleSp
             timeout_sec=max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0),
             region="",
         )
+    if normalized_provider == "cartesia":
+        return SingleSpeakerTTSProviderRuntimeMetadata(
+            endpoint=(os.getenv("CARTESIA_TTS_ENDPOINT", "https://api.cartesia.ai").strip() or "https://api.cartesia.ai").rstrip("/"),
+            api_key=os.getenv("CARTESIA_API_KEY", "").strip(),
+            timeout_sec=max(_env_float("CARTESIA_TTS_TIMEOUT_SEC", 300.0), 1.0),
+            region="",
+        )
     raise RuntimeError(f"unsupported single-speaker tts provider metadata: {provider}")

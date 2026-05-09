@@ -1271,6 +1271,20 @@ func (h *SettingsHandler) DeleteElevenLabsAPIKey(w http.ResponseWriter, r *http.
 	})
 }
 
+func (h *SettingsHandler) SetCartesiaAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "cartesia", map[string]func(*model.UserSettings) any{
+		"has_cartesia_api_key":   func(s *model.UserSettings) any { return s.HasCartesiaAPIKey },
+		"cartesia_api_key_last4": func(s *model.UserSettings) any { return s.CartesiaAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteCartesiaAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "cartesia", map[string]func(*model.UserSettings) any{
+		"has_cartesia_api_key":   func(s *model.UserSettings) any { return s.HasCartesiaAPIKey },
+		"cartesia_api_key_last4": func(s *model.UserSettings) any { return s.CartesiaAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) GetAivisUserDictionaries(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	items, err := h.aivisDictionaries.List(r.Context(), userID)

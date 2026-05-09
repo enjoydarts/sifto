@@ -1,4 +1,5 @@
 import type {
+  CartesiaVoiceCatalogEntry,
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   OpenAITTSVoiceSnapshot,
@@ -25,6 +26,7 @@ type ResolveTTSVoiceDisplayArgs = {
   openAIResolved?: OpenAITTSVoiceSnapshot | null;
   geminiResolved?: GeminiTTSVoiceCatalogEntry | null;
   elevenLabsResolved?: ElevenLabsVoiceCatalogEntry | null;
+  cartesiaResolved?: CartesiaVoiceCatalogEntry | null;
   azureSpeechResolved?: AzureSpeechVoiceCatalogEntry | null;
 };
 
@@ -41,6 +43,7 @@ export function resolveTTSVoiceDisplay({
   openAIResolved,
   geminiResolved,
   elevenLabsResolved,
+  cartesiaResolved,
   azureSpeechResolved,
 }: ResolveTTSVoiceDisplayArgs): { label: string; detail: string } {
   const normalizedProvider = provider.trim().toLowerCase();
@@ -80,6 +83,12 @@ export function resolveTTSVoiceDisplay({
     return {
       label: elevenLabsResolved?.name || providerVoiceLabel || voiceModel || unsetText,
       detail: elevenLabsResolved?.description || providerVoiceDescription || voiceModel || unsetText,
+    };
+  }
+  if (normalizedProvider == "cartesia") {
+    return {
+      label: cartesiaResolved?.name || providerVoiceLabel || voiceModel || unsetText,
+      detail: cartesiaResolved?.description || providerVoiceDescription || voiceModel || unsetText,
     };
   }
   if (normalizedProvider == "azure_speech") {

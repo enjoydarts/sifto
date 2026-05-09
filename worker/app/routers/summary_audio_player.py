@@ -39,6 +39,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
     elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
     xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
     azure_speech_api_key = request.headers.get("x-azure-speech-api-key", "").strip() or None
+    cartesia_api_key = request.headers.get("x-cartesia-api-key", "").strip() or None
     audio_base64, content_type, duration_sec, resolved_text = _service.synthesize(
         provider=req.provider,
         voice_model=req.voice_model,
@@ -61,6 +62,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
         openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         azure_speech_api_key=azure_speech_api_key,
         azure_speech_region=(req.azure_speech_region or "").strip() or None,
+        cartesia_api_key=cartesia_api_key,
     )
     return SummaryAudioSynthesizeResponse(
         audio_base64=audio_base64,

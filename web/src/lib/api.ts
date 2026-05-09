@@ -19,6 +19,7 @@ import type {
   AudioBriefingJob,
   AudioBriefingPersonaVoice,
   AudioBriefingPreset,
+  CartesiaTTSCatalogResponse,
   AudioBriefingSettings,
   DeepInfraModelsResponse,
   DeepInfraSyncStatusResponse,
@@ -147,7 +148,7 @@ async function clientFetch<T>(path: string, options?: RequestInit, opts?: { apiP
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status}: ${text || res.statusText}`);
+    throw new Error(`${res.status}: ${requestPath}: ${text || res.statusText}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -159,6 +160,36 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 async function apiFetchStable<T>(path: string, options?: RequestInit): Promise<T> {
   return clientFetch<T>(path, options, { apiPrefix: true, forceFresh: false });
+}
+
+async function apiFetchBlob(path: string, options?: RequestInit): Promise<Blob> {
+  const requestPath = withCacheBust(path, options?.method);
+  const authHeaders = await getAuthHeaders();
+  let res = await fetch(`/api${requestPath}`, {
+    cache: "no-store",
+    ...options,
+    headers: {
+      ...authHeaders,
+      ...options?.headers,
+    },
+  });
+  if (res.status === 401 && authHeaders.Authorization) {
+    await resolveClerkIdentityIfNeeded();
+    const retryAuthHeaders = await getAuthHeaders();
+    res = await fetch(`/api${requestPath}`, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        ...retryAuthHeaders,
+        ...options?.headers,
+      },
+    });
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${res.status}: ${requestPath}: ${text || res.statusText}`);
+  }
+  return res.blob();
 }
 
 async function fetchSummaryAudioBinary(itemID: string): Promise<SummaryAudioSynthesisResponse> {
@@ -1216,6 +1247,16 @@ export const api = {
       "/settings/elevenlabs-key",
       { method: "DELETE" }
     ),
+  setCartesiaApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_cartesia_api_key: boolean; cartesia_api_key_last4: string | null }>(
+      "/settings/cartesia-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteCartesiaApiKey: () =>
+    apiFetch<{ user_id: string; has_cartesia_api_key: boolean; cartesia_api_key_last4: string | null }>(
+      "/settings/cartesia-key",
+      { method: "DELETE" }
+    ),
   setFishApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_fish_api_key: boolean; fish_api_key_last4: string | null }>(
       "/settings/fish-key",
@@ -1352,6 +1393,10 @@ export const api = {
     apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices/sync", { method: "POST" }),
   getElevenLabsVoices: () =>
     apiFetch<ElevenLabsVoicesResponse>("/elevenlabs-voices"),
+  getCartesiaTTSCatalog: () =>
+    apiFetch<CartesiaTTSCatalogResponse>("/cartesia-tts-catalog"),
+  getCartesiaVoicePreview: (voiceID: string) =>
+    apiFetchBlob(`/cartesia-tts-catalog/voices/${encodeURIComponent(voiceID)}/preview`),
   getAzureSpeechVoices: () =>
     apiFetch<AzureSpeechVoicesResponse>("/azure-speech-voices"),
   getGeminiTTSVoices: () =>

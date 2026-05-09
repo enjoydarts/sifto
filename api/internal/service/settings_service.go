@@ -83,6 +83,8 @@ type SettingsGetPayload struct {
 	FishAudioAPIKeyLast4           *string                         `json:"fish_api_key_last4,omitempty"`
 	HasElevenLabsAPIKey            bool                            `json:"has_elevenlabs_api_key"`
 	ElevenLabsAPIKeyLast4          *string                         `json:"elevenlabs_api_key_last4,omitempty"`
+	HasCartesiaAPIKey              bool                            `json:"has_cartesia_api_key"`
+	CartesiaAPIKeyLast4            *string                         `json:"cartesia_api_key_last4,omitempty"`
 	AivisUserDictionaryUUID        *string                         `json:"aivis_user_dictionary_uuid,omitempty"`
 	GeminiTTSEnabled               bool                            `json:"gemini_tts_enabled"`
 	Podcast                        PodcastView                     `json:"podcast"`
@@ -452,6 +454,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		FishAudioAPIKeyLast4:           settings.FishAudioAPIKeyLast4,
 		HasElevenLabsAPIKey:            settings.HasElevenLabsAPIKey,
 		ElevenLabsAPIKeyLast4:          settings.ElevenLabsAPIKeyLast4,
+		HasCartesiaAPIKey:              settings.HasCartesiaAPIKey,
+		CartesiaAPIKeyLast4:            settings.CartesiaAPIKeyLast4,
 		AivisUserDictionaryUUID:        settings.AivisUserDictionaryUUID,
 		GeminiTTSEnabled:               GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
 		Podcast:                        NewPodcastView(settings),
@@ -1322,6 +1326,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetFishAudioAPIKey(ctx, userID, enc, last4)
 	case "elevenlabs":
 		return s.repo.SetElevenLabsAPIKey(ctx, userID, enc, last4)
+	case "cartesia":
+		return s.repo.SetCartesiaAPIKey(ctx, userID, enc, last4)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
@@ -1377,6 +1383,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearFishAudioAPIKey(ctx, userID)
 	case "elevenlabs":
 		return s.repo.ClearElevenLabsAPIKey(ctx, userID)
+	case "cartesia":
+		return s.repo.ClearCartesiaAPIKey(ctx, userID)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}

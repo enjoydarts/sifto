@@ -42,6 +42,16 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
     },
     defaultTTSModel: "eleven_flash_v2_5",
   },
+  cartesia: {
+    capabilities: {
+      requiresVoiceStyle: false,
+      supportsCatalogPicker: true,
+      supportsSeparateTTSModel: true,
+      supportsSpeechTuning: false,
+      requiresRegion: false,
+    },
+    defaultTTSModel: "sonic-3.5",
+  },
   xai: {
     capabilities: {
       requiresVoiceStyle: false,
@@ -122,6 +132,8 @@ export function formatTTSProviderLabel(provider: string, t: Translate): string {
       return t("settings.summaryAudio.provider.gemini_tts");
     case "elevenlabs":
       return t("settings.summaryAudio.provider.elevenlabs");
+    case "cartesia":
+      return t("settings.summaryAudio.provider.cartesia");
     case "mock":
       return "Mock";
     default:

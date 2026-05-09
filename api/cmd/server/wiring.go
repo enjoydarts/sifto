@@ -301,6 +301,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/fish-key", settingsH.DeleteFishAudioAPIKey)
 				r.Post("/elevenlabs-key", settingsH.SetElevenLabsAPIKey)
 				r.Delete("/elevenlabs-key", settingsH.DeleteElevenLabsAPIKey)
+				r.Post("/cartesia-key", settingsH.SetCartesiaAPIKey)
+				r.Delete("/cartesia-key", settingsH.DeleteCartesiaAPIKey)
 				r.Get("/aivis-user-dictionaries", settingsH.GetAivisUserDictionaries)
 				r.Post("/aivis-user-dictionary", settingsH.SetAivisUserDictionary)
 				r.Delete("/aivis-user-dictionary", settingsH.DeleteAivisUserDictionary)
@@ -442,6 +444,8 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, d.secretCipher, xaiVoiceCatalogSvc)
 	elevenLabsVoiceCatalogSvc := service.NewElevenLabsVoiceCatalogService()
 	elevenLabsVoicesH := handler.NewElevenLabsVoicesHandler(userSettingsRepo, d.secretCipher, elevenLabsVoiceCatalogSvc)
+	cartesiaTTSCatalogSvc := service.NewCartesiaTTSCatalogService()
+	cartesiaTTSCatalogH := handler.NewCartesiaTTSCatalogHandler(userSettingsRepo, d.secretCipher, cartesiaTTSCatalogSvc)
 	azureSpeechVoiceCatalogSvc := service.NewAzureSpeechVoiceCatalogService()
 	azureSpeechVoicesH := handler.NewAzureSpeechVoicesHandler(userSettingsRepo, d.secretCipher, azureSpeechVoiceCatalogSvc)
 	openAITTSVoiceCatalogSvc := service.NewOpenAITTSVoiceCatalogService()
@@ -497,6 +501,10 @@ func buildLLMModelsModule(d *appDeps) appModule {
 			})
 			r.Route("/elevenlabs-voices", func(r chi.Router) {
 				r.Get("/", elevenLabsVoicesH.List)
+			})
+			r.Route("/cartesia-tts-catalog", func(r chi.Router) {
+				r.Get("/", cartesiaTTSCatalogH.List)
+				r.Get("/voices/{voiceID}/preview", cartesiaTTSCatalogH.Preview)
 			})
 			r.Route("/azure-speech-voices", func(r chi.Router) {
 				r.Get("/", azureSpeechVoicesH.List)

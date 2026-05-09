@@ -37,6 +37,7 @@ func (s *summaryAudioSynthStub) SynthesizeSummaryAudio(
 	_ *string,
 	_ *string,
 	_ *string,
+	_ *string,
 ) (*SummaryAudioSynthesizeResponse, error) {
 	s.gotText = text
 	if s.resp != nil {
@@ -598,6 +599,18 @@ func TestSummaryAudioPlayerTTSModelRequirementsByProvider(t *testing.T) {
 			provider:   "elevenlabs",
 			ttsModel:   "",
 			voiceModel: "voice-1",
+			wantErr:    ErrSummaryAudioMissingModel,
+		},
+		{
+			name:       "cartesia requires tts model",
+			userID:     "00000000-0000-4000-8000-000000000151",
+			sourceID:   "00000000-0000-4000-8000-000000000152",
+			itemID:     "00000000-0000-4000-8000-000000000153",
+			userEmail:  "summary-audio-cartesia-requirement@example.com",
+			userName:   "Summary Audio Cartesia Requirement",
+			provider:   "cartesia",
+			ttsModel:   "",
+			voiceModel: "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
 			wantErr:    ErrSummaryAudioMissingModel,
 		},
 	}

@@ -12,7 +12,7 @@ function hasConfiguredVoice(settings: SummaryAudioVoiceSettings | null | undefin
   if (!settings.tts_provider.trim() || !settings.voice_model.trim()) {
     return false;
   }
-  if ((settings.tts_provider === "openai" || settings.tts_provider === "gemini_tts" || settings.tts_provider === "elevenlabs") && !settings.tts_model.trim()) {
+  if ((settings.tts_provider === "openai" || settings.tts_provider === "gemini_tts" || settings.tts_provider === "elevenlabs" || settings.tts_provider === "cartesia") && !settings.tts_model.trim()) {
     return false;
   }
   if (settings.tts_provider === "aivis" && !settings.voice_style.trim()) {
@@ -44,6 +44,10 @@ export function getSummaryAudioReadiness(settings: UserSettings | null | undefin
       return settings?.has_elevenlabs_api_key
         ? { ready: true, reasonKey: null }
         : { ready: false, reasonKey: "summaryAudio.playbackBlocked.elevenlabsApiKeyMissing" };
+    case "cartesia":
+      return settings?.has_cartesia_api_key
+        ? { ready: true, reasonKey: null }
+        : { ready: false, reasonKey: "summaryAudio.playbackBlocked.cartesiaApiKeyMissing" };
     case "openai":
       return settings?.has_openai_api_key
         ? { ready: true, reasonKey: null }

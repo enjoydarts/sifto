@@ -28,11 +28,20 @@ export async function POST(
     cache: "no-store",
   });
 
-  const text = await upstream.text();
-  return new NextResponse(text, {
+  const body = await upstream.arrayBuffer();
+  const headers = new Headers();
+  headers.set("Content-Type", upstream.headers.get("Content-Type") ?? "audio/mpeg");
+  headers.set("Cache-Control", "no-store");
+  const durationSec = upstream.headers.get("X-Summary-Audio-Duration-Sec");
+  if (durationSec) {
+    headers.set("X-Summary-Audio-Duration-Sec", durationSec);
+  }
+  const preprocessedText = upstream.headers.get("X-Summary-Audio-Preprocessed-Text-B64");
+  if (preprocessedText) {
+    headers.set("X-Summary-Audio-Preprocessed-Text-B64", preprocessedText);
+  }
+  return new NextResponse(body, {
     status: upstream.status,
-    headers: {
-      "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
-    },
+    headers,
   });
 }

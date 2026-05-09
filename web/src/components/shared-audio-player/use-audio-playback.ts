@@ -10,15 +10,6 @@ export function hasSummaryAudioPlaybackAccess(settings: UserSettings | null | un
   return readiness.ready;
 }
 
-export function base64ToBlob(base64: string, contentType: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: contentType || "audio/mpeg" });
-}
-
 export function progressRatio(positionSec: number, durationSec: number): number | null {
   if (durationSec <= 0) return null;
   return Math.max(0, Math.min(1, positionSec / durationSec));

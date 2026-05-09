@@ -90,6 +90,29 @@ func (s *summaryAudioPreprocessStub) PreprocessSummaryAudioTextForProviderWithVa
 	return &TTSMarkupPreprocessResult{Text: text}, nil
 }
 
+func TestSummaryAudioSynthesisDecodesWorkerBase64(t *testing.T) {
+	t.Parallel()
+
+	result, err := decodeSummaryAudioWorkerResponse(&SummaryAudioSynthesizeResponse{
+		AudioBase64:  "Zm9v",
+		ContentType:  "audio/mpeg",
+		DurationSec:  12,
+		ResolvedText: "resolved",
+	})
+	if err != nil {
+		t.Fatalf("decodeSummaryAudioWorkerResponse() error = %v", err)
+	}
+	if got := string(result.AudioBytes); got != "foo" {
+		t.Fatalf("AudioBytes = %q, want foo", got)
+	}
+	if result.AudioBase64 != "" {
+		t.Fatalf("AudioBase64 should be omitted from API result, got %q", result.AudioBase64)
+	}
+	if result.ContentType != "audio/mpeg" || result.DurationSec != 12 || result.ResolvedText != "resolved" {
+		t.Fatalf("unexpected metadata: %#v", result)
+	}
+}
+
 func TestSummaryAudioPlayerUsesFishPreprocessOutput(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "summary-audio-fish-test-key")
 	db, err := repository.NewPool(context.Background())

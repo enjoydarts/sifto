@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -19,6 +20,7 @@ type SummaryAudioSynthesis struct {
 	Item             *model.ItemDetail `json:"item,omitempty"`
 	Persona          string            `json:"persona"`
 	AudioBase64      string            `json:"audio_base64"`
+	AudioBytes       []byte            `json:"-"`
 	ContentType      string            `json:"content_type"`
 	DurationSec      int               `json:"duration_sec"`
 	ResolvedText     string            `json:"resolved_text"`
@@ -264,14 +266,36 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	if err != nil {
 		return nil, err
 	}
+	result, err := decodeSummaryAudioWorkerResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+	result.Item = item
+	result.PreprocessedText = preprocessedText
+	return result, nil
+}
+
+func decodeSummaryAudioWorkerResponse(resp *SummaryAudioSynthesizeResponse) (*SummaryAudioSynthesis, error) {
+	if resp == nil {
+		return nil, errors.New("summary audio worker response is empty")
+	}
+	audioBase64 := strings.TrimSpace(resp.AudioBase64)
+	if audioBase64 == "" {
+		return nil, errors.New("summary audio worker response missing audio")
+	}
+	audioBytes, err := base64.StdEncoding.DecodeString(audioBase64)
+	if err != nil {
+		return nil, err
+	}
+	if len(audioBytes) == 0 {
+		return nil, errors.New("summary audio worker response decoded empty audio")
+	}
 	return &SummaryAudioSynthesis{
-		Item:             item,
-		Persona:          "",
-		AudioBase64:      resp.AudioBase64,
-		ContentType:      resp.ContentType,
-		DurationSec:      resp.DurationSec,
-		ResolvedText:     resp.ResolvedText,
-		PreprocessedText: preprocessedText,
+		Persona:      "",
+		AudioBytes:   audioBytes,
+		ContentType:  strings.TrimSpace(resp.ContentType),
+		DurationSec:  resp.DurationSec,
+		ResolvedText: resp.ResolvedText,
 	}, nil
 }
 

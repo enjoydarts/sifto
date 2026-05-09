@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
@@ -49,5 +51,30 @@ func (h *SummaryAudioPlayerHandler) Synthesize(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
-	writeJSON(w, resp)
+	writeSummaryAudioBinary(w, resp)
+}
+
+func writeSummaryAudioBinary(w http.ResponseWriter, resp *service.SummaryAudioSynthesis) {
+	if resp == nil || len(resp.AudioBytes) == 0 {
+		http.Error(w, "summary audio response missing audio", http.StatusInternalServerError)
+		return
+	}
+	contentType := strings.TrimSpace(resp.ContentType)
+	if contentType == "" {
+		contentType = "audio/mpeg"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(resp.AudioBytes)))
+	w.Header().Set("Cache-Control", "no-store")
+	if resp.DurationSec > 0 {
+		w.Header().Set("X-Summary-Audio-Duration-Sec", strconv.Itoa(resp.DurationSec))
+	}
+	if text := strings.TrimSpace(derefString(resp.PreprocessedText)); text != "" {
+		encoded := base64.RawURLEncoding.EncodeToString([]byte(text))
+		if len(encoded) <= 7000 {
+			w.Header().Set("X-Summary-Audio-Preprocessed-Text-B64", encoded)
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(resp.AudioBytes)
 }

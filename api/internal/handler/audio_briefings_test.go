@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,42 @@ import (
 
 	"github.com/enjoydarts/sifto/api/internal/service"
 )
+
+func TestWriteSummaryAudioBinaryWritesAudioBytes(t *testing.T) {
+	t.Parallel()
+
+	preprocessed := "読み上げ用テキスト"
+	rec := httptest.NewRecorder()
+	writeSummaryAudioBinary(rec, &service.SummaryAudioSynthesis{
+		AudioBytes:       []byte("audio"),
+		ContentType:      "audio/mpeg",
+		DurationSec:      42,
+		PreprocessedText: &preprocessed,
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "audio/mpeg" {
+		t.Fatalf("Content-Type = %q, want audio/mpeg", got)
+	}
+	if got := rec.Header().Get("Content-Length"); got != "5" {
+		t.Fatalf("Content-Length = %q, want 5", got)
+	}
+	if got := rec.Header().Get("X-Summary-Audio-Duration-Sec"); got != "42" {
+		t.Fatalf("duration header = %q, want 42", got)
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(rec.Header().Get("X-Summary-Audio-Preprocessed-Text-B64"))
+	if err != nil {
+		t.Fatalf("decode preprocessed header: %v", err)
+	}
+	if string(decoded) != preprocessed {
+		t.Fatalf("preprocessed header = %q, want %q", string(decoded), preprocessed)
+	}
+	if got := rec.Body.String(); got != "audio" {
+		t.Fatalf("body = %q, want audio", got)
+	}
+}
 
 func TestResolvePlayableAudioURLKeepsAbsoluteURL(t *testing.T) {
 	t.Parallel()

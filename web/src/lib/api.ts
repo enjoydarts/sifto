@@ -161,6 +161,61 @@ async function apiFetchStable<T>(path: string, options?: RequestInit): Promise<T
   return clientFetch<T>(path, options, { apiPrefix: true, forceFresh: false });
 }
 
+async function fetchSummaryAudioBinary(itemID: string): Promise<SummaryAudioSynthesisResponse> {
+  const targetPath = `/summary-audio-proxy/items/${encodeURIComponent(itemID)}/synthesize`;
+  const authHeaders = await getAuthHeaders();
+  let res = await fetch(targetPath, {
+    method: "POST",
+    cache: "no-store",
+    headers: authHeaders,
+  });
+  if (res.status === 401 && authHeaders.Authorization) {
+    await resolveClerkIdentityIfNeeded();
+    const retryAuthHeaders = await getAuthHeaders();
+    res = await fetch(targetPath, {
+      method: "POST",
+      cache: "no-store",
+      headers: retryAuthHeaders,
+    });
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${res.status}: ${text || res.statusText}`);
+  }
+  const blob = await res.blob();
+  const contentType = res.headers.get("Content-Type") ?? blob.type ?? "audio/mpeg";
+  return {
+    item: null,
+    persona: "",
+    audio_blob: blob,
+    content_type: contentType,
+    duration_sec: parsePositiveIntHeader(res.headers.get("X-Summary-Audio-Duration-Sec")),
+    resolved_text: "",
+    preprocessed_text: decodeBase64URLHeader(res.headers.get("X-Summary-Audio-Preprocessed-Text-B64")),
+  };
+}
+
+function parsePositiveIntHeader(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+}
+
+function decodeBase64URLHeader(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 const FORCE_FRESH_UNTIL_KEY = "sifto.forceFreshUntil";
 
 function withCacheBust(path: string, method?: string, enabled = true): string {
@@ -512,10 +567,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  synthesizeSummaryAudio: (id: string) =>
-    clientFetch<SummaryAudioSynthesisResponse>(`/summary-audio-proxy/items/${id}/synthesize`, {
-      method: "POST",
-    }, { apiPrefix: false }),
+  synthesizeSummaryAudio: (id: string) => fetchSummaryAudioBinary(id),
   saveItemNote: (id: string, body: { content: string; tags?: string[] }) =>
     apiFetch<ItemNote>(`/items/${id}/note`, {
       method: "PUT",

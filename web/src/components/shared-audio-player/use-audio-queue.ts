@@ -4,7 +4,6 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Item, type ItemDetail } from "@/lib/api";
 import {
-  base64ToBlob,
   isPlaybackPermissionError,
   preparedSummaryItemDetail,
   preparedSummaryPreprocessedText,
@@ -269,8 +268,7 @@ export function useAudioQueue(
 
   async function synthesizeSummaryItem(itemID: string): Promise<SummaryAudioPrepared> {
     const response = await api.synthesizeSummaryAudio(itemID);
-    const blob = base64ToBlob(response.audio_base64, response.content_type);
-    return { itemID, objectURL: URL.createObjectURL(blob), response };
+    return { itemID, objectURL: URL.createObjectURL(response.audio_blob), response };
   }
 
   async function ensureSummaryPrefetch(queue: Item[], index: number) {

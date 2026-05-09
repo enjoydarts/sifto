@@ -278,7 +278,7 @@ export interface ItemReadResult {
 export interface SummaryAudioSynthesisResponse {
   item?: ItemDetail | null;
   persona: string;
-  audio_base64: string;
+  audio_blob: Blob;
   content_type: string;
   duration_sec: number;
   resolved_text: string;

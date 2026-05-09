@@ -2575,6 +2575,8 @@ export const enDict: Dict = {
   "debug.digest.helperText": "digest_date is a JST date. Example: if you specify 2026-02-24, summaries generated on 2026-02-23 JST are targeted.",
   "debug.notFetched": "Not fetched",
   "debug.systemHealthFirst": "Fetch System Health first",
+  "debug.systemStatus.dbSelectLatency": "DB SELECT 1 latency",
+  "debug.systemStatus.samples": "Samples",
   "debug.digest.skipSend": "`skip_send` (create only; do not send `digest/created`)",
   "debug.digest.dryRun": "`dry_run` (preview candidates only; do not enqueue)",
   "debug.running": "Running…",

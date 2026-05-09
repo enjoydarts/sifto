@@ -2575,6 +2575,8 @@ export const jaDict: Dict = {
   "debug.digest.helperText": "digest_date は JST の日付です。例: 2026-02-24 を指定すると、2026-02-23 JST に生成された要約が対象になります。",
   "debug.notFetched": "未取得",
   "debug.systemHealthFirst": "System Health を先に取得してください",
+  "debug.systemStatus.dbSelectLatency": "DB SELECT 1 レイテンシ",
+  "debug.systemStatus.samples": "サンプル数",
   "debug.digest.skipSend": "`skip_send`（作成だけして `digest/created` は送らない）",
   "debug.digest.dryRun": "`dry_run`（候補確認だけしてキュー投入しない）",
   "debug.running": "実行中…",

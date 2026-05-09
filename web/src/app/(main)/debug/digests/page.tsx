@@ -787,6 +787,13 @@ export default function DebugDigestsPage() {
                         </div>
                       </div>
                       {row.detail && <div className="mt-1 text-[var(--color-editorial-ink-faint)]">{row.detail}</div>}
+                      {name === "db" && (
+                        <SystemDbLatencyMeta
+                          meta={row.meta}
+                          label={t("debug.systemStatus.dbSelectLatency")}
+                          samplesLabel={t("debug.systemStatus.samples")}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1514,6 +1521,82 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
       {label}
     </span>
   );
+}
+
+function SystemDbLatencyMeta({
+  meta,
+  label,
+  samplesLabel,
+}: {
+  meta?: Record<string, unknown>;
+  label: string;
+  samplesLabel: string;
+}) {
+  const query = getMetaString(meta, "query") ?? "SELECT 1";
+  const samples = getMetaNumber(meta, "samples");
+  const min = getMetaNumber(meta, "min_ms");
+  const avg = getMetaNumber(meta, "avg_ms");
+  const p95 = getMetaNumber(meta, "p95_ms");
+  const max = getMetaNumber(meta, "max_ms");
+
+  if (min === null && avg === null && p95 === null && max === null && samples === null) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 rounded-[14px] bg-[var(--color-editorial-panel-strong)] px-3 py-2">
+      <div className="mb-1 text-[11px] font-medium text-[var(--color-editorial-ink-faint)]">{label}</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-[var(--color-editorial-ink-faint)] sm:grid-cols-6">
+        <span>query</span>
+        <span className="font-mono text-[var(--color-editorial-ink)] sm:col-span-5">{query}</span>
+        <LatencyMetaCell label="min" value={min} />
+        <LatencyMetaCell label="avg" value={avg} />
+        <LatencyMetaCell label="p95" value={p95} />
+        <LatencyMetaCell label="max" value={max} />
+        {samples !== null && (
+          <>
+            <span>{samplesLabel}</span>
+            <span className="font-mono text-[var(--color-editorial-ink)]">{formatMetaNumber(samples)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LatencyMetaCell({ label, value }: { label: string; value: number | null }) {
+  if (value === null) {
+    return null;
+  }
+  return (
+    <>
+      <span>{label}</span>
+      <span className="font-mono text-[var(--color-editorial-ink)]">{formatMetaNumber(value)} ms</span>
+    </>
+  );
+}
+
+function getMetaNumber(meta: Record<string, unknown> | undefined, key: string): number | null {
+  const value = meta?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function getMetaString(meta: Record<string, unknown> | undefined, key: string): string | null {
+  const value = meta?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function formatMetaNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function RateCell({ value }: { value: number | null }) {

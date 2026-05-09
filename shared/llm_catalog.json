@@ -772,6 +772,29 @@
       }
     },
     {
+      "id": "gemini-3.1-flash-lite",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Gemini 3.1 Flash-Lite の安定版。低遅延・低コストの抽出、分類、軽い要約向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_05",
+        "input_per_mtok_usd": 0.25,
+        "output_per_mtok_usd": 1.5,
+        "cache_read_per_mtok_usd": 0.025
+      }
+    },
+    {
       "id": "gemini-3.1-flash-lite-preview",
       "provider": "google",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

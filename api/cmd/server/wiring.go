@@ -121,6 +121,7 @@ func buildItemsModule(d *appDeps) appModule {
 				r.Get("/ux-metrics", itemH.UXMetrics)
 				r.Get("/topic-trends", itemH.TopicTrends)
 				r.Post("/retry-failed", itemH.RetryFailed)
+				r.Post("/bulk-jobs", itemH.CreateBulkJob)
 				r.Post("/retry-bulk", itemH.RetryBulk)
 				r.Post("/delete-bulk", itemH.DeleteBulk)
 				r.Post("/retry-from-facts-bulk", itemH.RetryFromFactsBulk)

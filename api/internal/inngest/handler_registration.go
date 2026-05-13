@@ -27,6 +27,12 @@ type DigestCopyComposedData struct {
 	To       string `json:"to"`
 }
 
+type ItemBulkJobRunData struct {
+	JobID     string `json:"job_id"`
+	Trigger   string `json:"trigger"`
+	TriggerID string `json:"trigger_id"`
+}
+
 func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache, search *service.MeilisearchService, keyProvider *service.UserKeyProvider) http.Handler {
 	openAI := service.NewOpenAIClient()
 	llmUsageCache = cache
@@ -43,6 +49,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	}
 
 	register(fetchRSSFn(client, db))
+	register(runItemBulkJobFn(client, db, cache))
 	register(processItemFn(client, db, worker, openAI, oneSignal, keyProvider, cache))
 	register(itemSearchUpsertFn(client, db, search))
 	register(itemSearchDeleteFn(client, search))

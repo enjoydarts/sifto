@@ -675,6 +675,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ item_ids: itemIds }),
     }),
+  createItemBulkJob: (body: {
+    action: "retry" | "retry_from_facts";
+    filters: {
+      status: "pending";
+      source_id?: string;
+      topic?: string;
+      genre?: string;
+    };
+  }) =>
+    apiFetch<{ status: string; job_id: string; matched_count: number }>("/items/bulk-jobs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   retryItemFromFacts: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry-from-facts`, { method: "POST" }),
   retryItemsFromFactsBulk: (itemIds: string[]) =>

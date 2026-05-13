@@ -44,10 +44,11 @@ export function useItemsPageData() {
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkRetryingFromFacts, setBulkRetryingFromFacts] = useState(false);
+  const [bulkJobQueuing, setBulkJobQueuing] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedItemIDs, setSelectedItemIDs] = useState<string[]>([]);
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
-  const [pendingBulkAction, setPendingBulkAction] = useState<"" | "retry" | "retry_from_facts" | "delete">("");
+  const [pendingBulkAction, setPendingBulkAction] = useState<"" | "retry" | "retry_from_facts" | "delete" | "retry_all" | "retry_from_facts_all">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
@@ -338,6 +339,8 @@ export function useItemsPageData() {
 
   const selectedItemIDSet = useMemo(() => new Set(selectedItemIDs), [selectedItemIDs]);
   const visibleSelectedCount = selectedItemIDs.length;
+  const pendingFilteredBulkDisabled = !pendingMode || searchQuery.trim().length > 0;
+  const pendingBulkActionRequiresSelection = pendingBulkAction === "retry" || pendingBulkAction === "retry_from_facts" || pendingBulkAction === "delete";
 
   const toggleSelectedItem = useCallback((itemID: string) => {
     setSelectedItemIDs((prev) => (prev.includes(itemID) ? prev.filter((id) => id !== itemID) : [...prev, itemID]));
@@ -422,6 +425,40 @@ export function useItemsPageData() {
       setBulkRetrying(false);
     }
   }, [confirm, queryClient, selectedItemIDs, showToast, t]);
+
+  const queuePendingFilteredBulkJob = useCallback(async (action: "retry" | "retry_from_facts") => {
+    if (pendingFilteredBulkDisabled) return;
+    const ok = await confirm({
+      title: action === "retry" ? t("items.pendingActions.retryAllTitle") : t("items.pendingActions.retryAllFromFactsTitle"),
+      message: t("items.pendingActions.filteredBulkMessage"),
+      confirmLabel: action === "retry" ? t("items.pendingActions.retryAllFiltered") : t("items.pendingActions.retryAllFromFactsFiltered"),
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBulkJobQueuing(true);
+    try {
+      const result = await api.createItemBulkJob({
+        action,
+        filters: {
+          status: "pending",
+          ...(sourceID ? { source_id: sourceID } : {}),
+          ...(topic ? { topic } : {}),
+          ...(genre ? { genre } : {}),
+        },
+      });
+      showToast(t("items.pendingActions.bulkJobQueued").replace("{{count}}", String(result.matched_count)), "success");
+      setPendingBulkAction("");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.items.feedPrefix });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.queues.focus() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.briefing.todayPrefix });
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setBulkJobQueuing(false);
+    }
+  }, [confirm, genre, pendingFilteredBulkDisabled, queryClient, showToast, sourceID, t, topic]);
 
   const bulkDelete = useCallback(async () => {
     if (selectedItemIDs.length === 0) return;
@@ -587,10 +624,13 @@ export function useItemsPageData() {
     bulkMarkingRead,
     bulkRetrying,
     bulkRetryingFromFacts,
+    bulkJobQueuing,
     bulkDeleting,
     selectedItemIDs,
     toolbarAction, setToolbarAction,
     pendingBulkAction, setPendingBulkAction,
+    pendingFilteredBulkDisabled,
+    pendingBulkActionRequiresSelection,
     searchOpen, setSearchOpen,
     searchDraft, setSearchDraft,
     searchModeDraft, setSearchModeDraft,
@@ -626,6 +666,7 @@ export function useItemsPageData() {
     clearSelectedItems,
     bulkRetryFromFacts,
     bulkRetry,
+    queuePendingFilteredBulkJob,
     bulkDelete,
     queryClient,
     router,

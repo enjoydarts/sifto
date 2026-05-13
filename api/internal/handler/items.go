@@ -51,6 +51,42 @@ type retryBulkRequest struct {
 	ItemIDs []string `json:"item_ids"`
 }
 
+type createItemBulkJobRequest struct {
+	Action  string `json:"action"`
+	Filters struct {
+		Status   string `json:"status"`
+		SourceID string `json:"source_id"`
+		Topic    string `json:"topic"`
+		Genre    string `json:"genre"`
+		Query    string `json:"q"`
+	} `json:"filters"`
+}
+
+type createItemBulkJobResponse struct {
+	Status       string `json:"status"`
+	JobID        string `json:"job_id"`
+	MatchedCount int    `json:"matched_count"`
+}
+
+func validateCreateItemBulkJobRequest(body createItemBulkJobRequest) (repository.ItemBulkJobAction, repository.ItemBulkJobFilters, string) {
+	action := repository.ItemBulkJobAction(strings.TrimSpace(body.Action))
+	if action != repository.ItemBulkJobActionRetry && action != repository.ItemBulkJobActionRetryFromFacts {
+		return "", repository.ItemBulkJobFilters{}, "invalid action"
+	}
+	if strings.TrimSpace(body.Filters.Status) != "pending" {
+		return "", repository.ItemBulkJobFilters{}, "status must be pending"
+	}
+	if strings.TrimSpace(body.Filters.Query) != "" {
+		return "", repository.ItemBulkJobFilters{}, "search bulk jobs are not supported"
+	}
+	return action, repository.ItemBulkJobFilters{
+		Status:   strings.TrimSpace(body.Filters.Status),
+		SourceID: strings.TrimSpace(body.Filters.SourceID),
+		Topic:    strings.TrimSpace(body.Filters.Topic),
+		Genre:    strings.TrimSpace(body.Filters.Genre),
+	}, ""
+}
+
 type retryBulkCandidate struct {
 	ID       string
 	SourceID string
@@ -142,6 +178,45 @@ func runDeleteBulk(
 		result.UpdatedCount++
 	}
 	return result
+}
+
+func (h *ItemHandler) CreateBulkJob(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body createItemBulkJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	action, filters, validationMessage := validateCreateItemBulkJobRequest(body)
+	if validationMessage != "" {
+		http.Error(w, validationMessage, http.StatusBadRequest)
+		return
+	}
+	if h.publisher == nil {
+		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	job, err := h.repo.CreateItemBulkJob(r.Context(), userID, action, filters)
+	if err != nil {
+		if errors.Is(err, repository.ErrInvalidState) {
+			http.Error(w, "invalid bulk job", http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.publisher.SendItemBulkJobRunE(r.Context(), job.ID, "manual"); err != nil {
+		http.Error(w, "failed to enqueue bulk job", http.StatusBadGateway)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, createItemBulkJobResponse{
+		Status:       "queued",
+		JobID:        job.ID,
+		MatchedCount: job.MatchedCount,
+	})
 }
 
 func (h *ItemHandler) RetryBulk(w http.ResponseWriter, r *http.Request) {

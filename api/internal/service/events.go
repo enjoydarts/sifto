@@ -57,6 +57,28 @@ func (p *EventPublisher) SendItemCreatedWithReasonE(ctx context.Context, itemID,
 	return nil
 }
 
+func NewItemBulkJobRunEvent(jobID, trigger string) inngestgo.Event {
+	return inngestgo.Event{
+		Name: "item-bulk-job/run",
+		Data: map[string]any{
+			"job_id":     strings.TrimSpace(jobID),
+			"trigger":    strings.TrimSpace(trigger),
+			"trigger_id": uuid.NewString(),
+		},
+	}
+}
+
+func (p *EventPublisher) SendItemBulkJobRunE(ctx context.Context, jobID, trigger string) error {
+	if p == nil || strings.TrimSpace(jobID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, NewItemBulkJobRunEvent(jobID, trigger)); err != nil {
+		log.Printf("send item-bulk-job/run: %v", err)
+		return err
+	}
+	return nil
+}
+
 func (p *EventPublisher) SendDigestCreatedE(ctx context.Context, digestID, userID, to string) error {
 	if p == nil {
 		return nil

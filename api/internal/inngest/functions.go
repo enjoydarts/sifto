@@ -2,6 +2,7 @@ package inngest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -950,6 +951,95 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 			return map[string]int{"new_items": newCount}, nil
 		},
 	)
+}
+
+func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.JSONCache) (inngestgo.ServableFunction, error) {
+	itemRepo := repository.NewItemRepo(db)
+	batchSize := envIntOrDefault("ITEM_BULK_JOB_BATCH_SIZE", 50)
+	if batchSize <= 0 {
+		batchSize = 50
+	}
+	if batchSize > 200 {
+		batchSize = 200
+	}
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			ID:   "run-item-bulk-job",
+			Name: "Run Item Bulk Job",
+			Concurrency: []inngestgo.ConfigStepConcurrency{
+				{
+					Limit: 1,
+					Key:   inngestgo.StrPtr("event.data.job_id"),
+				},
+			},
+		},
+		inngestgo.EventTrigger("item-bulk-job/run", nil),
+		func(ctx context.Context, input inngestgo.Input[ItemBulkJobRunData]) (any, error) {
+			jobID := strings.TrimSpace(input.Event.Data.JobID)
+			if jobID == "" {
+				return nil, fmt.Errorf("item bulk job id is required")
+			}
+			job, err := itemRepo.GetItemBulkJob(ctx, jobID)
+			if err != nil {
+				return nil, err
+			}
+			candidates, err := itemRepo.ClaimItemBulkJobItems(ctx, jobID, batchSize)
+			if err != nil {
+				_ = itemRepo.FailItemBulkJob(ctx, jobID, err.Error())
+				return nil, err
+			}
+			for _, candidate := range candidates {
+				resetItem, err := resetItemForBulkJob(ctx, itemRepo, job, candidate)
+				if err != nil {
+					if !errors.Is(err, repository.ErrConflict) && !errors.Is(err, repository.ErrNotFound) {
+						log.Printf("item bulk job reset failed job_id=%s item_id=%s err=%v", jobID, candidate.ID, err)
+					}
+					_ = itemRepo.MarkItemBulkJobItemSkipped(ctx, jobID, candidate.ID, err.Error())
+					continue
+				}
+				reason := string(job.Action)
+				if _, err := client.Send(ctx, service.NewItemCreatedEvent(resetItem.ID, resetItem.SourceID, resetItem.URL, nil, reason)); err != nil {
+					log.Printf("item bulk job enqueue failed job_id=%s item_id=%s err=%v", jobID, candidate.ID, err)
+					_ = itemRepo.MarkItemBulkJobItemSkipped(ctx, jobID, candidate.ID, err.Error())
+					continue
+				}
+				_ = itemRepo.MarkItemBulkJobItemProcessed(ctx, jobID, candidate.ID)
+				bumpProcessItemDetailCacheVersion(ctx, cache, candidate.ID)
+			}
+			if len(candidates) > 0 {
+				bumpProcessUserItemsCacheVersion(ctx, cache, job.UserID)
+			}
+			remaining, err := itemRepo.RefreshItemBulkJobCounts(ctx, jobID)
+			if err != nil {
+				_ = itemRepo.FailItemBulkJob(ctx, jobID, err.Error())
+				return nil, err
+			}
+			if remaining > 0 {
+				if _, err := client.Send(ctx, service.NewItemBulkJobRunEvent(jobID, "continue")); err != nil {
+					_ = itemRepo.FailItemBulkJob(ctx, jobID, err.Error())
+					return nil, err
+				}
+				return map[string]any{"job_id": jobID, "processed_batch": len(candidates), "remaining": remaining}, nil
+			}
+			if err := itemRepo.CompleteItemBulkJob(ctx, jobID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"job_id": jobID, "processed_batch": len(candidates), "remaining": 0}, nil
+		},
+	)
+}
+
+func resetItemForBulkJob(ctx context.Context, repo *repository.ItemRepo, job repository.ItemBulkJob, candidate repository.ItemBulkJobCandidate) (*model.Item, error) {
+	switch job.Action {
+	case repository.ItemBulkJobActionRetry:
+		return repo.ResetForExtractRetry(ctx, candidate.ID, job.UserID)
+	case repository.ItemBulkJobActionRetryFromFacts:
+		return repo.ResetForFactsRetry(ctx, candidate.ID, job.UserID)
+	default:
+		return nil, repository.ErrInvalidState
+	}
 }
 
 func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, keyProvider *service.UserKeyProvider, cache service.JSONCache) (inngestgo.ServableFunction, error) {

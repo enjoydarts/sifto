@@ -40,9 +40,12 @@ function ItemsPageContent() {
     bulkMarkingRead,
     bulkRetrying,
     bulkRetryingFromFacts,
+    bulkJobQueuing,
     bulkDeleting,
     toolbarAction, setToolbarAction,
     pendingBulkAction, setPendingBulkAction,
+    pendingFilteredBulkDisabled,
+    pendingBulkActionRequiresSelection,
     searchOpen, setSearchOpen,
     searchDraft, setSearchDraft,
     searchModeDraft, setSearchModeDraft,
@@ -77,6 +80,7 @@ function ItemsPageContent() {
     clearSelectedItems,
     bulkRetryFromFacts,
     bulkRetry,
+    queuePendingFilteredBulkJob,
     bulkDelete,
     queryClient,
     router,
@@ -451,15 +455,23 @@ function ItemsPageContent() {
                       <option value="">{t("items.pendingActions.placeholder")}</option>
                       <option value="retry">{t("items.bulkRetry.run")}</option>
                       <option value="retry_from_facts">{t("items.bulkRetryFromFacts.run")}</option>
+                      <option value="retry_all" disabled={pendingFilteredBulkDisabled}>
+                        {t("items.pendingActions.retryAllFiltered")}
+                      </option>
+                      <option value="retry_from_facts_all" disabled={pendingFilteredBulkDisabled}>
+                        {t("items.pendingActions.retryAllFromFactsFiltered")}
+                      </option>
                       <option value="delete">{t("items.bulkDelete.run")}</option>
                     </select>
                     <button
                       type="button"
                       disabled={
-                        visibleSelectedCount === 0 ||
+                        (pendingBulkActionRequiresSelection && visibleSelectedCount === 0) ||
                         !pendingBulkAction ||
                         bulkRetrying ||
                         bulkRetryingFromFacts ||
+                        bulkJobQueuing ||
+                        (pendingFilteredBulkDisabled && (pendingBulkAction === "retry_all" || pendingBulkAction === "retry_from_facts_all")) ||
                         bulkDeleting
                       }
                       onClick={() => {
@@ -471,19 +483,32 @@ function ItemsPageContent() {
                           void bulkRetryFromFacts();
                           return;
                         }
+                        if (pendingBulkAction === "retry_all") {
+                          void queuePendingFilteredBulkJob("retry");
+                          return;
+                        }
+                        if (pendingBulkAction === "retry_from_facts_all") {
+                          void queuePendingFilteredBulkJob("retry_from_facts");
+                          return;
+                        }
                         if (pendingBulkAction === "delete") {
                           void bulkDelete();
                         }
                       }}
                       className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
-                      {bulkRetrying || bulkRetryingFromFacts || bulkDeleting ? t("common.saving") : (
+                      {bulkRetrying || bulkRetryingFromFacts || bulkJobQueuing || bulkDeleting ? t("common.saving") : (
                         <>
                           <span className="xl:hidden">{t("items.actions.run")}</span>
                           <span className="hidden xl:inline">{t("items.actions.run")}</span>
                         </>
                       )}
                     </button>
+                    {searchQuery ? (
+                      <p className="w-full text-xs text-[var(--color-editorial-ink-muted)] xl:order-last xl:basis-full xl:text-right">
+                        {t("items.pendingActions.searchUnsupported")}
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <div

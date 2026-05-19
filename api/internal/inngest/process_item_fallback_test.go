@@ -232,8 +232,8 @@ func TestShouldDeleteOnExtractBodyFailure(t *testing.T) {
 	if shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot")) {
 		t.Fatal("yt-dlp metadata failure should not delete")
 	}
-	if shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
-		t.Fatal("generic extract failure should not delete")
+	if !shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
+		t.Fatal("generic extract failure should delete after retries")
 	}
 }
 

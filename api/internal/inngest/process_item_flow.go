@@ -83,7 +83,9 @@ func shouldDeleteOnExtractBodyFailure(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "youtube transcript unavailable")
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "youtube transcript unavailable") ||
+		strings.Contains(message, "worker /extract-body: status 422 detail=failed to extract body")
 }
 
 var extractComparablePunctuation = regexp.MustCompile(`[[:punct:]\p{P}\p{S}]+`)

@@ -235,6 +235,16 @@ func TestShouldDeleteOnExtractBodyFailure(t *testing.T) {
 	if !shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
 		t.Fatal("generic extract failure should delete after retries")
 	}
+	for _, message := range []string{
+		"worker /extract-body: status 403 detail=forbidden",
+		"worker /extract-body: status 404 detail=not found",
+		"worker /extract-body: status 500 detail=upstream error",
+		"worker /extract-body: status 502 body=bad gateway",
+	} {
+		if !shouldDeleteOnExtractBodyFailure(assertErr(message)) {
+			t.Fatalf("%q should delete after retries", message)
+		}
+	}
 }
 
 func TestInvalidExtractReason(t *testing.T) {

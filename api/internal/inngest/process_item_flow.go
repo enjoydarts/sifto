@@ -85,7 +85,14 @@ func shouldDeleteOnExtractBodyFailure(err error) bool {
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "youtube transcript unavailable") ||
-		strings.Contains(message, "worker /extract-body: status 422 detail=failed to extract body")
+		strings.Contains(message, "worker /extract-body: status 422 detail=failed to extract body") ||
+		isTerminalExtractBodyHTTPStatus(message)
+}
+
+var terminalExtractBodyHTTPStatusPattern = regexp.MustCompile(`worker /extract-body: status (403|404|410|500|502|503|504)\b`)
+
+func isTerminalExtractBodyHTTPStatus(message string) bool {
+	return terminalExtractBodyHTTPStatusPattern.MatchString(message)
 }
 
 var extractComparablePunctuation = regexp.MustCompile(`[[:punct:]\p{P}\p{S}]+`)

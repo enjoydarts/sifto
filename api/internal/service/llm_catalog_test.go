@@ -22,6 +22,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-5.4-nano"); got == nil {
 		t.Fatal("gpt-5.4-nano not found in catalog")
 	}
+	if got := findModelCatalog("gemini-3.5-flash"); got == nil {
+		t.Fatal("gemini-3.5-flash not found in catalog")
+	}
 	if got := findModelCatalog("deepseek-chat"); got == nil {
 		t.Fatal("deepseek-chat not found in catalog")
 	}
@@ -172,6 +175,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 	}{
 		{model: "claude-sonnet-4-6", provider: "anthropic"},
 		{model: "claude-opus-4-7", provider: "anthropic"},
+		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "deepseek-v4-flash", provider: "deepseek"},

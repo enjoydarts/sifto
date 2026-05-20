@@ -749,6 +749,29 @@
       }
     },
     {
+      "id": "gemini-3.5-flash",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "Gemini 3.5 Flash の安定版。agentic workflow、コーディング、複数段階の要約を高速に回したい時の上位 Flash 枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_05",
+        "input_per_mtok_usd": 1.5,
+        "output_per_mtok_usd": 9.0,
+        "cache_read_per_mtok_usd": 0.15
+      }
+    },
+    {
       "id": "gemini-3.1-pro-preview",
       "provider": "google",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

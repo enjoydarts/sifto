@@ -196,6 +196,26 @@ export function useSettingsResources({
     }
   }, [aivisUserDictionaries, aivisUserDictionariesLoaded, showToast]);
 
+  const resetXAIVoices = useCallback(() => {
+    setXAIVoicesData(null);
+    setXAIVoicesError(null);
+  }, []);
+
+  const resetElevenLabsVoices = useCallback(() => {
+    setElevenLabsVoicesData(null);
+    setElevenLabsVoicesError(null);
+  }, []);
+
+  const resetAivisUserDictionaries = useCallback(() => {
+    setAivisUserDictionaries([]);
+    setAivisUserDictionariesLoaded(false);
+    setAivisUserDictionariesError(null);
+  }, []);
+
+  const markAivisUserDictionariesStale = useCallback(() => {
+    setAivisUserDictionariesLoaded(false);
+  }, []);
+
   useEffect(() => {
     if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
     void loadAivisModels().catch(() => undefined);
@@ -361,5 +381,9 @@ export function useSettingsResources({
     syncXAIVoices,
     syncOpenAITTSVoices,
     loadAivisUserDictionaries,
+    resetXAIVoices,
+    resetElevenLabsVoices,
+    resetAivisUserDictionaries,
+    markAivisUserDictionariesStale,
   };
 }

@@ -110,6 +110,72 @@ test("buildOptionsForPurpose formats DeepInfra entries with provider label and p
   assert.equal(option.note, "in $0.12 / out $0.34 / 1M tok");
 });
 
+test("buildOptionsForPurpose formats cache read pricing before input and output pricing", () => {
+  const catalog = {
+    chat_models: [
+      {
+        id: "deepinfra::meta-llama/Llama-4-Scout",
+        provider: "deepinfra",
+        available_purposes: ["summary"],
+        pricing: {
+          input_per_mtok_usd: 0.14,
+          output_per_mtok_usd: 0.28,
+          cache_read_per_mtok_usd: 0.028,
+        },
+      },
+    ],
+    embedding_models: [],
+  };
+
+  const [option] = buildOptionsForPurpose(catalog, "summary", undefined, t);
+  assert.equal(option.note, "cached in $0.028 / in $0.14 / out $0.28 / 1M tok");
+});
+
+test("buildOptionsForPurpose hides unavailable OpenRouter models unless currently selected", () => {
+  const catalog = {
+    chat_models: [
+      {
+        id: "openrouter::available-model",
+        provider: "openrouter",
+        available_purposes: ["summary"],
+        pricing: null,
+        capabilities: { supports_structured_output: true },
+      },
+      {
+        id: "openrouter::unavailable-model",
+        provider: "openrouter",
+        available_purposes: ["summary"],
+        pricing: null,
+        capabilities: { supports_structured_output: false },
+      },
+    ],
+    embedding_models: [],
+  };
+
+  const options = buildOptionsForPurpose(catalog, "summary", undefined, t);
+  assert.deepEqual(options.map((option) => option.value), ["openrouter::available-model"]);
+});
+
+test("buildOptionsForPurpose keeps selected unavailable OpenRouter model visible but disabled", () => {
+  const catalog = {
+    chat_models: [
+      {
+        id: "openrouter::unavailable-model",
+        provider: "openrouter",
+        available_purposes: ["summary"],
+        pricing: null,
+        capabilities: { supports_structured_output: false },
+      },
+    ],
+    embedding_models: [],
+  };
+
+  const [option] = buildOptionsForPurpose(catalog, "summary", "openrouter::unavailable-model", t);
+  assert.equal(option.value, "openrouter::unavailable-model");
+  assert.equal(option.disabled, true);
+  assert.equal(option.badge, "Unavailable");
+});
+
 test("buildOptionsForPurpose keeps missing selected DeepInfra model visible with provider fallback", () => {
   const options = buildOptionsForPurpose(
     { chat_models: [], embedding_models: [] },

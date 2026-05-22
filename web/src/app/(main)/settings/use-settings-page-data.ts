@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, AzureSpeechVoicesResponse, CartesiaTTSCatalogResponse, CartesiaVoiceCatalogEntry, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, CartesiaVoiceCatalogEntry, ElevenLabsVoiceCatalogEntry, GeminiTTSVoiceCatalogEntry, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, PodcastCategoryOption, PreferenceProfile, UserSettings, XAIVoiceSnapshot } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -56,16 +56,13 @@ import {
   buildVoicePickerCatalogData,
   findAudioBriefingActiveVoice,
 } from "@/components/settings/settings-picker-helpers";
-import { loadResourceAction, syncResourceAction } from "@/components/settings/settings-resource-actions";
 import {
   buildApiKeyCardLabels,
   buildUIFontState,
-  dismissProviderModelUpdatesToLocalStorage,
-  MODEL_UPDATES_DISMISSED_AT_KEY,
-  restoreProviderModelUpdatesFromLocalStorage,
 } from "@/components/settings/settings-system-helpers";
 import { buildAccessCards, createAccessCardRuntime, resolveAccessCardSelection } from "@/components/settings/system-access-cards";
 import { useSettingsDialogState } from "@/components/settings/use-settings-dialog-state";
+import { useSettingsResources } from "./use-settings-resources";
 import {
   AudioBriefingNumericInputField,
   AudioBriefingScheduleSelection,
@@ -220,12 +217,6 @@ export function useSettingsPageData() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [preferenceProfile, setPreferenceProfile] = useState<PreferenceProfile | null>(null);
   const [preferenceProfileError, setPreferenceProfileError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
-  const [providerModelUpdates, setProviderModelUpdates] = useState<ProviderModelChangeEvent[]>([]);
-  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
-  });
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
@@ -313,34 +304,6 @@ export function useSettingsPageData() {
   const [audioBriefingPresetsLoading, setAudioBriefingPresetsLoading] = useState(false);
   const [audioBriefingPresetsLoaded, setAudioBriefingPresetsLoaded] = useState(false);
   const [audioBriefingPresetsError, setAudioBriefingPresetsError] = useState<string | null>(null);
-  const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
-  const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
-  const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
-  const [aivisModelsError, setAivisModelsError] = useState<string | null>(null);
-  const [xaiVoicesData, setXAIVoicesData] = useState<XAIVoicesResponse | null>(null);
-  const [xaiVoicesLoading, setXAIVoicesLoading] = useState(false);
-  const [xaiVoicesSyncing, setXAIVoicesSyncing] = useState(false);
-  const [xaiVoicesError, setXAIVoicesError] = useState<string | null>(null);
-  const [openAITTSVoicesData, setOpenAITTSVoicesData] = useState<OpenAITTSVoicesResponse | null>(null);
-  const [openAITTSVoicesLoading, setOpenAITTSVoicesLoading] = useState(false);
-  const [openAITTSVoicesSyncing, setOpenAITTSVoicesSyncing] = useState(false);
-  const [openAITTSVoicesError, setOpenAITTSVoicesError] = useState<string | null>(null);
-  const [elevenLabsVoicesData, setElevenLabsVoicesData] = useState<ElevenLabsVoicesResponse | null>(null);
-  const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
-  const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
-  const [cartesiaTTSCatalogData, setCartesiaTTSCatalogData] = useState<CartesiaTTSCatalogResponse | null>(null);
-  const [cartesiaTTSCatalogLoading, setCartesiaTTSCatalogLoading] = useState(false);
-  const [cartesiaTTSCatalogError, setCartesiaTTSCatalogError] = useState<string | null>(null);
-  const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
-  const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
-  const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
-  const [azureSpeechVoicesData, setAzureSpeechVoicesData] = useState<AzureSpeechVoicesResponse | null>(null);
-  const [azureSpeechVoicesLoading, setAzureSpeechVoicesLoading] = useState(false);
-  const [azureSpeechVoicesError, setAzureSpeechVoicesError] = useState<string | null>(null);
-  const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
-  const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
-  const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
-  const [aivisUserDictionariesError, setAivisUserDictionariesError] = useState<string | null>(null);
   const uiFontSansOptions = useMemo(() => getSelectableSansFonts(), []);
   const uiFontSerifOptions = useMemo(() => getSelectableSerifFonts(), []);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
@@ -393,6 +356,61 @@ export function useSettingsPageData() {
   const llmModelsDirtyRef = useRef(false);
   const uiFontsDirtyRef = useRef(false);
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
+  const {
+    catalog,
+    setCatalog,
+    providerModelUpdates,
+    dismissedModelUpdatesAt,
+    dismissProviderModelUpdates,
+    restoreProviderModelUpdates,
+    aivisModelsData,
+    aivisModelsLoading,
+    aivisModelsSyncing,
+    aivisModelsError,
+    xaiVoicesData,
+    setXAIVoicesData,
+    xaiVoicesLoading,
+    xaiVoicesSyncing,
+    xaiVoicesError,
+    setXAIVoicesError,
+    openAITTSVoicesData,
+    openAITTSVoicesLoading,
+    openAITTSVoicesSyncing,
+    openAITTSVoicesError,
+    elevenLabsVoicesData,
+    setElevenLabsVoicesData,
+    elevenLabsVoicesLoading,
+    elevenLabsVoicesError,
+    setElevenLabsVoicesError,
+    cartesiaTTSCatalogData,
+    setCartesiaTTSCatalogData,
+    cartesiaTTSCatalogLoading,
+    cartesiaTTSCatalogError,
+    setCartesiaTTSCatalogError,
+    geminiTTSVoicesData,
+    geminiTTSVoicesLoading,
+    geminiTTSVoicesError,
+    azureSpeechVoicesData,
+    azureSpeechVoicesLoading,
+    azureSpeechVoicesError,
+    aivisUserDictionaries,
+    setAivisUserDictionaries,
+    aivisUserDictionariesLoading,
+    setAivisUserDictionariesLoaded,
+    aivisUserDictionariesError,
+    setAivisUserDictionariesError,
+    loadAivisModels,
+    loadXAIVoices,
+    loadOpenAITTSVoices,
+    loadElevenLabsVoices,
+    loadCartesiaTTSCatalog,
+    loadGeminiTTSVoices,
+    loadAzureSpeechVoices,
+    syncAivisModels,
+    syncXAIVoices,
+    syncOpenAITTSVoices,
+    loadAivisUserDictionaries,
+  } = useSettingsResources({ activeSection, settings, showToast, t });
   const summaryAudioVoiceStatus = useMemo(() => {
     return getSummaryAudioVoiceStatus(
       {
@@ -772,125 +790,6 @@ export function useSettingsPageData() {
     [queryClient, showToast, syncLLMModelForm]
   );
 
-  const loadAivisModels = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setAivisModelsLoading,
-      fetch: api.getAivisModels,
-      setData: setAivisModelsData,
-      setError: setAivisModelsError,
-    });
-  }, []);
-
-  const loadXAIVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setXAIVoicesLoading,
-      fetch: api.getXAIVoices,
-      setData: setXAIVoicesData,
-      setError: setXAIVoicesError,
-    });
-  }, []);
-
-  const loadOpenAITTSVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setOpenAITTSVoicesLoading,
-      fetch: api.getOpenAITTSVoices,
-      setData: setOpenAITTSVoicesData,
-      setError: setOpenAITTSVoicesError,
-    });
-  }, []);
-
-  const loadElevenLabsVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setElevenLabsVoicesLoading,
-      fetch: api.getElevenLabsVoices,
-      setData: setElevenLabsVoicesData,
-      setError: setElevenLabsVoicesError,
-    });
-  }, []);
-
-  const loadCartesiaTTSCatalog = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setCartesiaTTSCatalogLoading,
-      fetch: api.getCartesiaTTSCatalog,
-      setData: setCartesiaTTSCatalogData,
-      setError: setCartesiaTTSCatalogError,
-    });
-  }, []);
-
-  const loadGeminiTTSVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setGeminiTTSVoicesLoading,
-      fetch: api.getGeminiTTSVoices,
-      setData: setGeminiTTSVoicesData,
-      setError: setGeminiTTSVoicesError,
-    });
-  }, []);
-
-  const loadAzureSpeechVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setAzureSpeechVoicesLoading,
-      fetch: api.getAzureSpeechVoices,
-      setData: setAzureSpeechVoicesData,
-      setError: setAzureSpeechVoicesError,
-    });
-  }, []);
-
-  const syncAivisModels = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setAivisModelsSyncing,
-      sync: api.syncAivisModels,
-      setData: setAivisModelsData,
-      setError: setAivisModelsError,
-      showToast,
-      successMessage: t("aivisModels.syncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const syncXAIVoices = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setXAIVoicesSyncing,
-      sync: api.syncXAIVoices,
-      setData: setXAIVoicesData,
-      setError: setXAIVoicesError,
-      showToast,
-      successMessage: t("settings.audioBriefing.xaiSyncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const syncOpenAITTSVoices = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setOpenAITTSVoicesSyncing,
-      sync: api.syncOpenAITTSVoices,
-      setData: setOpenAITTSVoicesData,
-      setError: setOpenAITTSVoicesError,
-      showToast,
-      successMessage: t("settings.audioBriefing.openAITTSSyncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const loadAivisUserDictionaries = useCallback(async (force = false) => {
-    if (!force && aivisUserDictionariesLoaded) {
-      return aivisUserDictionaries;
-    }
-    setAivisUserDictionariesLoading(true);
-    try {
-      const next = await api.getAivisUserDictionaries();
-      setAivisUserDictionaries(next.user_dictionaries ?? []);
-      setAivisUserDictionariesLoaded(true);
-      setAivisUserDictionariesError(null);
-      return next.user_dictionaries ?? [];
-    } catch (e) {
-      const message = String(e);
-      setAivisUserDictionariesError(message);
-      if (force) {
-        showToast(message, "error");
-      }
-      throw e;
-    } finally {
-      setAivisUserDictionariesLoading(false);
-    }
-  }, [aivisUserDictionaries, aivisUserDictionariesLoaded, showToast]);
-
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
@@ -971,7 +870,24 @@ export function useSettingsPageData() {
         setLoading(false);
       }
     }
-  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, syncSummaryAudioForm, syncUIFontForm, t]);
+  }, [
+    setAivisUserDictionaries,
+    setAivisUserDictionariesError,
+    setAivisUserDictionariesLoaded,
+    setCartesiaTTSCatalogData,
+    setCartesiaTTSCatalogError,
+    setCatalog,
+    setElevenLabsVoicesData,
+    setElevenLabsVoicesError,
+    setXAIVoicesData,
+    setXAIVoicesError,
+    syncAudioBriefingForm,
+    syncLLMModelForm,
+    syncPodcastForm,
+    syncSummaryAudioForm,
+    syncUIFontForm,
+    t,
+  ]);
 
   useEffect(() => {
     load();
@@ -1004,88 +920,6 @@ export function useSettingsPageData() {
   }, [uiFontSerifKey]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
-    void loadAivisModels().catch(() => undefined);
-  }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_xai_api_key || xaiVoicesData != null || xaiVoicesLoading) {
-      return;
-    }
-    void loadXAIVoices().catch(() => undefined);
-  }, [activeSection, loadXAIVoices, settings?.has_xai_api_key, xaiVoicesData, xaiVoicesLoading]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_openai_api_key || openAITTSVoicesData != null || openAITTSVoicesLoading) {
-      return;
-    }
-    void loadOpenAITTSVoices().catch(() => undefined);
-  }, [activeSection, loadOpenAITTSVoices, openAITTSVoicesData, openAITTSVoicesLoading, settings?.has_openai_api_key]);
-
-  useEffect(() => {
-    if (
-      (activeSection !== "audio-briefing" && activeSection !== "summary-audio")
-      || !settings?.has_elevenlabs_api_key
-      || elevenLabsVoicesData != null
-      || elevenLabsVoicesLoading
-    ) {
-      return;
-    }
-    void loadElevenLabsVoices().catch(() => undefined);
-  }, [
-    activeSection,
-    elevenLabsVoicesData,
-    elevenLabsVoicesLoading,
-    loadElevenLabsVoices,
-    settings?.has_elevenlabs_api_key,
-  ]);
-
-  useEffect(() => {
-    if (
-      activeSection !== "summary-audio"
-      || !settings?.has_cartesia_api_key
-      || cartesiaTTSCatalogData != null
-      || cartesiaTTSCatalogLoading
-    ) {
-      return;
-    }
-    void loadCartesiaTTSCatalog().catch(() => undefined);
-  }, [
-    activeSection,
-    cartesiaTTSCatalogData,
-    cartesiaTTSCatalogLoading,
-    loadCartesiaTTSCatalog,
-    settings?.has_cartesia_api_key,
-  ]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
-      return;
-    }
-    void loadGeminiTTSVoices().catch(() => undefined);
-  }, [activeSection, geminiTTSVoicesData, geminiTTSVoicesLoading, loadGeminiTTSVoices]);
-
-  useEffect(() => {
-    if ((activeSection !== "audio-briefing" && activeSection !== "summary-audio") || !settings?.has_azure_speech_api_key || !settings?.azure_speech_region?.trim() || azureSpeechVoicesData != null || azureSpeechVoicesLoading) {
-      return;
-    }
-    void loadAzureSpeechVoices().catch(() => undefined);
-  }, [activeSection, azureSpeechVoicesData, azureSpeechVoicesLoading, loadAzureSpeechVoices, settings?.has_azure_speech_api_key, settings?.azure_speech_region]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
-      return;
-    }
-    void loadAivisUserDictionaries().catch(() => undefined);
-  }, [
-    activeSection,
-    aivisUserDictionariesLoaded,
-    aivisUserDictionariesLoading,
-    loadAivisUserDictionaries,
-    settings?.has_aivis_api_key,
-  ]);
-
-  useEffect(() => {
     setExpandedAudioBriefingPersonas((prev) => {
       if (prev.length === 0) return [audioBriefingDefaultPersona];
       if (prev.length === 1 && prev[0] === "editor" && audioBriefingDefaultPersona !== "editor") {
@@ -1111,22 +945,6 @@ export function useSettingsPageData() {
   useEffect(() => {
     setPodcastRSSURL(buildPodcastRSSURL(podcastFeedSlug, podcastRSSURL));
   }, [podcastFeedSlug]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getProviderModelUpdates({ days: 14, limit: 20 })
-      .then((modelUpdates) => {
-        if (cancelled) return;
-        setProviderModelUpdates(modelUpdates ?? []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setProviderModelUpdates([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1470,14 +1288,6 @@ export function useSettingsPageData() {
   useEffect(() => {
     uiFontsDirtyRef.current = uiFontsDirty;
   }, [uiFontsDirty]);
-
-  function dismissProviderModelUpdates() {
-    setDismissedModelUpdatesAt(dismissProviderModelUpdatesToLocalStorage(providerModelUpdates));
-  }
-
-  function restoreProviderModelUpdates() {
-    setDismissedModelUpdatesAt(restoreProviderModelUpdatesFromLocalStorage());
-  }
 
   function toggleLLMExtras() {
     llm.setLLMExtrasOpen((prev) => {

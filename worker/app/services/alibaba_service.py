@@ -3,7 +3,7 @@ from .provider_base import ProviderConfig, OpenAICompatProvider
 _config = ProviderConfig(
     provider_name="alibaba",
     env_prefix="ALIBABA",
-    pricing_source_version="alibaba_dashscope_static_2026_03",
+    pricing_source_version="alibaba_dashscope_static_2026_05",
     api_base_url="https://dashscope-us.aliyuncs.com/compatible-mode/v1/chat/completions",
     api_base_url_env="ALIBABA_API_BASE_URL",
 )

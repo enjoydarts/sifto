@@ -57,6 +57,7 @@
       "id": "alibaba",
       "api_key_header": "x-alibaba-api-key",
       "match_exact": [
+        "qwen3.7-max",
         "qwen3-max",
         "qwen3.6-plus",
         "qwen3.6-flash",
@@ -1135,6 +1136,30 @@
         "input_per_mtok_usd": 1.0,
         "output_per_mtok_usd": 3.0,
         "cache_read_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "qwen3.7-max",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Alibaba Model Studio の qwen3.7-max。agentic workflow と長文コンテキスト向けの上位 Qwen 枠で、難しめの整理やダイジェストの品質比較候補として扱う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "alibaba_modelstudio_qwen3_7_2026_05",
+        "input_per_mtok_usd": 2.5,
+        "output_per_mtok_usd": 7.5,
+        "cache_write_per_mtok_usd": 3.125,
+        "cache_read_per_mtok_usd": 0.25
       }
     },
     {

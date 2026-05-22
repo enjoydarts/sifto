@@ -4,7 +4,13 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from app.services.llm_catalog import model_pricing, model_supports
+from app.services.llm_catalog import model_supports
+from app.services.provider_pricing import (
+    estimate_cost_usd,
+    normalize_model_family,
+    normalize_model_name,
+    pricing_for_model,
+)
 from app.services.llm_text_utils import (
     audio_briefing_script_max_tokens as _audio_briefing_script_max_tokens,
     extract_first_json_object as _extract_first_json_object,
@@ -78,20 +84,6 @@ def env_timeout_seconds(name: str, default: float) -> float:
         return default
 
 
-def env_optional_float(name: str) -> float | None:
-    raw = os.getenv(name)
-    if raw is None or raw == "":
-        return None
-    try:
-        return float(raw)
-    except Exception:
-        return None
-
-
-def normalize_model_name(model: str) -> str:
-    return str(model or "").strip()
-
-
 @dataclass
 class ProviderConfig:
     provider_name: str
@@ -120,62 +112,32 @@ class OpenAICompatProvider:
         self._log = logging.getLogger(f"app.services.{config.provider_name}_service")
 
     def _normalize_model_name(self, model: str) -> str:
-        if self.config.use_resolve_model_id:
-            from app.services.llm_catalog import resolve_model_id
-            return resolve_model_id(str(model or "").strip())
-        return str(model or "").strip()
+        return normalize_model_name(model, use_resolve_model_id=self.config.use_resolve_model_id)
 
     def _normalize_model_family(self, model: str) -> str:
-        m = self._normalize_model_name(model)
-        if self.config.legacy_model_pricing:
-            if model_pricing(m) is not None:
-                return m
-            for family in sorted(self.config.legacy_model_pricing.keys(), key=len, reverse=True):
-                if m == family or m.startswith(family + "-"):
-                    return family
-            return m
-        if self.config.model_families:
-            if model_pricing(m) is not None:
-                return m
-            for family in self.config.model_families:
-                if m == family or m.startswith(family + "-"):
-                    return family
-        return m
+        return normalize_model_family(
+            model,
+            legacy_model_pricing=self.config.legacy_model_pricing,
+            model_families=self.config.model_families,
+            use_resolve_model_id=self.config.use_resolve_model_id,
+        )
 
     def _supports_strict_schema(self, model: str) -> bool:
         family = self._normalize_model_family(model)
         return model_supports(family, "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
     def _pricing_for_model(self, model: str, purpose: str) -> dict:
-        family = self._normalize_model_family(model)
-        catalog_pricing = model_pricing(family) or model_pricing(model)
-        if self.config.legacy_model_pricing:
-            base = dict(catalog_pricing or self.config.legacy_model_pricing.get(family, {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0}))
-        else:
-            base = dict(catalog_pricing or {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0})
-        source = str(base.get("pricing_source") or self.config.pricing_source_version)
-        prefix = f"{self.config.env_prefix}_{purpose.upper()}_"
-        override_map = {
-            "input_per_mtok_usd": env_optional_float(prefix + "INPUT_PER_MTOK_USD"),
-            "output_per_mtok_usd": env_optional_float(prefix + "OUTPUT_PER_MTOK_USD"),
-            "cache_read_per_mtok_usd": env_optional_float(prefix + "CACHE_READ_PER_MTOK_USD"),
-        }
-        for k, v in override_map.items():
-            if v is not None:
-                base[k] = v
-                source = "env_override"
-        base["pricing_source"] = source
-        base["pricing_model_family"] = family
-        return base
+        return pricing_for_model(
+            model,
+            purpose,
+            env_prefix=self.config.env_prefix,
+            pricing_source_version=self.config.pricing_source_version,
+            legacy_model_pricing=self.config.legacy_model_pricing,
+            normalize_model_family_func=self._normalize_model_family,
+        )
 
     def _estimate_cost_usd(self, model: str, purpose: str, usage: dict) -> float:
-        p = self._pricing_for_model(model, purpose)
-        non_cached_input_tokens = max(0, int(usage.get("input_tokens", 0) or 0) - int(usage.get("cache_read_input_tokens", 0) or 0))
-        total = 0.0
-        total += non_cached_input_tokens / 1_000_000 * p["input_per_mtok_usd"]
-        total += int(usage.get("output_tokens", 0) or 0) / 1_000_000 * p["output_per_mtok_usd"]
-        total += int(usage.get("cache_read_input_tokens", 0) or 0) / 1_000_000 * p.get("cache_read_per_mtok_usd", 0.0)
-        return round(total, 8)
+        return estimate_cost_usd(model, purpose, usage, pricing_for_model_func=self._pricing_for_model)
 
     def _llm_meta(self, model: str, purpose: str, usage: dict) -> dict:
         if self.config.include_resolved_model_in_meta:

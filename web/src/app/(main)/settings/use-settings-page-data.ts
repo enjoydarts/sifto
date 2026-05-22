@@ -8,9 +8,7 @@ import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
-import { queryKeys } from "@/lib/query-keys";
 import { normalizeAudioBriefingPresetVoices } from "@/components/settings/audio-briefing-preset-modal-helpers";
-import { type ModelOption } from "@/components/settings/model-select";
 import { type SettingsSectionID } from "@/components/settings/settings-page-shell";
 import {
   buildSettingsRailNotes,
@@ -59,6 +57,7 @@ import { buildUIFontState } from "@/components/settings/settings-system-helpers"
 import { resolveAccessCardSelection } from "@/components/settings/system-access-cards";
 import { useSettingsDialogState } from "@/components/settings/use-settings-dialog-state";
 import { useSettingsApiKeys } from "./use-settings-api-keys";
+import { useSettingsLLMModels } from "./use-settings-llm-models";
 import { useSettingsResources } from "./use-settings-resources";
 import {
   AudioBriefingNumericInputField,
@@ -83,19 +82,6 @@ import {
   tWithVars,
 } from "@/components/settings/settings-page-helpers";
 import {
-  buildCostPerformancePreset,
-  localizeSettingsErrorMessage,
-} from "@/components/settings/providers/llm-provider-metadata";
-import {
-  buildEmbeddingModelOptions,
-  buildModelComparisonEntries,
-  buildModelSelectLabels,
-  buildOptionsForChatModel,
-  buildOptionsForPurpose,
-  buildUnavailableSelectedModelWarnings,
-  buildVisibleProviderModelUpdates,
-} from "@/components/settings/providers/llm-model-options";
-import {
   getAudioBriefingTTSProviderDefaultModel,
   getTTSProviderDefaultModel,
 } from "@/components/settings/providers/tts-provider-metadata";
@@ -115,7 +101,6 @@ import {
 import {
   buildAudioBriefingDictionaryState,
   buildAudioBriefingDuoReadiness,
-  buildAudioBriefingScriptModels,
   buildAudioBriefingSettingsState,
   buildAudioBriefingVoiceMatrixAvailability,
   buildAudioBriefingVoiceMatrixCatalogs,
@@ -125,10 +110,6 @@ import {
   buildDigestActions,
   buildDigestState,
   buildIntegrationsState,
-  buildLLMModelsExtras,
-  buildLLMModelsState,
-  buildNavigatorActions,
-  buildNavigatorState,
   buildPodcastState,
   buildReadingPlanActions,
   buildReadingPlanState,
@@ -155,7 +136,6 @@ export function useSettingsPageData() {
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingObsidianExport, setSavingObsidianExport] = useState(false);
   const [runningObsidianExport, setRunningObsidianExport] = useState(false);
-  const [savingLLMModels, setSavingLLMModels] = useState(false);
   const [savingAivisDictionary, setSavingAivisDictionary] = useState(false);
   const [deletingAivisDictionary, setDeletingAivisDictionary] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
@@ -242,41 +222,11 @@ export function useSettingsPageData() {
   const [obsidianRepoName, setObsidianRepoName] = useState("");
   const [obsidianRepoBranch, setObsidianRepoBranch] = useState("main");
   const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
-  const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
-  const [anthropicFactsSecondaryModel, setAnthropicFactsSecondaryModel] = useState("");
-  const [anthropicFactsSecondaryRatePercent, setAnthropicFactsSecondaryRatePercent] = useState("0");
-  const [anthropicFactsFallbackModel, setAnthropicFactsFallbackModel] = useState("");
-  const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
-  const [anthropicSummarySecondaryModel, setAnthropicSummarySecondaryModel] = useState("");
-  const [anthropicSummarySecondaryRatePercent, setAnthropicSummarySecondaryRatePercent] = useState("0");
-  const [anthropicSummaryFallbackModel, setAnthropicSummaryFallbackModel] = useState("");
-  const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
-  const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
-  const [anthropicAskModel, setAnthropicAskModel] = useState("");
-  const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
-  const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
-  const [factsCheckModel, setFactsCheckModel] = useState("");
-  const [factsCheckFallbackModel, setFactsCheckFallbackModel] = useState("");
-  const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
-  const [faithfulnessCheckFallbackModel, setFaithfulnessCheckFallbackModel] = useState("");
-  const [navigatorEnabled, setNavigatorEnabled] = useState(false);
-  const [aiNavigatorBriefEnabled, setAINavigatorBriefEnabled] = useState(false);
-  const [navigatorPersonaMode, setNavigatorPersonaMode] = useState<"fixed" | "random">("fixed");
-  const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const dialogState = useSettingsDialogState();
   const { uiFonts, llm, presets, audioBriefingPickers, summaryAudioPickers } = dialogState;
-  const [navigatorModel, setNavigatorModel] = useState("");
-  const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
-  const [aiNavigatorBriefModel, setAINavigatorBriefModel] = useState("");
-  const [aiNavigatorBriefFallbackModel, setAINavigatorBriefFallbackModel] = useState("");
-  const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
-  const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
-  const [ttsMarkupPreprocessModel, setTTSMarkupPreprocessModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
-  const llmModelsDirtyRef = useRef(false);
   const uiFontsDirtyRef = useRef(false);
-  const llmExtrasRef = useRef<HTMLDivElement | null>(null);
   const {
     catalog,
     setCatalog,
@@ -407,6 +357,20 @@ export function useSettingsPageData() {
       })),
     [navigatorPersonaDefinitions]
   );
+  const llmModels = useSettingsLLMModels({
+    settings,
+    setSettings,
+    catalog,
+    providerModelUpdates,
+    dismissedModelUpdatesAt,
+    dismissProviderModelUpdates,
+    restoreProviderModelUpdates,
+    navigatorPersonaCards,
+    queryClient,
+    showToast,
+    t,
+    llm,
+  });
   const syncAudioBriefingVoiceForm = useCallback((voices?: UserSettings["audio_briefing_persona_voices"] | AudioBriefingPersonaVoice[] | null) => {
     const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
     const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice] as const));
@@ -536,177 +500,8 @@ export function useSettingsPageData() {
     [podcastAvailableCategories, podcastCategory]
   );
 
-  const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
-    setAnthropicFactsModel(llmModels?.facts ?? "");
-    setAnthropicFactsSecondaryModel(llmModels?.facts_secondary ?? "");
-    setAnthropicFactsSecondaryRatePercent(String(llmModels?.facts_secondary_rate_percent ?? 0));
-    setAnthropicFactsFallbackModel(llmModels?.facts_fallback ?? "");
-    setAnthropicSummaryModel(llmModels?.summary ?? "");
-    setAnthropicSummarySecondaryModel(llmModels?.summary_secondary ?? "");
-    setAnthropicSummarySecondaryRatePercent(String(llmModels?.summary_secondary_rate_percent ?? 0));
-    setAnthropicSummaryFallbackModel(llmModels?.summary_fallback ?? "");
-    setAnthropicDigestClusterModel(llmModels?.digest_cluster ?? "");
-    setAnthropicDigestModel(llmModels?.digest ?? "");
-    setAnthropicAskModel(llmModels?.ask ?? "");
-    setAnthropicSourceSuggestionModel(llmModels?.source_suggestion ?? "");
-    setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
-    setFactsCheckModel(llmModels?.facts_check ?? "");
-    setFactsCheckFallbackModel(llmModels?.facts_check_fallback ?? "");
-    setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
-    setFaithfulnessCheckFallbackModel(llmModels?.faithfulness_check_fallback ?? "");
-    setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
-    setAINavigatorBriefEnabled(Boolean(llmModels?.ai_navigator_brief_enabled ?? false));
-    setNavigatorPersonaMode(llmModels?.navigator_persona_mode === "random" ? "random" : "fixed");
-    setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
-    setNavigatorModel(llmModels?.navigator ?? "");
-    setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
-    setAINavigatorBriefModel(llmModels?.ai_navigator_brief ?? "");
-    setAINavigatorBriefFallbackModel(llmModels?.ai_navigator_brief_fallback ?? "");
-    setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
-    setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
-    setTTSMarkupPreprocessModel(llmModels?.tts_markup_preprocess_model ?? "");
-  }, []);
-
-  const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
-    llmModelsDirtyRef.current = true;
-    setter(value);
-  }, []);
-
-  const buildLLMModelPayload = useCallback(
-    (overrides?: Partial<{
-      facts: string | null;
-      facts_secondary: string | null;
-      facts_secondary_rate_percent: number;
-      facts_fallback: string | null;
-      summary: string | null;
-      summary_secondary: string | null;
-      summary_secondary_rate_percent: number;
-      summary_fallback: string | null;
-      digest_cluster: string | null;
-      digest: string | null;
-      ask: string | null;
-      source_suggestion: string | null;
-      embedding: string | null;
-      facts_check: string | null;
-      facts_check_fallback: string | null;
-      faithfulness_check: string | null;
-      faithfulness_check_fallback: string | null;
-      navigator_enabled: boolean;
-      ai_navigator_brief_enabled: boolean;
-      navigator_persona_mode: string | null;
-      navigator_persona: string | null;
-      navigator: string | null;
-      navigator_fallback: string | null;
-      ai_navigator_brief: string | null;
-      ai_navigator_brief_fallback: string | null;
-      audio_briefing_script: string | null;
-      audio_briefing_script_fallback: string | null;
-      tts_markup_preprocess_model: string | null;
-    }>) => {
-      const emptyToNull = (v: string) => {
-        const s = v.trim();
-        return s === "" ? null : s;
-      };
-      const normalizeRate = (v: string) => {
-        const n = Number(v);
-        if (!Number.isFinite(n)) return 0;
-        return Math.min(100, Math.max(0, Math.round(n)));
-      };
-      return {
-        facts: emptyToNull(anthropicFactsModel),
-        facts_secondary: emptyToNull(anthropicFactsSecondaryModel),
-        facts_secondary_rate_percent: normalizeRate(anthropicFactsSecondaryRatePercent),
-        facts_fallback: emptyToNull(anthropicFactsFallbackModel),
-        summary: emptyToNull(anthropicSummaryModel),
-        summary_secondary: emptyToNull(anthropicSummarySecondaryModel),
-        summary_secondary_rate_percent: normalizeRate(anthropicSummarySecondaryRatePercent),
-        summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
-        digest_cluster: emptyToNull(anthropicDigestClusterModel),
-        digest: emptyToNull(anthropicDigestModel),
-        ask: emptyToNull(anthropicAskModel),
-        source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
-        embedding: emptyToNull(openAIEmbeddingModel),
-        facts_check: emptyToNull(factsCheckModel),
-        facts_check_fallback: emptyToNull(factsCheckFallbackModel),
-        faithfulness_check: emptyToNull(faithfulnessCheckModel),
-        faithfulness_check_fallback: emptyToNull(faithfulnessCheckFallbackModel),
-        navigator_enabled: navigatorEnabled,
-        ai_navigator_brief_enabled: aiNavigatorBriefEnabled,
-        navigator_persona_mode: navigatorPersonaMode,
-        navigator_persona: navigatorPersona,
-        navigator: emptyToNull(navigatorModel),
-        navigator_fallback: emptyToNull(navigatorFallbackModel),
-        ai_navigator_brief: emptyToNull(aiNavigatorBriefModel),
-        ai_navigator_brief_fallback: emptyToNull(aiNavigatorBriefFallbackModel),
-        audio_briefing_script: emptyToNull(audioBriefingScriptModel),
-        audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
-        tts_markup_preprocess_model: emptyToNull(ttsMarkupPreprocessModel),
-        ...overrides,
-      };
-    },
-    [
-      anthropicAskModel,
-      anthropicDigestClusterModel,
-      anthropicDigestModel,
-      anthropicFactsFallbackModel,
-      anthropicFactsModel,
-      anthropicFactsSecondaryModel,
-      anthropicFactsSecondaryRatePercent,
-      anthropicSourceSuggestionModel,
-      anthropicSummaryFallbackModel,
-      anthropicSummaryModel,
-      anthropicSummarySecondaryModel,
-      anthropicSummarySecondaryRatePercent,
-      factsCheckModel,
-      factsCheckFallbackModel,
-      faithfulnessCheckModel,
-      faithfulnessCheckFallbackModel,
-      aiNavigatorBriefEnabled,
-      aiNavigatorBriefFallbackModel,
-      aiNavigatorBriefModel,
-      navigatorEnabled,
-      navigatorFallbackModel,
-      navigatorModel,
-      navigatorPersonaMode,
-      navigatorPersona,
-      audioBriefingScriptFallbackModel,
-      audioBriefingScriptModel,
-      ttsMarkupPreprocessModel,
-      openAIEmbeddingModel,
-    ]
-  );
-
-  const persistLLMModels = useCallback(
-    async (
-      payload: ReturnType<typeof buildLLMModelPayload>,
-      successMessage?: string
-    ) => {
-      const resp = await api.updateLLMModelSettings(payload);
-      let nextSettingsSnapshot: UserSettings | null = null;
-      setSettings((prev) => {
-        if (!prev) return prev;
-        const next = {
-          ...prev,
-          llm_models: {
-            ...prev.llm_models,
-            ...resp.llm_models,
-          },
-        };
-        nextSettingsSnapshot = next;
-        return next;
-      });
-      if (nextSettingsSnapshot) {
-        queryClient.setQueryData(queryKeys.settings.all(), nextSettingsSnapshot);
-      }
-      syncLLMModelForm(resp.llm_models);
-      llmModelsDirtyRef.current = false;
-      if (successMessage) {
-        showToast(successMessage, "success");
-      }
-      return resp;
-    },
-    [queryClient, showToast, syncLLMModelForm]
-  );
+  const isLLMModelsDirty = llmModels.isDirty;
+  const syncLLMModelsForm = llmModels.syncForm;
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -767,8 +562,8 @@ export function useSettingsPageData() {
         if (!uiFontsDirtyRef.current) {
           syncUIFontForm(data);
         }
-        if (!llmModelsDirtyRef.current) {
-          syncLLMModelForm(data.llm_models);
+        if (!isLLMModelsDirty()) {
+          syncLLMModelsForm(data.llm_models);
         }
       }
       if (nextCatalog) setCatalog(nextCatalog);
@@ -792,7 +587,8 @@ export function useSettingsPageData() {
     setCartesiaTTSCatalogError,
     setCatalog,
     syncAudioBriefingForm,
-    syncLLMModelForm,
+    isLLMModelsDirty,
+    syncLLMModelsForm,
     syncPodcastForm,
     syncSummaryAudioForm,
     syncUIFontForm,
@@ -879,57 +675,6 @@ export function useSettingsPageData() {
     }
   }, [showToast, t]);
 
-  const modelSelectLabels = useMemo(() => buildModelSelectLabels(t), [t]);
-
-  const applyCostPerformancePreset = useCallback(() => {
-    const preset = buildCostPerformancePreset(catalog);
-    llmModelsDirtyRef.current = true;
-    setAnthropicFactsModel(preset.facts ?? "");
-    setAnthropicFactsSecondaryModel("");
-    setAnthropicFactsSecondaryRatePercent("0");
-    setAnthropicFactsFallbackModel("");
-    setAnthropicSummaryModel(preset.summary ?? "");
-    setAnthropicSummarySecondaryModel("");
-    setAnthropicSummarySecondaryRatePercent("0");
-    setAnthropicSummaryFallbackModel("");
-    setAnthropicDigestClusterModel(preset.digest_cluster ?? "");
-    setAnthropicDigestModel(preset.digest ?? "");
-    setAnthropicAskModel(preset.ask ?? "");
-    setAnthropicSourceSuggestionModel(preset.source_suggestion ?? "");
-    setOpenAIEmbeddingModel(preset.embedding ?? "");
-    setFactsCheckModel(preset.facts_check ?? "");
-    setFactsCheckFallbackModel("");
-    setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
-    setFaithfulnessCheckFallbackModel("");
-    setTTSMarkupPreprocessModel(preset.tts_markup_preprocess_model ?? "");
-  }, [catalog]);
-
-  const optionsForPurpose = useCallback(
-    (purpose: string, currentValue?: string): ModelOption[] => buildOptionsForPurpose(catalog, purpose, currentValue, t),
-    [catalog, t],
-  );
-
-  const optionsForChatModel = useCallback(
-    (currentValue?: string): ModelOption[] => buildOptionsForChatModel(catalog, currentValue, t),
-    [catalog, t],
-  );
-
-  const unavailableSelectedModelWarnings = useMemo(
-    () => buildUnavailableSelectedModelWarnings(catalog, settings?.llm_models, t),
-    [catalog, settings?.llm_models, t],
-  );
-
-  const sourceSuggestionModelOptions = useMemo(
-    () => optionsForPurpose("source_suggestion", anthropicSourceSuggestionModel),
-    [anthropicSourceSuggestionModel, optionsForPurpose]
-  );
-  const openAIEmbeddingModelOptions = useMemo(() => buildEmbeddingModelOptions(catalog, t), [catalog, t]);
-  const modelComparisonEntries = useMemo(() => buildModelComparisonEntries(catalog), [catalog]);
-  const visibleProviderModelUpdates = useMemo(
-    () => buildVisibleProviderModelUpdates(providerModelUpdates, dismissedModelUpdatesAt),
-    [dismissedModelUpdatesAt, providerModelUpdates],
-  );
-
   const budgetRemainingTone = useMemo(() => {
     const v = settings?.current_month.remaining_budget_pct;
     if (v == null) return "text-zinc-700";
@@ -963,18 +708,6 @@ export function useSettingsPageData() {
   useEffect(() => {
     uiFontsDirtyRef.current = uiFontsDirty;
   }, [uiFontsDirty]);
-
-  function toggleLLMExtras() {
-    llm.setLLMExtrasOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        window.requestAnimationFrame(() => {
-          llmExtrasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      }
-      return next;
-    });
-  }
 
   async function submitBudget(e: FormEvent) {
     e.preventDefault();
@@ -1016,33 +749,6 @@ export function useSettingsPageData() {
         );
         void queryClient.invalidateQueries({ queryKey: ["settings"] });
       },
-    });
-  }
-
-  async function submitLLMModels(e: FormEvent) {
-    await submitSavingFormAction({
-      event: e,
-      setSaving: setSavingLLMModels,
-      showToast,
-      mapError: (error) => localizeSettingsErrorMessage(error, t),
-      run: () => persistLLMModels(buildLLMModelPayload(), t("settings.toast.modelsSaved")),
-    });
-  }
-
-  async function submitAudioBriefingModels(e: FormEvent) {
-    await submitSavingFormAction({
-      event: e,
-      setSaving: setSavingLLMModels,
-      showToast,
-      mapError: (error) => localizeSettingsErrorMessage(error, t),
-      run: () =>
-        persistLLMModels(
-          buildLLMModelPayload({
-            audio_briefing_script: audioBriefingScriptModel || null,
-            audio_briefing_script_fallback: audioBriefingScriptFallbackModel || null,
-          }),
-          t("settings.toast.modelsSaved")
-        ),
     });
   }
 
@@ -1696,10 +1402,10 @@ export function useSettingsPageData() {
     readingPlanWindow,
     readingPlanSize,
     readingPlanDiversifyTopics,
-    navigatorEnabled,
-    navigatorPersonaMode,
-    navigatorPersona,
-    navigatorModel,
+    navigatorEnabled: llmModels.navigatorSummary.enabled,
+    navigatorPersonaMode: llmModels.navigatorSummary.personaMode,
+    navigatorPersona: llmModels.navigatorSummary.persona,
+    navigatorModel: llmModels.navigatorSummary.model,
     audioBriefingEnabled,
     audioBriefingScheduleSummary: formatAudioBriefingScheduleSelection(audioBriefingScheduleSelection, t),
     audioBriefingArticlesPerEpisode,
@@ -1719,7 +1425,7 @@ export function useSettingsPageData() {
 
   const railNotes = buildSettingsRailNotes({
     t,
-    providerModelUpdateCount: visibleProviderModelUpdates.length,
+    providerModelUpdateCount: llmModels.visibleProviderModelUpdates.length,
     notificationBriefingEnabled: notificationPriority.briefing_enabled,
     notificationImmediateEnabled: notificationPriority.immediate_enabled,
     notificationDailyCap: notificationPriority.daily_cap,
@@ -1737,8 +1443,8 @@ export function useSettingsPageData() {
   const audioBriefingSettingsForm = {
     onSubmitSettings: submitAudioBriefingSettings,
     savingSettings: savingAudioBriefing,
-    onSubmitModels: submitAudioBriefingModels,
-    savingModels: savingLLMModels,
+    onSubmitModels: llmModels.audioBriefingSettingsForm.onSubmitModels,
+    savingModels: llmModels.audioBriefingSettingsForm.savingModels,
   };
 
   const audioBriefingSettingsState = buildAudioBriefingSettingsState({
@@ -1766,13 +1472,6 @@ export function useSettingsPageData() {
     fishDuoDistinctVoiceCount,
     elevenLabsDuoReady,
     elevenLabsDuoDistinctVoiceCount,
-  });
-
-  const audioBriefingScriptModels = buildAudioBriefingScriptModels({
-    audioBriefingScriptModel,
-    audioBriefingScriptOptions: optionsForPurpose("summary", audioBriefingScriptModel),
-    audioBriefingScriptFallbackModel,
-    audioBriefingScriptFallbackOptions: optionsForPurpose("summary", audioBriefingScriptFallbackModel),
   });
 
   const audioBriefingDictionaryState = buildAudioBriefingDictionaryState({
@@ -1804,8 +1503,8 @@ export function useSettingsPageData() {
     onChangeDefaultPersona: setAudioBriefingDefaultPersona,
     onChangeBGMEnabled: setAudioBriefingBGMEnabled,
     onChangeBGMPrefix: setAudioBriefingBGMR2Prefix,
-    onChangeAudioBriefingScriptModel: (value: string) => onChangeLLMModel(setAudioBriefingScriptModel, value),
-    onChangeAudioBriefingScriptFallbackModel: (value: string) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value),
+    onChangeAudioBriefingScriptModel: llmModels.audioBriefingScriptActions.onChangeAudioBriefingScriptModel,
+    onChangeAudioBriefingScriptFallbackModel: llmModels.audioBriefingScriptActions.onChangeAudioBriefingScriptFallbackModel,
     onRefreshAivisUserDictionaries: () => {
       void loadAivisUserDictionaries(true).catch(() => undefined);
     },
@@ -2123,147 +1822,6 @@ export function useSettingsPageData() {
     onSelectProvider: setActiveAccessProvider,
   });
 
-  const llmModelsForm = buildSavingForm({
-    onSubmit: submitLLMModels,
-    saving: savingLLMModels,
-  });
-
-  const llmModelsState = buildLLMModelsState({
-    summary: {
-      facts: { value: anthropicFactsModel, options: optionsForPurpose("facts", anthropicFactsModel) },
-      factsSecondary: { value: anthropicFactsSecondaryModel, options: optionsForPurpose("facts", anthropicFactsSecondaryModel) },
-      factsSecondaryRatePercent: anthropicFactsSecondaryRatePercent,
-      factsFallback: { value: anthropicFactsFallbackModel, options: optionsForPurpose("facts", anthropicFactsFallbackModel) },
-      summary: { value: anthropicSummaryModel, options: optionsForPurpose("summary", anthropicSummaryModel) },
-      summarySecondary: { value: anthropicSummarySecondaryModel, options: optionsForPurpose("summary", anthropicSummarySecondaryModel) },
-      summarySecondaryRatePercent: anthropicSummarySecondaryRatePercent,
-      summaryFallback: { value: anthropicSummaryFallbackModel, options: optionsForPurpose("summary", anthropicSummaryFallbackModel) },
-    },
-    digest: {
-      digestCluster: { value: anthropicDigestClusterModel, options: optionsForPurpose("digest_cluster_draft", anthropicDigestClusterModel) },
-      digest: { value: anthropicDigestModel, options: optionsForPurpose("digest", anthropicDigestModel) },
-    },
-    validation: {
-      factsCheck: { value: factsCheckModel, options: optionsForPurpose("facts", factsCheckModel) },
-      factsCheckFallback: { value: factsCheckFallbackModel, options: optionsForPurpose("facts", factsCheckFallbackModel) },
-      faithfulnessCheck: { value: faithfulnessCheckModel, options: optionsForPurpose("summary", faithfulnessCheckModel) },
-      faithfulnessCheckFallback: { value: faithfulnessCheckFallbackModel, options: optionsForPurpose("summary", faithfulnessCheckFallbackModel) },
-    },
-    other: {
-      sourceSuggestion: { value: anthropicSourceSuggestionModel, options: sourceSuggestionModelOptions },
-      ask: { value: anthropicAskModel, options: optionsForPurpose("ask", anthropicAskModel) },
-      embeddings: { value: openAIEmbeddingModel, options: openAIEmbeddingModelOptions },
-    },
-    preprocess: {
-      ttsMarkupPreprocess: { value: ttsMarkupPreprocessModel, options: optionsForChatModel(ttsMarkupPreprocessModel) },
-    },
-  });
-
-  const llmModelsActions = {
-    onChangeModel: (key: string, value: string) => {
-      const handlers: Record<string, (next: string) => void> = {
-        facts: (next) => onChangeLLMModel(setAnthropicFactsModel, next),
-        factsSecondary: (next) => onChangeLLMModel(setAnthropicFactsSecondaryModel, next),
-        factsFallback: (next) => onChangeLLMModel(setAnthropicFactsFallbackModel, next),
-        summary: (next) => onChangeLLMModel(setAnthropicSummaryModel, next),
-        summarySecondary: (next) => onChangeLLMModel(setAnthropicSummarySecondaryModel, next),
-        summaryFallback: (next) => onChangeLLMModel(setAnthropicSummaryFallbackModel, next),
-        digestCluster: (next) => onChangeLLMModel(setAnthropicDigestClusterModel, next),
-        digest: (next) => onChangeLLMModel(setAnthropicDigestModel, next),
-        factsCheck: (next) => onChangeLLMModel(setFactsCheckModel, next),
-        factsCheckFallback: (next) => onChangeLLMModel(setFactsCheckFallbackModel, next),
-        faithfulnessCheck: (next) => onChangeLLMModel(setFaithfulnessCheckModel, next),
-        faithfulnessCheckFallback: (next) => onChangeLLMModel(setFaithfulnessCheckFallbackModel, next),
-        sourceSuggestion: (next) => onChangeLLMModel(setAnthropicSourceSuggestionModel, next),
-        ask: (next) => onChangeLLMModel(setAnthropicAskModel, next),
-        embeddings: (next) => onChangeLLMModel(setOpenAIEmbeddingModel, next),
-        ttsMarkupPreprocess: (next) => onChangeLLMModel(setTTSMarkupPreprocessModel, next),
-      };
-      handlers[key]?.(value);
-    },
-    onChangeRate: (key: "factsSecondaryRatePercent" | "summarySecondaryRatePercent", value: string) => {
-      llmModelsDirtyRef.current = true;
-      if (key === "factsSecondaryRatePercent") {
-        setAnthropicFactsSecondaryRatePercent(value);
-      } else {
-        setAnthropicSummarySecondaryRatePercent(value);
-      }
-    },
-    onOpenModelGuide: llm.openModelGuide,
-    onDismissProviderModelUpdates: dismissProviderModelUpdates,
-    onRestoreProviderModelUpdates: restoreProviderModelUpdates,
-  };
-
-  const llmModelsExtras = buildLLMModelsExtras({
-    llmExtrasOpen: llm.llmExtrasOpen,
-    llmExtrasRef,
-    providerModelUpdates,
-    visibleProviderModelUpdates,
-  });
-
-  const navigatorForm = buildSavingForm({
-    onSubmit: submitLLMModels,
-    saving: savingLLMModels,
-  });
-
-  const navigatorState = buildNavigatorState({
-    enabled: navigatorEnabled,
-    aiNavigatorBriefEnabled,
-    personaMode: navigatorPersonaMode,
-    persona: navigatorPersona,
-    navigatorPersonaCards,
-    navigatorModel,
-    navigatorModelOptions: optionsForPurpose("summary", navigatorModel),
-    navigatorFallbackModel,
-    navigatorFallbackModelOptions: optionsForPurpose("summary", navigatorFallbackModel),
-    aiNavigatorBriefModel,
-    aiNavigatorBriefModelOptions: optionsForPurpose("summary", aiNavigatorBriefModel),
-    aiNavigatorBriefFallbackModel,
-    aiNavigatorBriefFallbackModelOptions: optionsForPurpose("summary", aiNavigatorBriefFallbackModel),
-  });
-
-  const navigatorActions = buildNavigatorActions({
-    onChangeEnabled: (value: boolean) => {
-      llmModelsDirtyRef.current = true;
-      setNavigatorEnabled(value);
-    },
-    onChangeBriefEnabled: (value: boolean) => {
-      llmModelsDirtyRef.current = true;
-      setAINavigatorBriefEnabled(value);
-    },
-    onChangePersonaMode: (value: "fixed" | "random") => {
-      llmModelsDirtyRef.current = true;
-      setNavigatorPersonaMode(value);
-    },
-    onSelectPersona: async (personaKey: string) => {
-      if (navigatorPersonaMode !== "fixed" || personaKey === navigatorPersona || savingLLMModels) return;
-      const previousPersona = settings?.llm_models?.navigator_persona ?? "editor";
-      llmModelsDirtyRef.current = true;
-      setNavigatorPersona(personaKey);
-      setSavingLLMModels(true);
-      try {
-        await persistLLMModels(
-          buildLLMModelPayload({ navigator_persona: personaKey }),
-          t("settings.toast.navigatorSaved")
-        );
-      } catch (e) {
-        setNavigatorPersona(previousPersona);
-        showToast(localizeSettingsErrorMessage(e, t), "error");
-      } finally {
-        setSavingLLMModels(false);
-      }
-    },
-    onChangeModel: (key: "navigator" | "navigatorFallback" | "aiNavigatorBrief" | "aiNavigatorBriefFallback", value: string) => {
-      const handlers = {
-        navigator: (next: string) => onChangeLLMModel(setNavigatorModel, next),
-        navigatorFallback: (next: string) => onChangeLLMModel(setNavigatorFallbackModel, next),
-        aiNavigatorBrief: (next: string) => onChangeLLMModel(setAINavigatorBriefModel, next),
-        aiNavigatorBriefFallback: (next: string) => onChangeLLMModel(setAINavigatorBriefFallbackModel, next),
-      } as const;
-      handlers[key](value);
-    },
-  });
-
   const readingPlanForm = buildSavingForm({
     onSubmit: submitReadingPlan,
     saving: savingReadingPlan,
@@ -2333,14 +1891,14 @@ export function useSettingsPageData() {
     sectionNavItems,
     railNotes,
     selectedSectionMeta,
-    applyCostPerformancePreset,
-    toggleLLMExtras,
+    applyCostPerformancePreset: llmModels.applyCostPerformancePreset,
+    toggleLLMExtras: llmModels.toggleLLMExtras,
     llm,
-    modelSelectLabels,
+    modelSelectLabels: llmModels.modelSelectLabels,
     audioBriefingSettingsForm,
     audioBriefingSettingsState,
     audioBriefingDuoReadiness,
-    audioBriefingScriptModels,
+    audioBriefingScriptModels: llmModels.audioBriefingScriptModels,
     audioBriefingDictionaryState,
     audioBriefingSettingsActions,
     audioBriefingVoiceMatrixForm,
@@ -2370,14 +1928,14 @@ export function useSettingsPageData() {
     saveNotificationPriority,
     integrationsState,
     integrationsActions,
-    llmModelsForm,
-    llmModelsState,
-    llmModelsActions,
-    llmModelsExtras,
-    unavailableSelectedModelWarnings,
-    navigatorForm,
-    navigatorState,
-    navigatorActions,
+    llmModelsForm: llmModels.llmModelsForm,
+    llmModelsState: llmModels.llmModelsState,
+    llmModelsActions: llmModels.llmModelsActions,
+    llmModelsExtras: llmModels.llmModelsExtras,
+    unavailableSelectedModelWarnings: llmModels.unavailableSelectedModelWarnings,
+    navigatorForm: llmModels.navigatorForm,
+    navigatorState: llmModels.navigatorState,
+    navigatorActions: llmModels.navigatorActions,
     budgetForm,
     budgetState,
     budgetActions,
@@ -2439,8 +1997,8 @@ export function useSettingsPageData() {
     uiFontSerifKey,
     setUIFontSansKey,
     setUIFontSerifKey,
-    modelComparisonEntries,
-    llmExtrasRef,
+    modelComparisonEntries: llmModels.modelComparisonEntries,
+    llmExtrasRef: llmModels.llmExtrasRef,
     audioBriefingAivisModels,
     audioBriefingXAIVoices,
     audioBriefingOpenAITTSVoices,

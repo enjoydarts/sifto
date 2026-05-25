@@ -9,12 +9,14 @@ class AlibabaCatalogTests(unittest.TestCase):
 
         self.assertEqual(provider_for_model("qwen3.7-max"), "alibaba")
         self.assertIsNotNone(pricing)
-        self.assertEqual(pricing["input_per_mtok_usd"], 2.5)
-        self.assertEqual(pricing["output_per_mtok_usd"], 7.5)
-        self.assertEqual(pricing["cache_write_per_mtok_usd"], 3.125)
-        self.assertEqual(pricing["cache_read_per_mtok_usd"], 0.25)
+        self.assertEqual(pricing["input_per_mtok_usd"], 1.65)
+        self.assertEqual(pricing["output_per_mtok_usd"], 4.951)
+        self.assertNotIn("cache_write_per_mtok_usd", pricing)
+        self.assertNotIn("cache_read_per_mtok_usd", pricing)
         self.assertTrue(model_supports("qwen3.7-max", "supports_structured_output"))
         self.assertTrue(model_supports("qwen3.7-max", "supports_reasoning"))
+        self.assertFalse(model_supports("qwen3.7-max", "supports_cache_write_pricing"))
+        self.assertFalse(model_supports("qwen3.7-max", "supports_cache_read_pricing"))
 
 
 if __name__ == "__main__":

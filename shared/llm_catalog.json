@@ -1172,15 +1172,13 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": true,
-        "supports_cache_write_pricing": true
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
       },
       "pricing": {
         "pricing_source": "alibaba_modelstudio_qwen3_7_2026_05",
-        "input_per_mtok_usd": 2.5,
-        "output_per_mtok_usd": 7.5,
-        "cache_write_per_mtok_usd": 3.125,
-        "cache_read_per_mtok_usd": 0.25
+        "input_per_mtok_usd": 1.65,
+        "output_per_mtok_usd": 4.951
       }
     },
     {

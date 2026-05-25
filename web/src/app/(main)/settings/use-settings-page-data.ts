@@ -3,21 +3,18 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, AzureSpeechVoicesResponse, CartesiaTTSCatalogResponse, CartesiaVoiceCatalogEntry, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, CartesiaVoiceCatalogEntry, ElevenLabsVoiceCatalogEntry, GeminiTTSVoiceCatalogEntry, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, PodcastCategoryOption, PreferenceProfile, UserSettings, XAIVoiceSnapshot } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
-import { queryKeys } from "@/lib/query-keys";
 import { normalizeAudioBriefingPresetVoices } from "@/components/settings/audio-briefing-preset-modal-helpers";
-import { type ModelOption } from "@/components/settings/model-select";
 import { type SettingsSectionID } from "@/components/settings/settings-page-shell";
 import {
   buildSettingsRailNotes,
   buildSettingsSectionMeta,
   buildSettingsSectionNavItems,
 } from "@/components/settings/settings-page-descriptors";
-import { createAPIKeyActionHandlers } from "@/components/settings/settings-api-key-actions";
 import { copyToClipboardAction, readFileAsBase64DataURL } from "@/components/settings/settings-media-actions";
 import {
   runSavingAction,
@@ -56,16 +53,12 @@ import {
   buildVoicePickerCatalogData,
   findAudioBriefingActiveVoice,
 } from "@/components/settings/settings-picker-helpers";
-import { loadResourceAction, syncResourceAction } from "@/components/settings/settings-resource-actions";
-import {
-  buildApiKeyCardLabels,
-  buildUIFontState,
-  dismissProviderModelUpdatesToLocalStorage,
-  MODEL_UPDATES_DISMISSED_AT_KEY,
-  restoreProviderModelUpdatesFromLocalStorage,
-} from "@/components/settings/settings-system-helpers";
-import { buildAccessCards, createAccessCardRuntime, resolveAccessCardSelection } from "@/components/settings/system-access-cards";
+import { buildUIFontState } from "@/components/settings/settings-system-helpers";
+import { resolveAccessCardSelection } from "@/components/settings/system-access-cards";
 import { useSettingsDialogState } from "@/components/settings/use-settings-dialog-state";
+import { useSettingsApiKeys } from "./use-settings-api-keys";
+import { useSettingsLLMModels } from "./use-settings-llm-models";
+import { useSettingsResources } from "./use-settings-resources";
 import {
   AudioBriefingNumericInputField,
   AudioBriefingScheduleSelection,
@@ -89,19 +82,6 @@ import {
   tWithVars,
 } from "@/components/settings/settings-page-helpers";
 import {
-  buildCostPerformancePreset,
-  localizeSettingsErrorMessage,
-} from "@/components/settings/providers/llm-provider-metadata";
-import {
-  buildEmbeddingModelOptions,
-  buildModelComparisonEntries,
-  buildModelSelectLabels,
-  buildOptionsForChatModel,
-  buildOptionsForPurpose,
-  buildUnavailableSelectedModelWarnings,
-  buildVisibleProviderModelUpdates,
-} from "@/components/settings/providers/llm-model-options";
-import {
   getAudioBriefingTTSProviderDefaultModel,
   getTTSProviderDefaultModel,
 } from "@/components/settings/providers/tts-provider-metadata";
@@ -121,7 +101,6 @@ import {
 import {
   buildAudioBriefingDictionaryState,
   buildAudioBriefingDuoReadiness,
-  buildAudioBriefingScriptModels,
   buildAudioBriefingSettingsState,
   buildAudioBriefingVoiceMatrixAvailability,
   buildAudioBriefingVoiceMatrixCatalogs,
@@ -131,10 +110,6 @@ import {
   buildDigestActions,
   buildDigestState,
   buildIntegrationsState,
-  buildLLMModelsExtras,
-  buildLLMModelsState,
-  buildNavigatorActions,
-  buildNavigatorState,
   buildPodcastState,
   buildReadingPlanActions,
   buildReadingPlanState,
@@ -161,57 +136,6 @@ export function useSettingsPageData() {
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingObsidianExport, setSavingObsidianExport] = useState(false);
   const [runningObsidianExport, setRunningObsidianExport] = useState(false);
-  const [savingLLMModels, setSavingLLMModels] = useState(false);
-  const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
-  const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
-  const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
-  const [deletingOpenAIKey, setDeletingOpenAIKey] = useState(false);
-  const [savingGoogleKey, setSavingGoogleKey] = useState(false);
-  const [deletingGoogleKey, setDeletingGoogleKey] = useState(false);
-  const [savingGroqKey, setSavingGroqKey] = useState(false);
-  const [deletingGroqKey, setDeletingGroqKey] = useState(false);
-  const [savingDeepSeekKey, setSavingDeepSeekKey] = useState(false);
-  const [deletingDeepSeekKey, setDeletingDeepSeekKey] = useState(false);
-  const [savingAlibabaKey, setSavingAlibabaKey] = useState(false);
-  const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
-  const [savingMistralKey, setSavingMistralKey] = useState(false);
-  const [deletingMistralKey, setDeletingMistralKey] = useState(false);
-  const [savingCerebrasKey, setSavingCerebrasKey] = useState(false);
-  const [deletingCerebrasKey, setDeletingCerebrasKey] = useState(false);
-  const [savingMiniMaxKey, setSavingMiniMaxKey] = useState(false);
-  const [deletingMiniMaxKey, setDeletingMiniMaxKey] = useState(false);
-  const [savingXiaomiMiMoTokenPlanKey, setSavingXiaomiMiMoTokenPlanKey] = useState(false);
-  const [deletingXiaomiMiMoTokenPlanKey, setDeletingXiaomiMiMoTokenPlanKey] = useState(false);
-  const [savingMoonshotKey, setSavingMoonshotKey] = useState(false);
-  const [deletingMoonshotKey, setDeletingMoonshotKey] = useState(false);
-  const [savingXAIKey, setSavingXAIKey] = useState(false);
-  const [deletingXAIKey, setDeletingXAIKey] = useState(false);
-  const [savingZAIKey, setSavingZAIKey] = useState(false);
-  const [deletingZAIKey, setDeletingZAIKey] = useState(false);
-  const [savingFireworksKey, setSavingFireworksKey] = useState(false);
-  const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
-  const [savingTogetherKey, setSavingTogetherKey] = useState(false);
-  const [deletingTogetherKey, setDeletingTogetherKey] = useState(false);
-  const [savingPoeKey, setSavingPoeKey] = useState(false);
-  const [deletingPoeKey, setDeletingPoeKey] = useState(false);
-  const [savingSiliconFlowKey, setSavingSiliconFlowKey] = useState(false);
-  const [deletingSiliconFlowKey, setDeletingSiliconFlowKey] = useState(false);
-  const [savingAzureSpeechConfig, setSavingAzureSpeechConfig] = useState(false);
-  const [deletingAzureSpeechConfig, setDeletingAzureSpeechConfig] = useState(false);
-  const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
-  const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
-  const [savingDeepInfraKey, setSavingDeepInfraKey] = useState(false);
-  const [deletingDeepInfraKey, setDeletingDeepInfraKey] = useState(false);
-  const [savingFeatherlessKey, setSavingFeatherlessKey] = useState(false);
-  const [deletingFeatherlessKey, setDeletingFeatherlessKey] = useState(false);
-  const [savingAivisKey, setSavingAivisKey] = useState(false);
-  const [deletingAivisKey, setDeletingAivisKey] = useState(false);
-  const [savingElevenLabsKey, setSavingElevenLabsKey] = useState(false);
-  const [deletingElevenLabsKey, setDeletingElevenLabsKey] = useState(false);
-  const [savingCartesiaKey, setSavingCartesiaKey] = useState(false);
-  const [deletingCartesiaKey, setDeletingCartesiaKey] = useState(false);
-  const [savingFishKey, setSavingFishKey] = useState(false);
-  const [deletingFishKey, setDeletingFishKey] = useState(false);
   const [savingAivisDictionary, setSavingAivisDictionary] = useState(false);
   const [deletingAivisDictionary, setDeletingAivisDictionary] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
@@ -220,42 +144,10 @@ export function useSettingsPageData() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [preferenceProfile, setPreferenceProfile] = useState<PreferenceProfile | null>(null);
   const [preferenceProfileError, setPreferenceProfileError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
-  const [providerModelUpdates, setProviderModelUpdates] = useState<ProviderModelChangeEvent[]>([]);
-  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
-  });
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
   const [digestEmailEnabled, setDigestEmailEnabled] = useState(true);
-  const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
-  const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
-  const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
-  const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
-  const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
-  const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
-  const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
-  const [cerebrasApiKeyInput, setCerebrasApiKeyInput] = useState("");
-  const [miniMaxApiKeyInput, setMiniMaxApiKeyInput] = useState("");
-  const [xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput] = useState("");
-  const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
-  const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
-  const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
-  const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
-  const [togetherApiKeyInput, setTogetherApiKeyInput] = useState("");
-  const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
-  const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
-  const [azureSpeechApiKeyInput, setAzureSpeechApiKeyInput] = useState("");
-  const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
-  const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
-  const [deepInfraApiKeyInput, setDeepInfraApiKeyInput] = useState("");
-  const [featherlessApiKeyInput, setFeatherlessApiKeyInput] = useState("");
-  const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
-  const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
-  const [cartesiaApiKeyInput, setCartesiaApiKeyInput] = useState("");
-  const [fishApiKeyInput, setFishApiKeyInput] = useState("");
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
@@ -313,34 +205,6 @@ export function useSettingsPageData() {
   const [audioBriefingPresetsLoading, setAudioBriefingPresetsLoading] = useState(false);
   const [audioBriefingPresetsLoaded, setAudioBriefingPresetsLoaded] = useState(false);
   const [audioBriefingPresetsError, setAudioBriefingPresetsError] = useState<string | null>(null);
-  const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
-  const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
-  const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
-  const [aivisModelsError, setAivisModelsError] = useState<string | null>(null);
-  const [xaiVoicesData, setXAIVoicesData] = useState<XAIVoicesResponse | null>(null);
-  const [xaiVoicesLoading, setXAIVoicesLoading] = useState(false);
-  const [xaiVoicesSyncing, setXAIVoicesSyncing] = useState(false);
-  const [xaiVoicesError, setXAIVoicesError] = useState<string | null>(null);
-  const [openAITTSVoicesData, setOpenAITTSVoicesData] = useState<OpenAITTSVoicesResponse | null>(null);
-  const [openAITTSVoicesLoading, setOpenAITTSVoicesLoading] = useState(false);
-  const [openAITTSVoicesSyncing, setOpenAITTSVoicesSyncing] = useState(false);
-  const [openAITTSVoicesError, setOpenAITTSVoicesError] = useState<string | null>(null);
-  const [elevenLabsVoicesData, setElevenLabsVoicesData] = useState<ElevenLabsVoicesResponse | null>(null);
-  const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
-  const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
-  const [cartesiaTTSCatalogData, setCartesiaTTSCatalogData] = useState<CartesiaTTSCatalogResponse | null>(null);
-  const [cartesiaTTSCatalogLoading, setCartesiaTTSCatalogLoading] = useState(false);
-  const [cartesiaTTSCatalogError, setCartesiaTTSCatalogError] = useState<string | null>(null);
-  const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
-  const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
-  const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
-  const [azureSpeechVoicesData, setAzureSpeechVoicesData] = useState<AzureSpeechVoicesResponse | null>(null);
-  const [azureSpeechVoicesLoading, setAzureSpeechVoicesLoading] = useState(false);
-  const [azureSpeechVoicesError, setAzureSpeechVoicesError] = useState<string | null>(null);
-  const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
-  const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
-  const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
-  const [aivisUserDictionariesError, setAivisUserDictionariesError] = useState<string | null>(null);
   const uiFontSansOptions = useMemo(() => getSelectableSansFonts(), []);
   const uiFontSerifOptions = useMemo(() => getSelectableSerifFonts(), []);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
@@ -358,41 +222,63 @@ export function useSettingsPageData() {
   const [obsidianRepoName, setObsidianRepoName] = useState("");
   const [obsidianRepoBranch, setObsidianRepoBranch] = useState("main");
   const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
-  const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
-  const [anthropicFactsSecondaryModel, setAnthropicFactsSecondaryModel] = useState("");
-  const [anthropicFactsSecondaryRatePercent, setAnthropicFactsSecondaryRatePercent] = useState("0");
-  const [anthropicFactsFallbackModel, setAnthropicFactsFallbackModel] = useState("");
-  const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
-  const [anthropicSummarySecondaryModel, setAnthropicSummarySecondaryModel] = useState("");
-  const [anthropicSummarySecondaryRatePercent, setAnthropicSummarySecondaryRatePercent] = useState("0");
-  const [anthropicSummaryFallbackModel, setAnthropicSummaryFallbackModel] = useState("");
-  const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
-  const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
-  const [anthropicAskModel, setAnthropicAskModel] = useState("");
-  const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
-  const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
-  const [factsCheckModel, setFactsCheckModel] = useState("");
-  const [factsCheckFallbackModel, setFactsCheckFallbackModel] = useState("");
-  const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
-  const [faithfulnessCheckFallbackModel, setFaithfulnessCheckFallbackModel] = useState("");
-  const [navigatorEnabled, setNavigatorEnabled] = useState(false);
-  const [aiNavigatorBriefEnabled, setAINavigatorBriefEnabled] = useState(false);
-  const [navigatorPersonaMode, setNavigatorPersonaMode] = useState<"fixed" | "random">("fixed");
-  const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const dialogState = useSettingsDialogState();
   const { uiFonts, llm, presets, audioBriefingPickers, summaryAudioPickers } = dialogState;
-  const [navigatorModel, setNavigatorModel] = useState("");
-  const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
-  const [aiNavigatorBriefModel, setAINavigatorBriefModel] = useState("");
-  const [aiNavigatorBriefFallbackModel, setAINavigatorBriefFallbackModel] = useState("");
-  const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
-  const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
-  const [ttsMarkupPreprocessModel, setTTSMarkupPreprocessModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
-  const llmModelsDirtyRef = useRef(false);
   const uiFontsDirtyRef = useRef(false);
-  const llmExtrasRef = useRef<HTMLDivElement | null>(null);
+  const {
+    catalog,
+    setCatalog,
+    providerModelUpdates,
+    dismissedModelUpdatesAt,
+    dismissProviderModelUpdates,
+    restoreProviderModelUpdates,
+    aivisModelsData,
+    aivisModelsLoading,
+    aivisModelsSyncing,
+    aivisModelsError,
+    xaiVoicesData,
+    xaiVoicesLoading,
+    xaiVoicesSyncing,
+    xaiVoicesError,
+    openAITTSVoicesData,
+    openAITTSVoicesLoading,
+    openAITTSVoicesSyncing,
+    openAITTSVoicesError,
+    elevenLabsVoicesData,
+    elevenLabsVoicesLoading,
+    elevenLabsVoicesError,
+    cartesiaTTSCatalogData,
+    setCartesiaTTSCatalogData,
+    cartesiaTTSCatalogLoading,
+    cartesiaTTSCatalogError,
+    setCartesiaTTSCatalogError,
+    geminiTTSVoicesData,
+    geminiTTSVoicesLoading,
+    geminiTTSVoicesError,
+    azureSpeechVoicesData,
+    azureSpeechVoicesLoading,
+    azureSpeechVoicesError,
+    aivisUserDictionaries,
+    aivisUserDictionariesLoading,
+    aivisUserDictionariesError,
+    loadAivisModels,
+    loadXAIVoices,
+    loadOpenAITTSVoices,
+    loadElevenLabsVoices,
+    loadCartesiaTTSCatalog,
+    loadGeminiTTSVoices,
+    loadAzureSpeechVoices,
+    syncAivisModels,
+    syncXAIVoices,
+    syncOpenAITTSVoices,
+    loadAivisUserDictionaries,
+    resetXAIVoices,
+    resetElevenLabsVoices,
+    resetAivisUserDictionaries,
+    markAivisUserDictionariesStale,
+  } = useSettingsResources({ activeSection, settings, showToast, t });
   const summaryAudioVoiceStatus = useMemo(() => {
     return getSummaryAudioVoiceStatus(
       {
@@ -471,6 +357,20 @@ export function useSettingsPageData() {
       })),
     [navigatorPersonaDefinitions]
   );
+  const llmModels = useSettingsLLMModels({
+    settings,
+    setSettings,
+    catalog,
+    providerModelUpdates,
+    dismissedModelUpdatesAt,
+    dismissProviderModelUpdates,
+    restoreProviderModelUpdates,
+    navigatorPersonaCards,
+    queryClient,
+    showToast,
+    t,
+    llm,
+  });
   const syncAudioBriefingVoiceForm = useCallback((voices?: UserSettings["audio_briefing_persona_voices"] | AudioBriefingPersonaVoice[] | null) => {
     const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
     const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice] as const));
@@ -600,296 +500,8 @@ export function useSettingsPageData() {
     [podcastAvailableCategories, podcastCategory]
   );
 
-  const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
-    setAnthropicFactsModel(llmModels?.facts ?? "");
-    setAnthropicFactsSecondaryModel(llmModels?.facts_secondary ?? "");
-    setAnthropicFactsSecondaryRatePercent(String(llmModels?.facts_secondary_rate_percent ?? 0));
-    setAnthropicFactsFallbackModel(llmModels?.facts_fallback ?? "");
-    setAnthropicSummaryModel(llmModels?.summary ?? "");
-    setAnthropicSummarySecondaryModel(llmModels?.summary_secondary ?? "");
-    setAnthropicSummarySecondaryRatePercent(String(llmModels?.summary_secondary_rate_percent ?? 0));
-    setAnthropicSummaryFallbackModel(llmModels?.summary_fallback ?? "");
-    setAnthropicDigestClusterModel(llmModels?.digest_cluster ?? "");
-    setAnthropicDigestModel(llmModels?.digest ?? "");
-    setAnthropicAskModel(llmModels?.ask ?? "");
-    setAnthropicSourceSuggestionModel(llmModels?.source_suggestion ?? "");
-    setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
-    setFactsCheckModel(llmModels?.facts_check ?? "");
-    setFactsCheckFallbackModel(llmModels?.facts_check_fallback ?? "");
-    setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
-    setFaithfulnessCheckFallbackModel(llmModels?.faithfulness_check_fallback ?? "");
-    setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
-    setAINavigatorBriefEnabled(Boolean(llmModels?.ai_navigator_brief_enabled ?? false));
-    setNavigatorPersonaMode(llmModels?.navigator_persona_mode === "random" ? "random" : "fixed");
-    setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
-    setNavigatorModel(llmModels?.navigator ?? "");
-    setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
-    setAINavigatorBriefModel(llmModels?.ai_navigator_brief ?? "");
-    setAINavigatorBriefFallbackModel(llmModels?.ai_navigator_brief_fallback ?? "");
-    setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
-    setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
-    setTTSMarkupPreprocessModel(llmModels?.tts_markup_preprocess_model ?? "");
-  }, []);
-
-  const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
-    llmModelsDirtyRef.current = true;
-    setter(value);
-  }, []);
-
-  const buildLLMModelPayload = useCallback(
-    (overrides?: Partial<{
-      facts: string | null;
-      facts_secondary: string | null;
-      facts_secondary_rate_percent: number;
-      facts_fallback: string | null;
-      summary: string | null;
-      summary_secondary: string | null;
-      summary_secondary_rate_percent: number;
-      summary_fallback: string | null;
-      digest_cluster: string | null;
-      digest: string | null;
-      ask: string | null;
-      source_suggestion: string | null;
-      embedding: string | null;
-      facts_check: string | null;
-      facts_check_fallback: string | null;
-      faithfulness_check: string | null;
-      faithfulness_check_fallback: string | null;
-      navigator_enabled: boolean;
-      ai_navigator_brief_enabled: boolean;
-      navigator_persona_mode: string | null;
-      navigator_persona: string | null;
-      navigator: string | null;
-      navigator_fallback: string | null;
-      ai_navigator_brief: string | null;
-      ai_navigator_brief_fallback: string | null;
-      audio_briefing_script: string | null;
-      audio_briefing_script_fallback: string | null;
-      tts_markup_preprocess_model: string | null;
-    }>) => {
-      const emptyToNull = (v: string) => {
-        const s = v.trim();
-        return s === "" ? null : s;
-      };
-      const normalizeRate = (v: string) => {
-        const n = Number(v);
-        if (!Number.isFinite(n)) return 0;
-        return Math.min(100, Math.max(0, Math.round(n)));
-      };
-      return {
-        facts: emptyToNull(anthropicFactsModel),
-        facts_secondary: emptyToNull(anthropicFactsSecondaryModel),
-        facts_secondary_rate_percent: normalizeRate(anthropicFactsSecondaryRatePercent),
-        facts_fallback: emptyToNull(anthropicFactsFallbackModel),
-        summary: emptyToNull(anthropicSummaryModel),
-        summary_secondary: emptyToNull(anthropicSummarySecondaryModel),
-        summary_secondary_rate_percent: normalizeRate(anthropicSummarySecondaryRatePercent),
-        summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
-        digest_cluster: emptyToNull(anthropicDigestClusterModel),
-        digest: emptyToNull(anthropicDigestModel),
-        ask: emptyToNull(anthropicAskModel),
-        source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
-        embedding: emptyToNull(openAIEmbeddingModel),
-        facts_check: emptyToNull(factsCheckModel),
-        facts_check_fallback: emptyToNull(factsCheckFallbackModel),
-        faithfulness_check: emptyToNull(faithfulnessCheckModel),
-        faithfulness_check_fallback: emptyToNull(faithfulnessCheckFallbackModel),
-        navigator_enabled: navigatorEnabled,
-        ai_navigator_brief_enabled: aiNavigatorBriefEnabled,
-        navigator_persona_mode: navigatorPersonaMode,
-        navigator_persona: navigatorPersona,
-        navigator: emptyToNull(navigatorModel),
-        navigator_fallback: emptyToNull(navigatorFallbackModel),
-        ai_navigator_brief: emptyToNull(aiNavigatorBriefModel),
-        ai_navigator_brief_fallback: emptyToNull(aiNavigatorBriefFallbackModel),
-        audio_briefing_script: emptyToNull(audioBriefingScriptModel),
-        audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
-        tts_markup_preprocess_model: emptyToNull(ttsMarkupPreprocessModel),
-        ...overrides,
-      };
-    },
-    [
-      anthropicAskModel,
-      anthropicDigestClusterModel,
-      anthropicDigestModel,
-      anthropicFactsFallbackModel,
-      anthropicFactsModel,
-      anthropicFactsSecondaryModel,
-      anthropicFactsSecondaryRatePercent,
-      anthropicSourceSuggestionModel,
-      anthropicSummaryFallbackModel,
-      anthropicSummaryModel,
-      anthropicSummarySecondaryModel,
-      anthropicSummarySecondaryRatePercent,
-      factsCheckModel,
-      factsCheckFallbackModel,
-      faithfulnessCheckModel,
-      faithfulnessCheckFallbackModel,
-      aiNavigatorBriefEnabled,
-      aiNavigatorBriefFallbackModel,
-      aiNavigatorBriefModel,
-      navigatorEnabled,
-      navigatorFallbackModel,
-      navigatorModel,
-      navigatorPersonaMode,
-      navigatorPersona,
-      audioBriefingScriptFallbackModel,
-      audioBriefingScriptModel,
-      ttsMarkupPreprocessModel,
-      openAIEmbeddingModel,
-    ]
-  );
-
-  const persistLLMModels = useCallback(
-    async (
-      payload: ReturnType<typeof buildLLMModelPayload>,
-      successMessage?: string
-    ) => {
-      const resp = await api.updateLLMModelSettings(payload);
-      let nextSettingsSnapshot: UserSettings | null = null;
-      setSettings((prev) => {
-        if (!prev) return prev;
-        const next = {
-          ...prev,
-          llm_models: {
-            ...prev.llm_models,
-            ...resp.llm_models,
-          },
-        };
-        nextSettingsSnapshot = next;
-        return next;
-      });
-      if (nextSettingsSnapshot) {
-        queryClient.setQueryData(queryKeys.settings.all(), nextSettingsSnapshot);
-      }
-      syncLLMModelForm(resp.llm_models);
-      llmModelsDirtyRef.current = false;
-      if (successMessage) {
-        showToast(successMessage, "success");
-      }
-      return resp;
-    },
-    [queryClient, showToast, syncLLMModelForm]
-  );
-
-  const loadAivisModels = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setAivisModelsLoading,
-      fetch: api.getAivisModels,
-      setData: setAivisModelsData,
-      setError: setAivisModelsError,
-    });
-  }, []);
-
-  const loadXAIVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setXAIVoicesLoading,
-      fetch: api.getXAIVoices,
-      setData: setXAIVoicesData,
-      setError: setXAIVoicesError,
-    });
-  }, []);
-
-  const loadOpenAITTSVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setOpenAITTSVoicesLoading,
-      fetch: api.getOpenAITTSVoices,
-      setData: setOpenAITTSVoicesData,
-      setError: setOpenAITTSVoicesError,
-    });
-  }, []);
-
-  const loadElevenLabsVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setElevenLabsVoicesLoading,
-      fetch: api.getElevenLabsVoices,
-      setData: setElevenLabsVoicesData,
-      setError: setElevenLabsVoicesError,
-    });
-  }, []);
-
-  const loadCartesiaTTSCatalog = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setCartesiaTTSCatalogLoading,
-      fetch: api.getCartesiaTTSCatalog,
-      setData: setCartesiaTTSCatalogData,
-      setError: setCartesiaTTSCatalogError,
-    });
-  }, []);
-
-  const loadGeminiTTSVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setGeminiTTSVoicesLoading,
-      fetch: api.getGeminiTTSVoices,
-      setData: setGeminiTTSVoicesData,
-      setError: setGeminiTTSVoicesError,
-    });
-  }, []);
-
-  const loadAzureSpeechVoices = useCallback(async () => {
-    return loadResourceAction({
-      setLoading: setAzureSpeechVoicesLoading,
-      fetch: api.getAzureSpeechVoices,
-      setData: setAzureSpeechVoicesData,
-      setError: setAzureSpeechVoicesError,
-    });
-  }, []);
-
-  const syncAivisModels = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setAivisModelsSyncing,
-      sync: api.syncAivisModels,
-      setData: setAivisModelsData,
-      setError: setAivisModelsError,
-      showToast,
-      successMessage: t("aivisModels.syncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const syncXAIVoices = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setXAIVoicesSyncing,
-      sync: api.syncXAIVoices,
-      setData: setXAIVoicesData,
-      setError: setXAIVoicesError,
-      showToast,
-      successMessage: t("settings.audioBriefing.xaiSyncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const syncOpenAITTSVoices = useCallback(async () => {
-    return syncResourceAction({
-      setSyncing: setOpenAITTSVoicesSyncing,
-      sync: api.syncOpenAITTSVoices,
-      setData: setOpenAITTSVoicesData,
-      setError: setOpenAITTSVoicesError,
-      showToast,
-      successMessage: t("settings.audioBriefing.openAITTSSyncCompleted"),
-    });
-  }, [showToast, t]);
-
-  const loadAivisUserDictionaries = useCallback(async (force = false) => {
-    if (!force && aivisUserDictionariesLoaded) {
-      return aivisUserDictionaries;
-    }
-    setAivisUserDictionariesLoading(true);
-    try {
-      const next = await api.getAivisUserDictionaries();
-      setAivisUserDictionaries(next.user_dictionaries ?? []);
-      setAivisUserDictionariesLoaded(true);
-      setAivisUserDictionariesError(null);
-      return next.user_dictionaries ?? [];
-    } catch (e) {
-      const message = String(e);
-      setAivisUserDictionariesError(message);
-      if (force) {
-        showToast(message, "error");
-      }
-      throw e;
-    } finally {
-      setAivisUserDictionariesLoading(false);
-    }
-  }, [aivisUserDictionaries, aivisUserDictionariesLoaded, showToast]);
+  const isLLMModelsDirty = llmModels.isDirty;
+  const syncLLMModelsForm = llmModels.syncForm;
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -918,21 +530,17 @@ export function useSettingsPageData() {
         setSettings(data);
         setAivisUserDictionaryUUID(data.aivis_user_dictionary_uuid ?? "");
         if (!data.has_aivis_api_key) {
-          setAivisUserDictionaries([]);
-          setAivisUserDictionariesLoaded(false);
-          setAivisUserDictionariesError(null);
+          resetAivisUserDictionaries();
         }
         if (!data.has_elevenlabs_api_key) {
-          setElevenLabsVoicesData(null);
-          setElevenLabsVoicesError(null);
+          resetElevenLabsVoices();
         }
         if (!data.has_cartesia_api_key) {
           setCartesiaTTSCatalogData(null);
           setCartesiaTTSCatalogError(null);
         }
         if (!data.has_xai_api_key) {
-          setXAIVoicesData(null);
-          setXAIVoicesError(null);
+          resetXAIVoices();
         }
         setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
         setAlertEnabled(Boolean(data.budget_alert_enabled));
@@ -954,8 +562,8 @@ export function useSettingsPageData() {
         if (!uiFontsDirtyRef.current) {
           syncUIFontForm(data);
         }
-        if (!llmModelsDirtyRef.current) {
-          syncLLMModelForm(data.llm_models);
+        if (!isLLMModelsDirty()) {
+          syncLLMModelsForm(data.llm_models);
         }
       }
       if (nextCatalog) setCatalog(nextCatalog);
@@ -971,7 +579,21 @@ export function useSettingsPageData() {
         setLoading(false);
       }
     }
-  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, syncSummaryAudioForm, syncUIFontForm, t]);
+  }, [
+    resetAivisUserDictionaries,
+    resetElevenLabsVoices,
+    resetXAIVoices,
+    setCartesiaTTSCatalogData,
+    setCartesiaTTSCatalogError,
+    setCatalog,
+    syncAudioBriefingForm,
+    isLLMModelsDirty,
+    syncLLMModelsForm,
+    syncPodcastForm,
+    syncSummaryAudioForm,
+    syncUIFontForm,
+    t,
+  ]);
 
   useEffect(() => {
     load();
@@ -1004,88 +626,6 @@ export function useSettingsPageData() {
   }, [uiFontSerifKey]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
-    void loadAivisModels().catch(() => undefined);
-  }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_xai_api_key || xaiVoicesData != null || xaiVoicesLoading) {
-      return;
-    }
-    void loadXAIVoices().catch(() => undefined);
-  }, [activeSection, loadXAIVoices, settings?.has_xai_api_key, xaiVoicesData, xaiVoicesLoading]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_openai_api_key || openAITTSVoicesData != null || openAITTSVoicesLoading) {
-      return;
-    }
-    void loadOpenAITTSVoices().catch(() => undefined);
-  }, [activeSection, loadOpenAITTSVoices, openAITTSVoicesData, openAITTSVoicesLoading, settings?.has_openai_api_key]);
-
-  useEffect(() => {
-    if (
-      (activeSection !== "audio-briefing" && activeSection !== "summary-audio")
-      || !settings?.has_elevenlabs_api_key
-      || elevenLabsVoicesData != null
-      || elevenLabsVoicesLoading
-    ) {
-      return;
-    }
-    void loadElevenLabsVoices().catch(() => undefined);
-  }, [
-    activeSection,
-    elevenLabsVoicesData,
-    elevenLabsVoicesLoading,
-    loadElevenLabsVoices,
-    settings?.has_elevenlabs_api_key,
-  ]);
-
-  useEffect(() => {
-    if (
-      activeSection !== "summary-audio"
-      || !settings?.has_cartesia_api_key
-      || cartesiaTTSCatalogData != null
-      || cartesiaTTSCatalogLoading
-    ) {
-      return;
-    }
-    void loadCartesiaTTSCatalog().catch(() => undefined);
-  }, [
-    activeSection,
-    cartesiaTTSCatalogData,
-    cartesiaTTSCatalogLoading,
-    loadCartesiaTTSCatalog,
-    settings?.has_cartesia_api_key,
-  ]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
-      return;
-    }
-    void loadGeminiTTSVoices().catch(() => undefined);
-  }, [activeSection, geminiTTSVoicesData, geminiTTSVoicesLoading, loadGeminiTTSVoices]);
-
-  useEffect(() => {
-    if ((activeSection !== "audio-briefing" && activeSection !== "summary-audio") || !settings?.has_azure_speech_api_key || !settings?.azure_speech_region?.trim() || azureSpeechVoicesData != null || azureSpeechVoicesLoading) {
-      return;
-    }
-    void loadAzureSpeechVoices().catch(() => undefined);
-  }, [activeSection, azureSpeechVoicesData, azureSpeechVoicesLoading, loadAzureSpeechVoices, settings?.has_azure_speech_api_key, settings?.azure_speech_region]);
-
-  useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
-      return;
-    }
-    void loadAivisUserDictionaries().catch(() => undefined);
-  }, [
-    activeSection,
-    aivisUserDictionariesLoaded,
-    aivisUserDictionariesLoading,
-    loadAivisUserDictionaries,
-    settings?.has_aivis_api_key,
-  ]);
-
-  useEffect(() => {
     setExpandedAudioBriefingPersonas((prev) => {
       if (prev.length === 0) return [audioBriefingDefaultPersona];
       if (prev.length === 1 && prev[0] === "editor" && audioBriefingDefaultPersona !== "editor") {
@@ -1113,22 +653,6 @@ export function useSettingsPageData() {
   }, [podcastFeedSlug]);
 
   useEffect(() => {
-    let cancelled = false;
-    api.getProviderModelUpdates({ days: 14, limit: 20 })
-      .then((modelUpdates) => {
-        if (cancelled) return;
-        setProviderModelUpdates(modelUpdates ?? []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setProviderModelUpdates([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const inoreaderStatus = params.get("inoreader");
     if (inoreaderStatus === "connected") {
@@ -1151,57 +675,6 @@ export function useSettingsPageData() {
     }
   }, [showToast, t]);
 
-  const modelSelectLabels = useMemo(() => buildModelSelectLabels(t), [t]);
-
-  const applyCostPerformancePreset = useCallback(() => {
-    const preset = buildCostPerformancePreset(catalog);
-    llmModelsDirtyRef.current = true;
-    setAnthropicFactsModel(preset.facts ?? "");
-    setAnthropicFactsSecondaryModel("");
-    setAnthropicFactsSecondaryRatePercent("0");
-    setAnthropicFactsFallbackModel("");
-    setAnthropicSummaryModel(preset.summary ?? "");
-    setAnthropicSummarySecondaryModel("");
-    setAnthropicSummarySecondaryRatePercent("0");
-    setAnthropicSummaryFallbackModel("");
-    setAnthropicDigestClusterModel(preset.digest_cluster ?? "");
-    setAnthropicDigestModel(preset.digest ?? "");
-    setAnthropicAskModel(preset.ask ?? "");
-    setAnthropicSourceSuggestionModel(preset.source_suggestion ?? "");
-    setOpenAIEmbeddingModel(preset.embedding ?? "");
-    setFactsCheckModel(preset.facts_check ?? "");
-    setFactsCheckFallbackModel("");
-    setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
-    setFaithfulnessCheckFallbackModel("");
-    setTTSMarkupPreprocessModel(preset.tts_markup_preprocess_model ?? "");
-  }, [catalog]);
-
-  const optionsForPurpose = useCallback(
-    (purpose: string, currentValue?: string): ModelOption[] => buildOptionsForPurpose(catalog, purpose, currentValue, t),
-    [catalog, t],
-  );
-
-  const optionsForChatModel = useCallback(
-    (currentValue?: string): ModelOption[] => buildOptionsForChatModel(catalog, currentValue, t),
-    [catalog, t],
-  );
-
-  const unavailableSelectedModelWarnings = useMemo(
-    () => buildUnavailableSelectedModelWarnings(catalog, settings?.llm_models, t),
-    [catalog, settings?.llm_models, t],
-  );
-
-  const sourceSuggestionModelOptions = useMemo(
-    () => optionsForPurpose("source_suggestion", anthropicSourceSuggestionModel),
-    [anthropicSourceSuggestionModel, optionsForPurpose]
-  );
-  const openAIEmbeddingModelOptions = useMemo(() => buildEmbeddingModelOptions(catalog, t), [catalog, t]);
-  const modelComparisonEntries = useMemo(() => buildModelComparisonEntries(catalog), [catalog]);
-  const visibleProviderModelUpdates = useMemo(
-    () => buildVisibleProviderModelUpdates(providerModelUpdates, dismissedModelUpdatesAt),
-    [dismissedModelUpdatesAt, providerModelUpdates],
-  );
-
   const budgetRemainingTone = useMemo(() => {
     const v = settings?.current_month.remaining_budget_pct;
     if (v == null) return "text-zinc-700";
@@ -1210,253 +683,18 @@ export function useSettingsPageData() {
     return "text-zinc-700";
   }, [settings?.current_month.remaining_budget_pct, thresholdPct]);
 
-  const apiKeyHandlers = createAPIKeyActionHandlers({
-    confirm,
-    confirmLabel: t("settings.delete"),
-    reload: load,
-    showToast,
-    definitions: {
-      anthropic: {
-        value: anthropicApiKeyInput, setValue: setAnthropicApiKeyInput, setSaving: setSavingAnthropicKey, setDeleting: setDeletingAnthropicKey,
-        save: api.setAnthropicApiKey, remove: api.deleteAnthropicApiKey,
-        deleteTitle: t("settings.anthropicDeleteTitle"), deleteMessage: t("settings.anthropicDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.anthropicSaved"), deleteSuccessMessage: t("settings.toast.anthropicDeleted"),
-      },
-      openai: {
-        value: openAIApiKeyInput, setValue: setOpenAIApiKeyInput, setSaving: setSavingOpenAIKey, setDeleting: setDeletingOpenAIKey,
-        save: api.setOpenAIApiKey, remove: api.deleteOpenAIApiKey,
-        deleteTitle: t("settings.openaiDeleteTitle"), deleteMessage: t("settings.openaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.openaiSaved"), deleteSuccessMessage: t("settings.toast.openaiDeleted"),
-      },
-      google: {
-        value: googleApiKeyInput, setValue: setGoogleApiKeyInput, setSaving: setSavingGoogleKey, setDeleting: setDeletingGoogleKey,
-        save: api.setGoogleApiKey, remove: api.deleteGoogleApiKey,
-        deleteTitle: t("settings.googleDeleteTitle"), deleteMessage: t("settings.googleDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.googleSaved"), deleteSuccessMessage: t("settings.toast.googleDeleted"),
-      },
-      groq: {
-        value: groqApiKeyInput, setValue: setGroqApiKeyInput, setSaving: setSavingGroqKey, setDeleting: setDeletingGroqKey,
-        save: api.setGroqApiKey, remove: api.deleteGroqApiKey,
-        deleteTitle: t("settings.groqDeleteTitle"), deleteMessage: t("settings.groqDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.groqSaved"), deleteSuccessMessage: t("settings.toast.groqDeleted"),
-      },
-      deepseek: {
-        value: deepseekApiKeyInput, setValue: setDeepseekApiKeyInput, setSaving: setSavingDeepSeekKey, setDeleting: setDeletingDeepSeekKey,
-        save: api.setDeepSeekApiKey, remove: api.deleteDeepSeekApiKey,
-        deleteTitle: t("settings.deepseekDeleteTitle"), deleteMessage: t("settings.deepseekDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.deepseekSaved"), deleteSuccessMessage: t("settings.toast.deepseekDeleted"),
-      },
-      alibaba: {
-        value: alibabaApiKeyInput, setValue: setAlibabaApiKeyInput, setSaving: setSavingAlibabaKey, setDeleting: setDeletingAlibabaKey,
-        save: api.setAlibabaApiKey, remove: api.deleteAlibabaApiKey,
-        deleteTitle: t("settings.alibabaDeleteTitle"), deleteMessage: t("settings.alibabaDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.alibabaSaved"), deleteSuccessMessage: t("settings.toast.alibabaDeleted"),
-      },
-      mistral: {
-        value: mistralApiKeyInput, setValue: setMistralApiKeyInput, setSaving: setSavingMistralKey, setDeleting: setDeletingMistralKey,
-        save: api.setMistralApiKey, remove: api.deleteMistralApiKey,
-        deleteTitle: t("settings.mistralDeleteTitle"), deleteMessage: t("settings.mistralDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.mistralSaved"), deleteSuccessMessage: t("settings.toast.mistralDeleted"),
-      },
-      cerebras: {
-        value: cerebrasApiKeyInput, setValue: setCerebrasApiKeyInput, setSaving: setSavingCerebrasKey, setDeleting: setDeletingCerebrasKey,
-        save: api.setCerebrasApiKey, remove: api.deleteCerebrasApiKey,
-        deleteTitle: t("settings.cerebrasDeleteTitle"), deleteMessage: t("settings.cerebrasDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cerebrasSaved"), deleteSuccessMessage: t("settings.toast.cerebrasDeleted"),
-      },
-      minimax: {
-        value: miniMaxApiKeyInput, setValue: setMiniMaxApiKeyInput, setSaving: setSavingMiniMaxKey, setDeleting: setDeletingMiniMaxKey,
-        save: api.setMiniMaxApiKey, remove: api.deleteMiniMaxApiKey,
-        deleteTitle: t("settings.minimaxDeleteTitle"), deleteMessage: t("settings.minimaxDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.minimaxSaved"), deleteSuccessMessage: t("settings.toast.minimaxDeleted"),
-      },
-      xiaomi_mimo_token_plan: {
-        value: xiaomiMiMoTokenPlanApiKeyInput, setValue: setXiaomiMiMoTokenPlanApiKeyInput, setSaving: setSavingXiaomiMiMoTokenPlanKey, setDeleting: setDeletingXiaomiMiMoTokenPlanKey,
-        save: api.setXiaomiMiMoTokenPlanApiKey, remove: api.deleteXiaomiMiMoTokenPlanApiKey,
-        deleteTitle: t("settings.xiaomiMimoTokenPlanDeleteTitle"), deleteMessage: t("settings.xiaomiMimoTokenPlanDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanSaved"), deleteSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanDeleted"),
-      },
-      moonshot: {
-        value: moonshotApiKeyInput, setValue: setMoonshotApiKeyInput, setSaving: setSavingMoonshotKey, setDeleting: setDeletingMoonshotKey,
-        save: api.setMoonshotApiKey, remove: api.deleteMoonshotApiKey,
-        deleteTitle: t("settings.moonshotDeleteTitle"), deleteMessage: t("settings.moonshotDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.moonshotSaved"), deleteSuccessMessage: t("settings.toast.moonshotDeleted"),
-      },
-      xai: {
-        value: xaiApiKeyInput, setValue: setXaiApiKeyInput, setSaving: setSavingXAIKey, setDeleting: setDeletingXAIKey,
-        save: api.setXAIApiKey, remove: api.deleteXAIApiKey,
-        deleteTitle: t("settings.xaiDeleteTitle"), deleteMessage: t("settings.xaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.xaiSaved"), deleteSuccessMessage: t("settings.toast.xaiDeleted"),
-        afterSave: () => { setXAIVoicesData(null); setXAIVoicesError(null); },
-        afterDelete: () => { setXAIVoicesData(null); setXAIVoicesError(null); },
-      },
-      zai: {
-        value: zaiApiKeyInput, setValue: setZaiApiKeyInput, setSaving: setSavingZAIKey, setDeleting: setDeletingZAIKey,
-        save: api.setZAIApiKey, remove: api.deleteZAIApiKey,
-        deleteTitle: t("settings.zaiDeleteTitle"), deleteMessage: t("settings.zaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.zaiSaved"), deleteSuccessMessage: t("settings.toast.zaiDeleted"),
-      },
-      fireworks: {
-        value: fireworksApiKeyInput, setValue: setFireworksApiKeyInput, setSaving: setSavingFireworksKey, setDeleting: setDeletingFireworksKey,
-        save: api.setFireworksApiKey, remove: api.deleteFireworksApiKey,
-        deleteTitle: t("settings.fireworksDeleteTitle"), deleteMessage: t("settings.fireworksDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.fireworksSaved"), deleteSuccessMessage: t("settings.toast.fireworksDeleted"),
-      },
-      together: {
-        value: togetherApiKeyInput, setValue: setTogetherApiKeyInput, setSaving: setSavingTogetherKey, setDeleting: setDeletingTogetherKey,
-        save: api.setTogetherApiKey, remove: api.deleteTogetherApiKey,
-        deleteTitle: t("settings.togetherDeleteTitle"), deleteMessage: t("settings.togetherDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.togetherSaved"), deleteSuccessMessage: t("settings.toast.togetherDeleted"),
-      },
-      poe: {
-        value: poeApiKeyInput, setValue: setPoeApiKeyInput, setSaving: setSavingPoeKey, setDeleting: setDeletingPoeKey,
-        save: api.setPoeApiKey, remove: api.deletePoeApiKey,
-        deleteTitle: t("settings.poeDeleteTitle"), deleteMessage: t("settings.poeDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.poeSaved"), deleteSuccessMessage: t("settings.toast.poeDeleted"),
-      },
-      siliconflow: {
-        value: siliconFlowApiKeyInput, setValue: setSiliconFlowApiKeyInput, setSaving: setSavingSiliconFlowKey, setDeleting: setDeletingSiliconFlowKey,
-        save: api.setSiliconFlowApiKey, remove: api.deleteSiliconFlowApiKey,
-        deleteTitle: t("settings.siliconflowDeleteTitle"), deleteMessage: t("settings.siliconflowDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.siliconflowSaved"), deleteSuccessMessage: t("settings.toast.siliconflowDeleted"),
-      },
-      openrouter: {
-        value: openRouterApiKeyInput, setValue: setOpenRouterApiKeyInput, setSaving: setSavingOpenRouterKey, setDeleting: setDeletingOpenRouterKey,
-        save: api.setOpenRouterApiKey, remove: api.deleteOpenRouterApiKey,
-        deleteTitle: t("settings.openrouterDeleteTitle"), deleteMessage: t("settings.openrouterDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.openrouterSaved"), deleteSuccessMessage: t("settings.toast.openrouterDeleted"),
-      },
-      deepinfra: {
-        value: deepInfraApiKeyInput, setValue: setDeepInfraApiKeyInput, setSaving: setSavingDeepInfraKey, setDeleting: setDeletingDeepInfraKey,
-        save: api.setDeepInfraApiKey, remove: api.deleteDeepInfraApiKey,
-        deleteTitle: t("settings.deepinfraDeleteTitle"), deleteMessage: t("settings.deepinfraDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.deepinfraSaved"), deleteSuccessMessage: t("settings.toast.deepinfraDeleted"),
-      },
-      featherless: {
-        value: featherlessApiKeyInput, setValue: setFeatherlessApiKeyInput, setSaving: setSavingFeatherlessKey, setDeleting: setDeletingFeatherlessKey,
-        save: api.setFeatherlessApiKey, remove: api.deleteFeatherlessApiKey,
-        deleteTitle: t("settings.featherlessDeleteTitle"), deleteMessage: t("settings.featherlessDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.featherlessSaved"), deleteSuccessMessage: t("settings.toast.featherlessDeleted"),
-      },
-      aivis: {
-        value: aivisApiKeyInput, setValue: setAivisApiKeyInput, setSaving: setSavingAivisKey, setDeleting: setDeletingAivisKey,
-        save: api.setAivisApiKey, remove: api.deleteAivisApiKey,
-        deleteTitle: t("settings.aivisDeleteTitle"), deleteMessage: t("settings.aivisDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.aivisSaved"), deleteSuccessMessage: t("settings.toast.aivisDeleted"),
-        afterSave: () => { setAivisUserDictionariesLoaded(false); },
-        afterDelete: () => {
-          setAivisUserDictionaryUUID("");
-          setAivisUserDictionaries([]);
-          setAivisUserDictionariesLoaded(false);
-          setAivisUserDictionariesError(null);
-        },
-      },
-      elevenlabs: {
-        value: elevenLabsApiKeyInput, setValue: setElevenLabsApiKeyInput, setSaving: setSavingElevenLabsKey, setDeleting: setDeletingElevenLabsKey,
-        save: api.setElevenLabsApiKey, remove: api.deleteElevenLabsApiKey,
-        deleteTitle: t("settings.elevenlabsDeleteTitle"), deleteMessage: t("settings.elevenlabsDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.elevenlabsSaved"), deleteSuccessMessage: t("settings.toast.elevenlabsDeleted"),
-        afterSave: () => { setElevenLabsVoicesData(null); setElevenLabsVoicesError(null); },
-        afterDelete: () => { setElevenLabsVoicesData(null); setElevenLabsVoicesError(null); },
-      },
-      cartesia: {
-        value: cartesiaApiKeyInput, setValue: setCartesiaApiKeyInput, setSaving: setSavingCartesiaKey, setDeleting: setDeletingCartesiaKey,
-        save: api.setCartesiaApiKey, remove: api.deleteCartesiaApiKey,
-        deleteTitle: t("settings.cartesiaDeleteTitle"), deleteMessage: t("settings.cartesiaDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cartesiaSaved"), deleteSuccessMessage: t("settings.toast.cartesiaDeleted"),
-      },
-      fish: {
-        value: fishApiKeyInput, setValue: setFishApiKeyInput, setSaving: setSavingFishKey, setDeleting: setDeletingFishKey,
-        save: api.setFishApiKey, remove: api.deleteFishApiKey,
-        deleteTitle: t("settings.fishDeleteTitle"), deleteMessage: t("settings.fishDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.fishSaved"), deleteSuccessMessage: t("settings.toast.fishDeleted"),
-      },
-    },
-  });
-
-  const submitAzureSpeechConfig = async (event: FormEvent) => {
-    event.preventDefault();
-    setSavingAzureSpeechConfig(true);
-    try {
-      const apiKey = azureSpeechApiKeyInput.trim();
-      const region = azureSpeechRegionInput.trim();
-      if (!apiKey) throw new Error(t("settings.error.enterApiKey"));
-      if (!region) throw new Error(t("settings.azureSpeechRegionRequired"));
-      await api.setAzureSpeechConfig(apiKey, region);
-      setAzureSpeechApiKeyInput("");
-      await load();
-      showToast(t("settings.toast.azureSpeechSaved"), "success");
-    } catch (error) {
-      showToast(String(error), "error");
-    } finally {
-      setSavingAzureSpeechConfig(false);
-    }
-  };
-
-  const deleteAzureSpeechConfig = async () => {
-    if (!(await confirm({
-      title: t("settings.azureSpeechDeleteTitle"),
-      message: t("settings.azureSpeechDeleteMessage"),
-      confirmLabel: t("settings.delete"),
-      tone: "danger",
-    }))) {
-      return;
-    }
-    setDeletingAzureSpeechConfig(true);
-    try {
-      await api.deleteAzureSpeechConfig();
-      setAzureSpeechRegionInput("");
-      await load();
-      showToast(t("settings.toast.azureSpeechDeleted"), "success");
-    } catch (error) {
-      showToast(String(error), "error");
-    } finally {
-      setDeletingAzureSpeechConfig(false);
-    }
-  };
-
-  const apiKeyCardLabels = useMemo(() => buildApiKeyCardLabels(t), [t]);
-
-  const accessCards = buildAccessCards(
+  const { accessCards, apiKeyCardLabels } = useSettingsApiKeys({
     settings,
-    {
-      anthropic: createAccessCardRuntime(anthropicApiKeyInput, setAnthropicApiKeyInput, apiKeyHandlers.anthropic!.submit, apiKeyHandlers.anthropic!.remove, savingAnthropicKey, deletingAnthropicKey),
-      openai: createAccessCardRuntime(openAIApiKeyInput, setOpenAIApiKeyInput, apiKeyHandlers.openai!.submit, apiKeyHandlers.openai!.remove, savingOpenAIKey, deletingOpenAIKey),
-      google: createAccessCardRuntime(googleApiKeyInput, setGoogleApiKeyInput, apiKeyHandlers.google!.submit, apiKeyHandlers.google!.remove, savingGoogleKey, deletingGoogleKey),
-      groq: createAccessCardRuntime(groqApiKeyInput, setGroqApiKeyInput, apiKeyHandlers.groq!.submit, apiKeyHandlers.groq!.remove, savingGroqKey, deletingGroqKey),
-      deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek!.submit, apiKeyHandlers.deepseek!.remove, savingDeepSeekKey, deletingDeepSeekKey),
-      alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba!.submit, apiKeyHandlers.alibaba!.remove, savingAlibabaKey, deletingAlibabaKey),
-      minimax: createAccessCardRuntime(miniMaxApiKeyInput, setMiniMaxApiKeyInput, apiKeyHandlers.minimax!.submit, apiKeyHandlers.minimax!.remove, savingMiniMaxKey, deletingMiniMaxKey),
-      xiaomi_mimo_token_plan: createAccessCardRuntime(xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput, apiKeyHandlers.xiaomi_mimo_token_plan!.submit, apiKeyHandlers.xiaomi_mimo_token_plan!.remove, savingXiaomiMiMoTokenPlanKey, deletingXiaomiMiMoTokenPlanKey),
-      mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
-      cerebras: createAccessCardRuntime(cerebrasApiKeyInput, setCerebrasApiKeyInput, apiKeyHandlers.cerebras!.submit, apiKeyHandlers.cerebras!.remove, savingCerebrasKey, deletingCerebrasKey),
-      moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
-      xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),
-      zai: createAccessCardRuntime(zaiApiKeyInput, setZaiApiKeyInput, apiKeyHandlers.zai!.submit, apiKeyHandlers.zai!.remove, savingZAIKey, deletingZAIKey),
-      fireworks: createAccessCardRuntime(fireworksApiKeyInput, setFireworksApiKeyInput, apiKeyHandlers.fireworks!.submit, apiKeyHandlers.fireworks!.remove, savingFireworksKey, deletingFireworksKey),
-      together: createAccessCardRuntime(togetherApiKeyInput, setTogetherApiKeyInput, apiKeyHandlers.together!.submit, apiKeyHandlers.together!.remove, savingTogetherKey, deletingTogetherKey),
-      poe: createAccessCardRuntime(poeApiKeyInput, setPoeApiKeyInput, apiKeyHandlers.poe!.submit, apiKeyHandlers.poe!.remove, savingPoeKey, deletingPoeKey),
-      siliconflow: createAccessCardRuntime(siliconFlowApiKeyInput, setSiliconFlowApiKeyInput, apiKeyHandlers.siliconflow!.submit, apiKeyHandlers.siliconflow!.remove, savingSiliconFlowKey, deletingSiliconFlowKey),
-      azure_speech: createAccessCardRuntime(
-        azureSpeechApiKeyInput,
-        setAzureSpeechApiKeyInput,
-        submitAzureSpeechConfig,
-        deleteAzureSpeechConfig,
-        savingAzureSpeechConfig,
-        deletingAzureSpeechConfig,
-        azureSpeechRegionInput,
-        setAzureSpeechRegionInput,
-      ),
-      openrouter: createAccessCardRuntime(openRouterApiKeyInput, setOpenRouterApiKeyInput, apiKeyHandlers.openrouter!.submit, apiKeyHandlers.openrouter!.remove, savingOpenRouterKey, deletingOpenRouterKey),
-      deepinfra: createAccessCardRuntime(deepInfraApiKeyInput, setDeepInfraApiKeyInput, apiKeyHandlers.deepinfra!.submit, apiKeyHandlers.deepinfra!.remove, savingDeepInfraKey, deletingDeepInfraKey),
-      featherless: createAccessCardRuntime(featherlessApiKeyInput, setFeatherlessApiKeyInput, apiKeyHandlers.featherless!.submit, apiKeyHandlers.featherless!.remove, savingFeatherlessKey, deletingFeatherlessKey),
-      aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis!.submit, apiKeyHandlers.aivis!.remove, savingAivisKey, deletingAivisKey),
-      elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs!.submit, apiKeyHandlers.elevenlabs!.remove, savingElevenLabsKey, deletingElevenLabsKey),
-      cartesia: createAccessCardRuntime(cartesiaApiKeyInput, setCartesiaApiKeyInput, apiKeyHandlers.cartesia!.submit, apiKeyHandlers.cartesia!.remove, savingCartesiaKey, deletingCartesiaKey),
-      fish: createAccessCardRuntime(fishApiKeyInput, setFishApiKeyInput, apiKeyHandlers.fish!.submit, apiKeyHandlers.fish!.remove, savingFishKey, deletingFishKey),
-    },
+    reload: load,
+    confirm,
+    showToast,
     t,
-  );
+    onResetXAIVoices: resetXAIVoices,
+    onMarkAivisUserDictionariesStale: markAivisUserDictionariesStale,
+    onResetAivisUserDictionaries: resetAivisUserDictionaries,
+    onClearAivisUserDictionarySelection: () => setAivisUserDictionaryUUID(""),
+    onResetElevenLabsVoices: resetElevenLabsVoices,
+  });
 
   const { configuredProviderCount, activeAccessCard } = resolveAccessCardSelection(accessCards, activeAccessProvider);
   const {
@@ -1470,26 +708,6 @@ export function useSettingsPageData() {
   useEffect(() => {
     uiFontsDirtyRef.current = uiFontsDirty;
   }, [uiFontsDirty]);
-
-  function dismissProviderModelUpdates() {
-    setDismissedModelUpdatesAt(dismissProviderModelUpdatesToLocalStorage(providerModelUpdates));
-  }
-
-  function restoreProviderModelUpdates() {
-    setDismissedModelUpdatesAt(restoreProviderModelUpdatesFromLocalStorage());
-  }
-
-  function toggleLLMExtras() {
-    llm.setLLMExtrasOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        window.requestAnimationFrame(() => {
-          llmExtrasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      }
-      return next;
-    });
-  }
 
   async function submitBudget(e: FormEvent) {
     e.preventDefault();
@@ -1531,33 +749,6 @@ export function useSettingsPageData() {
         );
         void queryClient.invalidateQueries({ queryKey: ["settings"] });
       },
-    });
-  }
-
-  async function submitLLMModels(e: FormEvent) {
-    await submitSavingFormAction({
-      event: e,
-      setSaving: setSavingLLMModels,
-      showToast,
-      mapError: (error) => localizeSettingsErrorMessage(error, t),
-      run: () => persistLLMModels(buildLLMModelPayload(), t("settings.toast.modelsSaved")),
-    });
-  }
-
-  async function submitAudioBriefingModels(e: FormEvent) {
-    await submitSavingFormAction({
-      event: e,
-      setSaving: setSavingLLMModels,
-      showToast,
-      mapError: (error) => localizeSettingsErrorMessage(error, t),
-      run: () =>
-        persistLLMModels(
-          buildLLMModelPayload({
-            audio_briefing_script: audioBriefingScriptModel || null,
-            audio_briefing_script_fallback: audioBriefingScriptFallbackModel || null,
-          }),
-          t("settings.toast.modelsSaved")
-        ),
     });
   }
 
@@ -2211,10 +1402,10 @@ export function useSettingsPageData() {
     readingPlanWindow,
     readingPlanSize,
     readingPlanDiversifyTopics,
-    navigatorEnabled,
-    navigatorPersonaMode,
-    navigatorPersona,
-    navigatorModel,
+    navigatorEnabled: llmModels.navigatorSummary.enabled,
+    navigatorPersonaMode: llmModels.navigatorSummary.personaMode,
+    navigatorPersona: llmModels.navigatorSummary.persona,
+    navigatorModel: llmModels.navigatorSummary.model,
     audioBriefingEnabled,
     audioBriefingScheduleSummary: formatAudioBriefingScheduleSelection(audioBriefingScheduleSelection, t),
     audioBriefingArticlesPerEpisode,
@@ -2234,7 +1425,7 @@ export function useSettingsPageData() {
 
   const railNotes = buildSettingsRailNotes({
     t,
-    providerModelUpdateCount: visibleProviderModelUpdates.length,
+    providerModelUpdateCount: llmModels.visibleProviderModelUpdates.length,
     notificationBriefingEnabled: notificationPriority.briefing_enabled,
     notificationImmediateEnabled: notificationPriority.immediate_enabled,
     notificationDailyCap: notificationPriority.daily_cap,
@@ -2252,8 +1443,8 @@ export function useSettingsPageData() {
   const audioBriefingSettingsForm = {
     onSubmitSettings: submitAudioBriefingSettings,
     savingSettings: savingAudioBriefing,
-    onSubmitModels: submitAudioBriefingModels,
-    savingModels: savingLLMModels,
+    onSubmitModels: llmModels.audioBriefingSettingsForm.onSubmitModels,
+    savingModels: llmModels.audioBriefingSettingsForm.savingModels,
   };
 
   const audioBriefingSettingsState = buildAudioBriefingSettingsState({
@@ -2281,13 +1472,6 @@ export function useSettingsPageData() {
     fishDuoDistinctVoiceCount,
     elevenLabsDuoReady,
     elevenLabsDuoDistinctVoiceCount,
-  });
-
-  const audioBriefingScriptModels = buildAudioBriefingScriptModels({
-    audioBriefingScriptModel,
-    audioBriefingScriptOptions: optionsForPurpose("summary", audioBriefingScriptModel),
-    audioBriefingScriptFallbackModel,
-    audioBriefingScriptFallbackOptions: optionsForPurpose("summary", audioBriefingScriptFallbackModel),
   });
 
   const audioBriefingDictionaryState = buildAudioBriefingDictionaryState({
@@ -2319,8 +1503,8 @@ export function useSettingsPageData() {
     onChangeDefaultPersona: setAudioBriefingDefaultPersona,
     onChangeBGMEnabled: setAudioBriefingBGMEnabled,
     onChangeBGMPrefix: setAudioBriefingBGMR2Prefix,
-    onChangeAudioBriefingScriptModel: (value: string) => onChangeLLMModel(setAudioBriefingScriptModel, value),
-    onChangeAudioBriefingScriptFallbackModel: (value: string) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value),
+    onChangeAudioBriefingScriptModel: llmModels.audioBriefingScriptActions.onChangeAudioBriefingScriptModel,
+    onChangeAudioBriefingScriptFallbackModel: llmModels.audioBriefingScriptActions.onChangeAudioBriefingScriptFallbackModel,
     onRefreshAivisUserDictionaries: () => {
       void loadAivisUserDictionaries(true).catch(() => undefined);
     },
@@ -2638,147 +1822,6 @@ export function useSettingsPageData() {
     onSelectProvider: setActiveAccessProvider,
   });
 
-  const llmModelsForm = buildSavingForm({
-    onSubmit: submitLLMModels,
-    saving: savingLLMModels,
-  });
-
-  const llmModelsState = buildLLMModelsState({
-    summary: {
-      facts: { value: anthropicFactsModel, options: optionsForPurpose("facts", anthropicFactsModel) },
-      factsSecondary: { value: anthropicFactsSecondaryModel, options: optionsForPurpose("facts", anthropicFactsSecondaryModel) },
-      factsSecondaryRatePercent: anthropicFactsSecondaryRatePercent,
-      factsFallback: { value: anthropicFactsFallbackModel, options: optionsForPurpose("facts", anthropicFactsFallbackModel) },
-      summary: { value: anthropicSummaryModel, options: optionsForPurpose("summary", anthropicSummaryModel) },
-      summarySecondary: { value: anthropicSummarySecondaryModel, options: optionsForPurpose("summary", anthropicSummarySecondaryModel) },
-      summarySecondaryRatePercent: anthropicSummarySecondaryRatePercent,
-      summaryFallback: { value: anthropicSummaryFallbackModel, options: optionsForPurpose("summary", anthropicSummaryFallbackModel) },
-    },
-    digest: {
-      digestCluster: { value: anthropicDigestClusterModel, options: optionsForPurpose("digest_cluster_draft", anthropicDigestClusterModel) },
-      digest: { value: anthropicDigestModel, options: optionsForPurpose("digest", anthropicDigestModel) },
-    },
-    validation: {
-      factsCheck: { value: factsCheckModel, options: optionsForPurpose("facts", factsCheckModel) },
-      factsCheckFallback: { value: factsCheckFallbackModel, options: optionsForPurpose("facts", factsCheckFallbackModel) },
-      faithfulnessCheck: { value: faithfulnessCheckModel, options: optionsForPurpose("summary", faithfulnessCheckModel) },
-      faithfulnessCheckFallback: { value: faithfulnessCheckFallbackModel, options: optionsForPurpose("summary", faithfulnessCheckFallbackModel) },
-    },
-    other: {
-      sourceSuggestion: { value: anthropicSourceSuggestionModel, options: sourceSuggestionModelOptions },
-      ask: { value: anthropicAskModel, options: optionsForPurpose("ask", anthropicAskModel) },
-      embeddings: { value: openAIEmbeddingModel, options: openAIEmbeddingModelOptions },
-    },
-    preprocess: {
-      ttsMarkupPreprocess: { value: ttsMarkupPreprocessModel, options: optionsForChatModel(ttsMarkupPreprocessModel) },
-    },
-  });
-
-  const llmModelsActions = {
-    onChangeModel: (key: string, value: string) => {
-      const handlers: Record<string, (next: string) => void> = {
-        facts: (next) => onChangeLLMModel(setAnthropicFactsModel, next),
-        factsSecondary: (next) => onChangeLLMModel(setAnthropicFactsSecondaryModel, next),
-        factsFallback: (next) => onChangeLLMModel(setAnthropicFactsFallbackModel, next),
-        summary: (next) => onChangeLLMModel(setAnthropicSummaryModel, next),
-        summarySecondary: (next) => onChangeLLMModel(setAnthropicSummarySecondaryModel, next),
-        summaryFallback: (next) => onChangeLLMModel(setAnthropicSummaryFallbackModel, next),
-        digestCluster: (next) => onChangeLLMModel(setAnthropicDigestClusterModel, next),
-        digest: (next) => onChangeLLMModel(setAnthropicDigestModel, next),
-        factsCheck: (next) => onChangeLLMModel(setFactsCheckModel, next),
-        factsCheckFallback: (next) => onChangeLLMModel(setFactsCheckFallbackModel, next),
-        faithfulnessCheck: (next) => onChangeLLMModel(setFaithfulnessCheckModel, next),
-        faithfulnessCheckFallback: (next) => onChangeLLMModel(setFaithfulnessCheckFallbackModel, next),
-        sourceSuggestion: (next) => onChangeLLMModel(setAnthropicSourceSuggestionModel, next),
-        ask: (next) => onChangeLLMModel(setAnthropicAskModel, next),
-        embeddings: (next) => onChangeLLMModel(setOpenAIEmbeddingModel, next),
-        ttsMarkupPreprocess: (next) => onChangeLLMModel(setTTSMarkupPreprocessModel, next),
-      };
-      handlers[key]?.(value);
-    },
-    onChangeRate: (key: "factsSecondaryRatePercent" | "summarySecondaryRatePercent", value: string) => {
-      llmModelsDirtyRef.current = true;
-      if (key === "factsSecondaryRatePercent") {
-        setAnthropicFactsSecondaryRatePercent(value);
-      } else {
-        setAnthropicSummarySecondaryRatePercent(value);
-      }
-    },
-    onOpenModelGuide: llm.openModelGuide,
-    onDismissProviderModelUpdates: dismissProviderModelUpdates,
-    onRestoreProviderModelUpdates: restoreProviderModelUpdates,
-  };
-
-  const llmModelsExtras = buildLLMModelsExtras({
-    llmExtrasOpen: llm.llmExtrasOpen,
-    llmExtrasRef,
-    providerModelUpdates,
-    visibleProviderModelUpdates,
-  });
-
-  const navigatorForm = buildSavingForm({
-    onSubmit: submitLLMModels,
-    saving: savingLLMModels,
-  });
-
-  const navigatorState = buildNavigatorState({
-    enabled: navigatorEnabled,
-    aiNavigatorBriefEnabled,
-    personaMode: navigatorPersonaMode,
-    persona: navigatorPersona,
-    navigatorPersonaCards,
-    navigatorModel,
-    navigatorModelOptions: optionsForPurpose("summary", navigatorModel),
-    navigatorFallbackModel,
-    navigatorFallbackModelOptions: optionsForPurpose("summary", navigatorFallbackModel),
-    aiNavigatorBriefModel,
-    aiNavigatorBriefModelOptions: optionsForPurpose("summary", aiNavigatorBriefModel),
-    aiNavigatorBriefFallbackModel,
-    aiNavigatorBriefFallbackModelOptions: optionsForPurpose("summary", aiNavigatorBriefFallbackModel),
-  });
-
-  const navigatorActions = buildNavigatorActions({
-    onChangeEnabled: (value: boolean) => {
-      llmModelsDirtyRef.current = true;
-      setNavigatorEnabled(value);
-    },
-    onChangeBriefEnabled: (value: boolean) => {
-      llmModelsDirtyRef.current = true;
-      setAINavigatorBriefEnabled(value);
-    },
-    onChangePersonaMode: (value: "fixed" | "random") => {
-      llmModelsDirtyRef.current = true;
-      setNavigatorPersonaMode(value);
-    },
-    onSelectPersona: async (personaKey: string) => {
-      if (navigatorPersonaMode !== "fixed" || personaKey === navigatorPersona || savingLLMModels) return;
-      const previousPersona = settings?.llm_models?.navigator_persona ?? "editor";
-      llmModelsDirtyRef.current = true;
-      setNavigatorPersona(personaKey);
-      setSavingLLMModels(true);
-      try {
-        await persistLLMModels(
-          buildLLMModelPayload({ navigator_persona: personaKey }),
-          t("settings.toast.navigatorSaved")
-        );
-      } catch (e) {
-        setNavigatorPersona(previousPersona);
-        showToast(localizeSettingsErrorMessage(e, t), "error");
-      } finally {
-        setSavingLLMModels(false);
-      }
-    },
-    onChangeModel: (key: "navigator" | "navigatorFallback" | "aiNavigatorBrief" | "aiNavigatorBriefFallback", value: string) => {
-      const handlers = {
-        navigator: (next: string) => onChangeLLMModel(setNavigatorModel, next),
-        navigatorFallback: (next: string) => onChangeLLMModel(setNavigatorFallbackModel, next),
-        aiNavigatorBrief: (next: string) => onChangeLLMModel(setAINavigatorBriefModel, next),
-        aiNavigatorBriefFallback: (next: string) => onChangeLLMModel(setAINavigatorBriefFallbackModel, next),
-      } as const;
-      handlers[key](value);
-    },
-  });
-
   const readingPlanForm = buildSavingForm({
     onSubmit: submitReadingPlan,
     saving: savingReadingPlan,
@@ -2848,14 +1891,14 @@ export function useSettingsPageData() {
     sectionNavItems,
     railNotes,
     selectedSectionMeta,
-    applyCostPerformancePreset,
-    toggleLLMExtras,
+    applyCostPerformancePreset: llmModels.applyCostPerformancePreset,
+    toggleLLMExtras: llmModels.toggleLLMExtras,
     llm,
-    modelSelectLabels,
+    modelSelectLabels: llmModels.modelSelectLabels,
     audioBriefingSettingsForm,
     audioBriefingSettingsState,
     audioBriefingDuoReadiness,
-    audioBriefingScriptModels,
+    audioBriefingScriptModels: llmModels.audioBriefingScriptModels,
     audioBriefingDictionaryState,
     audioBriefingSettingsActions,
     audioBriefingVoiceMatrixForm,
@@ -2885,14 +1928,14 @@ export function useSettingsPageData() {
     saveNotificationPriority,
     integrationsState,
     integrationsActions,
-    llmModelsForm,
-    llmModelsState,
-    llmModelsActions,
-    llmModelsExtras,
-    unavailableSelectedModelWarnings,
-    navigatorForm,
-    navigatorState,
-    navigatorActions,
+    llmModelsForm: llmModels.llmModelsForm,
+    llmModelsState: llmModels.llmModelsState,
+    llmModelsActions: llmModels.llmModelsActions,
+    llmModelsExtras: llmModels.llmModelsExtras,
+    unavailableSelectedModelWarnings: llmModels.unavailableSelectedModelWarnings,
+    navigatorForm: llmModels.navigatorForm,
+    navigatorState: llmModels.navigatorState,
+    navigatorActions: llmModels.navigatorActions,
     budgetForm,
     budgetState,
     budgetActions,
@@ -2954,8 +1997,8 @@ export function useSettingsPageData() {
     uiFontSerifKey,
     setUIFontSansKey,
     setUIFontSerifKey,
-    modelComparisonEntries,
-    llmExtrasRef,
+    modelComparisonEntries: llmModels.modelComparisonEntries,
+    llmExtrasRef: llmModels.llmExtrasRef,
     audioBriefingAivisModels,
     audioBriefingXAIVoices,
     audioBriefingOpenAITTSVoices,

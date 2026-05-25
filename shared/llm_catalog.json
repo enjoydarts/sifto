@@ -3,6 +3,7 @@
     {
       "id": "anthropic",
       "api_key_header": "x-anthropic-api-key",
+      "match_exact": [],
       "match_prefixes": ["claude-"],
       "default_models": {
         "facts": "claude-haiku-4-5",
@@ -30,6 +31,7 @@
     {
       "id": "groq",
       "api_key_header": "x-groq-api-key",
+      "match_exact": [],
       "match_prefixes": ["openai/gpt-oss-", "qwen/", "meta-llama/", "llama-"],
       "default_models": {
         "facts": "openai/gpt-oss-20b",
@@ -44,6 +46,7 @@
       "id": "deepseek",
       "api_key_header": "x-deepseek-api-key",
       "match_exact": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+      "match_prefixes": [],
       "default_models": {
         "facts": "deepseek-chat",
         "summary": "deepseek-chat",
@@ -68,6 +71,7 @@
         "qwen3.5-35b-a3b",
         "qwen3.5-27b"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "qwen3.5-flash",
         "summary": "qwen3.5-plus",
@@ -92,6 +96,7 @@
         "magistral-medium-2509",
         "magistral-small-2509"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "mistral-small-2603",
         "summary": "mistral-small-2603",
@@ -111,6 +116,7 @@
         "qwen-3-235b-a22b-instruct-2507",
         "zai-glm-4.7"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "llama3.1-8b",
         "summary": "gpt-oss-120b",
@@ -129,6 +135,7 @@
         "MiniMax-M2.5",
         "MiniMax-M2.5-highspeed"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "MiniMax-M2.5-highspeed",
         "summary": "MiniMax-M2.7",
@@ -147,6 +154,7 @@
         "mimo-v2-pro",
         "mimo-v2-omni"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "mimo-v2-pro",
         "summary": "mimo-v2-pro",
@@ -191,6 +199,7 @@
         "grok-4.20-0309-reasoning",
         "grok-4.3"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "grok-4-fast-non-reasoning",
         "summary": "grok-4-1-fast-non-reasoning",
@@ -212,6 +221,7 @@
         "glm-4.7-flashx",
         "glm-4.7-flash"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "glm-4.7-flash",
         "summary": "glm-4.7",
@@ -224,6 +234,7 @@
     {
       "id": "fireworks",
       "api_key_header": "x-fireworks-api-key",
+      "match_exact": [],
       "match_prefixes": ["fireworks/", "cogito/"],
       "default_models": {
         "facts": "fireworks/glm-4p7",
@@ -243,8 +254,6 @@
         "moonshotai/Kimi-K2-Instruct",
         "zai-org/GLM-5.1",
         "zai-org/GLM-5",
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b",
         "LiquidAI/LFM2-24B-A2B",
         "deepseek-ai/DeepSeek-V4-Pro",
         "deepseek-ai/DeepSeek-V3.1",
@@ -265,6 +274,7 @@
         "Qwen/Qwen3.6-Plus",
         "Qwen/Qwen3-Coder-Next-FP8"
       ],
+      "match_prefixes": [],
       "default_models": {
         "facts": "together::openai/gpt-oss-20b",
         "summary": "together::moonshotai/Kimi-K2.5",
@@ -278,6 +288,8 @@
       "id": "featherless",
       "label": "Featherless.ai",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
+      "match_prefixes": [],
       "default_models": {
         "facts": "featherless::Qwen/Qwen3.5-9B",
         "summary": "featherless::Qwen/Qwen3.5-9B",
@@ -291,26 +303,35 @@
       "id": "deepinfra",
       "label": "DeepInfra",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
+      "match_prefixes": [],
       "default_models": {}
     },
     {
       "id": "openrouter",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
+      "match_prefixes": [],
       "default_models": {}
     },
     {
       "id": "poe",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
+      "match_prefixes": [],
       "default_models": {}
     },
     {
       "id": "siliconflow",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
+      "match_prefixes": [],
       "default_models": {}
     },
     {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
+      "match_exact": [],
       "match_prefixes": ["gpt-5"],
       "default_models": {
         "facts": "gpt-5.4-mini",
@@ -1197,8 +1218,8 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": false,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": true,
-        "supports_cache_write_pricing": true
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
       },
       "pricing": {
         "pricing_source": "alibaba_modelstudio_qwen3_6_2026_04",
@@ -2092,7 +2113,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2115,7 +2136,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2138,7 +2159,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2161,7 +2182,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2184,7 +2205,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": false,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2207,7 +2228,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": false,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
@@ -2230,7 +2251,7 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": false,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {

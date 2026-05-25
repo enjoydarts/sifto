@@ -312,16 +312,100 @@ func TestLLMCatalogPricingIsFilled(t *testing.T) {
 	}
 }
 
+func TestLLMCatalogPricingMatchesCacheCapabilities(t *testing.T) {
+	catalog := LLMCatalogData()
+	for _, item := range catalog.ChatModels {
+		if item.Pricing == nil || item.Capabilities == nil {
+			continue
+		}
+		if item.Capabilities.SupportsCacheReadPricing && item.Pricing.CacheReadPerMTokUSD <= 0 {
+			t.Fatalf("chat model %q supports cache read pricing but cache_read_per_mtok_usd is %v", item.ID, item.Pricing.CacheReadPerMTokUSD)
+		}
+		if item.Capabilities.SupportsCacheWritePricing && item.Pricing.CacheWritePerMTokUSD <= 0 {
+			t.Fatalf("chat model %q supports cache write pricing but cache_write_per_mtok_usd is %v", item.ID, item.Pricing.CacheWritePerMTokUSD)
+		}
+		if item.Pricing.CacheReadPerMTokUSD > 0 && !item.Capabilities.SupportsCacheReadPricing {
+			t.Fatalf("chat model %q has cache_read_per_mtok_usd but does not support cache read pricing", item.ID)
+		}
+		if item.Pricing.CacheWritePerMTokUSD > 0 && !item.Capabilities.SupportsCacheWritePricing {
+			t.Fatalf("chat model %q has cache_write_per_mtok_usd but does not support cache write pricing", item.ID)
+		}
+	}
+}
+
 func TestLLMCatalogProvidersAndCapabilitiesAreFilled(t *testing.T) {
 	catalog := LLMCatalogData()
 	for _, provider := range catalog.Providers {
 		if provider.APIKeyHeader == "" {
 			t.Fatalf("provider %q has empty api_key_header", provider.ID)
 		}
+		if provider.MatchExact == nil {
+			t.Fatalf("provider %q has nil match_exact; use [] for an empty list", provider.ID)
+		}
+		if provider.MatchPrefixes == nil {
+			t.Fatalf("provider %q has nil match_prefixes; use [] for an empty list", provider.ID)
+		}
 	}
 	for _, item := range catalog.ChatModels {
 		if item.Capabilities == nil {
 			t.Fatalf("chat model %q has nil capabilities", item.ID)
+		}
+	}
+}
+
+func TestLLMCatalogProviderMatchExactDoesNotClaimOtherCatalogProvider(t *testing.T) {
+	catalog := LLMCatalogData()
+	for _, provider := range catalog.Providers {
+		for _, exact := range provider.MatchExact {
+			model := CatalogModelByIDInCatalog(catalog, exact)
+			if model == nil {
+				continue
+			}
+			if model.Provider != provider.ID {
+				t.Fatalf("provider %q match_exact %q is catalog provider %q", provider.ID, exact, model.Provider)
+			}
+		}
+	}
+}
+
+func TestLLMCatalogProviderMatchRulesResolveToProvider(t *testing.T) {
+	catalog := LLMCatalogData()
+	for _, provider := range catalog.Providers {
+		for _, exact := range provider.MatchExact {
+			modelID := exact
+			if provider.ID == "together" {
+				modelID = TogetherAliasModelID(exact)
+			}
+			if got := CatalogProviderForModel(modelID); got != provider.ID {
+				t.Fatalf("CatalogProviderForModel(%q) = %q, want %q", modelID, got, provider.ID)
+			}
+		}
+		for _, prefix := range provider.MatchPrefixes {
+			if prefix == "" {
+				t.Fatalf("provider %q has empty match prefix", provider.ID)
+			}
+			model := prefix + "catalog-smoke-test"
+			if got := CatalogProviderForModel(model); got != provider.ID {
+				t.Fatalf("CatalogProviderForModel(%q) = %q, want %q", model, got, provider.ID)
+			}
+		}
+	}
+}
+
+func TestLLMCatalogDefaultModelsExistAndSupportPurpose(t *testing.T) {
+	catalog := LLMCatalogData()
+	for _, provider := range catalog.Providers {
+		for purpose, modelID := range provider.DefaultModels {
+			model := CatalogModelByIDInCatalog(catalog, modelID)
+			if model == nil {
+				t.Fatalf("provider %q default model for %q = %q is not in catalog", provider.ID, purpose, modelID)
+			}
+			if model.Provider != provider.ID {
+				t.Fatalf("provider %q default model for %q = %q has provider %q", provider.ID, purpose, modelID, model.Provider)
+			}
+			if !CatalogModelSupportsPurposeInCatalog(catalog, modelID, purpose) {
+				t.Fatalf("provider %q default model %q does not support purpose %q", provider.ID, modelID, purpose)
+			}
 		}
 	}
 }

@@ -2758,10 +2758,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_04_24",
-        "input_per_mtok_usd": 1.74,
-        "output_per_mtok_usd": 3.48,
-        "cache_read_per_mtok_usd": 0.145
+        "pricing_source": "deepseek_pricing_2026_05_26",
+        "input_per_mtok_usd": 0.435,
+        "output_per_mtok_usd": 0.87,
+        "cache_read_per_mtok_usd": 0.003625
       }
     },
     {

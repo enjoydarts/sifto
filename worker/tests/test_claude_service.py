@@ -6,9 +6,9 @@ from app.services.claude_service import _llm_meta, summarize, summarize_async
 
 
 class ClaudeServiceTests(unittest.TestCase):
-    def test_llm_meta_prices_opus_4_7_family(self):
+    def test_llm_meta_prices_opus_4_8_family(self):
         class _Message:
-            model = "claude-opus-4-7"
+            model = "claude-opus-4-8"
             usage = type(
                 "Usage",
                 (),
@@ -20,9 +20,9 @@ class ClaudeServiceTests(unittest.TestCase):
                 },
             )()
 
-        llm = _llm_meta(_Message(), "summary", "claude-opus-4-7")
-        self.assertEqual(llm["pricing_model_family"], "claude-opus-4-7")
-        self.assertEqual(llm["pricing_source"], "anthropic_static_2026_04")
+        llm = _llm_meta(_Message(), "summary", "claude-opus-4-8")
+        self.assertEqual(llm["pricing_model_family"], "claude-opus-4-8")
+        self.assertEqual(llm["pricing_source"], "anthropic_static_2026_05")
         self.assertEqual(llm["estimated_cost_usd"], 17.5)
 
     def test_summarize_requires_model(self):

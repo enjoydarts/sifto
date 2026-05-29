@@ -107,6 +107,12 @@ _LEGACY_MODEL_PRICING = {
         "cache_write_per_mtok_usd": 6.25,
         "cache_read_per_mtok_usd": 0.50,
     },
+    "claude-opus-4-8": {
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 25.0,
+        "cache_write_per_mtok_usd": 6.25,
+        "cache_read_per_mtok_usd": 0.50,
+    },
 }
 
 

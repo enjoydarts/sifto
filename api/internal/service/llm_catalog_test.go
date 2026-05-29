@@ -61,6 +61,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::moonshotai/Kimi-K2.6"); got == nil {
 		t.Fatal("siliconflow::moonshotai/Kimi-K2.6 not found in catalog")
 	}
+	if got := findModelCatalog("claude-opus-4-8"); got == nil {
+		t.Fatal("claude-opus-4-8 not found in catalog")
+	}
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
@@ -178,6 +181,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 	}{
 		{model: "claude-sonnet-4-6", provider: "anthropic"},
 		{model: "claude-opus-4-7", provider: "anthropic"},
+		{model: "claude-opus-4-8", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},

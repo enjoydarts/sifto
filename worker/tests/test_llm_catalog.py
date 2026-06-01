@@ -12,7 +12,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("alibaba", "qwen3.7-max"),
     ("mistral", "mistral-small-2603"),
     ("cerebras", "gpt-oss-120b"),
-    ("minimax", "MiniMax-M2.7"),
+    ("minimax", "MiniMax-M3"),
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
     ("moonshot", "kimi-k2.6"),
     ("xai", "grok-4"),

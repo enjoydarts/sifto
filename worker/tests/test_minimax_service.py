@@ -16,6 +16,7 @@ from app.services.minimax_service import (
 
 class MiniMaxServiceTests(unittest.TestCase):
     def test_provider_for_model_detects_minimax(self):
+        self.assertEqual(provider_for_model("MiniMax-M3"), "minimax")
         self.assertEqual(provider_for_model("MiniMax-M2.5"), "minimax")
         self.assertEqual(provider_for_model("MiniMax-M2.7"), "minimax")
         self.assertEqual(provider_for_model("minimax::MiniMax-M2.7"), "minimax")
@@ -49,13 +50,15 @@ class MiniMaxServiceTests(unittest.TestCase):
 
     def test_llm_meta_preserves_minimax_provider_identity(self):
         llm = _llm_meta(
-            "MiniMax-M2.5",
+            "MiniMax-M3",
             "summary",
             {"input_tokens": 0, "output_tokens": 0},
         )
 
         self.assertEqual(llm.get("provider"), "minimax")
-        self.assertEqual(llm.get("model"), "MiniMax-M2.5")
+        self.assertEqual(llm.get("model"), "MiniMax-M3")
+        self.assertEqual(llm.get("pricing_model_family"), "MiniMax-M3")
+        self.assertEqual(llm.get("pricing_source"), "minimax_docs_2026_06")
 
     @patch("app.services.minimax_service._p._chat_json")
     def test_summarize_keeps_taxonomy_genre_from_structured_output(self, chat_json):

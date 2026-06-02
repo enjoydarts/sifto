@@ -652,6 +652,76 @@
       }
     },
     {
+      "id": "siliconflow::Qwen/Qwen3.6-35B-A3B",
+      "provider": "siliconflow",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "SiliconFlow 経由の Qwen3.6 35B-A3B。長文 context と軽量 MoE を活かし、coding、Ask、要約の比較候補として使う枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_pricing_2026_06",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 1.6
+      }
+    },
+    {
+      "id": "siliconflow::Qwen/Qwen3.6-27B",
+      "provider": "siliconflow",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "SiliconFlow 経由の Qwen3.6 27B。dense 系の品質比較として、要約、Ask、事実抽出の置き換え検証に使う候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_pricing_2026_06",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 3.2
+      }
+    },
+    {
+      "id": "siliconflow::zai-org/GLM-5.1",
+      "provider": "siliconflow",
+      "source_provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "SiliconFlow 経由の GLM-5.1。agentic engineering や長めの実装相談、複雑な Ask の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_pricing_2026_06",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
+        "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
       "id": "siliconflow::moonshotai/Kimi-K2.6",
       "provider": "siliconflow",
       "source_provider": "moonshotai",

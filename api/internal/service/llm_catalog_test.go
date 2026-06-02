@@ -70,6 +70,15 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
+	if got := findModelCatalog("siliconflow::Qwen/Qwen3.6-35B-A3B"); got == nil {
+		t.Fatal("siliconflow::Qwen/Qwen3.6-35B-A3B not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::Qwen/Qwen3.6-27B"); got == nil {
+		t.Fatal("siliconflow::Qwen/Qwen3.6-27B not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::zai-org/GLM-5.1"); got == nil {
+		t.Fatal("siliconflow::zai-org/GLM-5.1 not found in catalog")
+	}
 	if got := findModelCatalog("qwen3.6-plus"); got == nil {
 		t.Fatal("qwen3.6-plus not found in catalog")
 	}
@@ -247,6 +256,9 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V4-Pro", provider: "siliconflow"},
 		{model: "siliconflow::MiniMaxAI/MiniMax-M3", provider: "siliconflow"},
+		{model: "siliconflow::Qwen/Qwen3.6-35B-A3B", provider: "siliconflow"},
+		{model: "siliconflow::Qwen/Qwen3.6-27B", provider: "siliconflow"},
+		{model: "siliconflow::zai-org/GLM-5.1", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
 		{model: CerebrasAliasModelID("llama-4-scout-17b-16e-instruct"), provider: "cerebras"},

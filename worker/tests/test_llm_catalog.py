@@ -22,6 +22,9 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("featherless", "featherless::Qwen/Qwen3.5-9B"),
     ("siliconflow", "siliconflow::deepseek-ai/DeepSeek-V3.1"),
     ("siliconflow", "siliconflow::MiniMaxAI/MiniMax-M3"),
+    ("siliconflow", "siliconflow::Qwen/Qwen3.6-35B-A3B"),
+    ("siliconflow", "siliconflow::Qwen/Qwen3.6-27B"),
+    ("siliconflow", "siliconflow::zai-org/GLM-5.1"),
     ("openai", "gpt-5-mini"),
 )
 

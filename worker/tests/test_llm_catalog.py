@@ -21,6 +21,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("together", "together::moonshotai/Kimi-K2.6"),
     ("featherless", "featherless::Qwen/Qwen3.5-9B"),
     ("siliconflow", "siliconflow::deepseek-ai/DeepSeek-V3.1"),
+    ("siliconflow", "siliconflow::MiniMaxAI/MiniMax-M3"),
     ("openai", "gpt-5-mini"),
 )
 

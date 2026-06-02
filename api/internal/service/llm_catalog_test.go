@@ -61,6 +61,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::moonshotai/Kimi-K2.6"); got == nil {
 		t.Fatal("siliconflow::moonshotai/Kimi-K2.6 not found in catalog")
 	}
+	if got := findModelCatalog("siliconflow::MiniMaxAI/MiniMax-M3"); got == nil {
+		t.Fatal("siliconflow::MiniMaxAI/MiniMax-M3 not found in catalog")
+	}
 	if got := findModelCatalog("claude-opus-4-8"); got == nil {
 		t.Fatal("claude-opus-4-8 not found in catalog")
 	}
@@ -243,6 +246,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V4-Pro", provider: "siliconflow"},
+		{model: "siliconflow::MiniMaxAI/MiniMax-M3", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
 		{model: CerebrasAliasModelID("llama-4-scout-17b-16e-instruct"), provider: "cerebras"},

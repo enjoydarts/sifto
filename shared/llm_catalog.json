@@ -669,10 +669,34 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "siliconflow_model_pages_2026_04",
-        "input_per_mtok_usd": 0.95,
+        "pricing_source": "siliconflow_model_pages_2026_06",
+        "input_per_mtok_usd": 0.77,
         "output_per_mtok_usd": 4.0,
-        "cache_read_per_mtok_usd": 0.16
+        "cache_read_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "siliconflow::MiniMaxAI/MiniMax-M3",
+      "provider": "siliconflow",
+      "source_provider": "minimaxai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "SiliconFlow 経由の MiniMax M3。長文 context、coding、agentic な整理を比較したい時に使う最新 MiniMax 枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_siliconflow_minimax_m3_2026_06",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.4,
+        "cache_read_per_mtok_usd": 0.12
       }
     },
     {

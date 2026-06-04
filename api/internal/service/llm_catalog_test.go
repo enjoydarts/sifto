@@ -91,6 +91,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("qwen3.7-max"); got == nil {
 		t.Fatal("qwen3.7-max not found in catalog")
 	}
+	if got := findModelCatalog("qwen3.7-plus"); got == nil {
+		t.Fatal("qwen3.7-plus not found in catalog")
+	}
 	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
 		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
 	}
@@ -208,6 +211,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.6-flash", provider: "alibaba"},
 		{model: "qwen3.6-35b-a3b", provider: "alibaba"},
 		{model: "qwen3.7-max", provider: "alibaba"},
+		{model: "qwen3.7-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "mistral-small-2603", provider: "mistral"},
 		{model: "mistral-medium-3.5", provider: "mistral"},

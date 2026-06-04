@@ -61,6 +61,7 @@
       "api_key_header": "x-alibaba-api-key",
       "match_exact": [
         "qwen3.7-max",
+        "qwen3.7-plus",
         "qwen3-max",
         "qwen3.6-plus",
         "qwen3.6-flash",
@@ -1298,6 +1299,28 @@
         "pricing_source": "alibaba_modelstudio_qwen3_7_2026_05",
         "input_per_mtok_usd": 1.65,
         "output_per_mtok_usd": 4.951
+      }
+    },
+    {
+      "id": "qwen3.7-plus",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "Alibaba Model Studio の qwen3.7-plus。マルチモーダル agent、coding、tool use に向く Plus 枠で、Max より低コストな上位比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_alibaba_qwen3_7_plus_2026_06",
+        "input_per_mtok_usd": 0.276,
+        "output_per_mtok_usd": 1.101
       }
     },
     {

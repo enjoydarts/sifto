@@ -18,6 +18,20 @@ class AlibabaCatalogTests(unittest.TestCase):
         self.assertFalse(model_supports("qwen3.7-max", "supports_cache_write_pricing"))
         self.assertFalse(model_supports("qwen3.7-max", "supports_cache_read_pricing"))
 
+    def test_qwen37_plus_is_available(self):
+        pricing = model_pricing("qwen3.7-plus")
+
+        self.assertEqual(provider_for_model("qwen3.7-plus"), "alibaba")
+        self.assertIsNotNone(pricing)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.276)
+        self.assertEqual(pricing["output_per_mtok_usd"], 1.101)
+        self.assertNotIn("cache_write_per_mtok_usd", pricing)
+        self.assertNotIn("cache_read_per_mtok_usd", pricing)
+        self.assertTrue(model_supports("qwen3.7-plus", "supports_structured_output"))
+        self.assertTrue(model_supports("qwen3.7-plus", "supports_reasoning"))
+        self.assertFalse(model_supports("qwen3.7-plus", "supports_cache_write_pricing"))
+        self.assertFalse(model_supports("qwen3.7-plus", "supports_cache_read_pricing"))
+
 
 if __name__ == "__main__":
     unittest.main()

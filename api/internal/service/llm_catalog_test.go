@@ -67,6 +67,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("claude-opus-4-8"); got == nil {
 		t.Fatal("claude-opus-4-8 not found in catalog")
 	}
+	if got := findModelCatalog("claude-fable-5"); got == nil {
+		t.Fatal("claude-fable-5 not found in catalog")
+	}
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
@@ -198,6 +201,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		provider string
 	}{
 		{model: "claude-sonnet-4-6", provider: "anthropic"},
+		{model: "claude-fable-5", provider: "anthropic"},
 		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "claude-opus-4-8", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},

@@ -891,6 +891,30 @@
       }
     },
     {
+      "id": "claude-fable-5",
+      "provider": "anthropic",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["long-context"],
+      "comment": "Anthropic の最上位 Fable 5。1M context と高い推論力を活かし、長く複雑な整理、重いダイジェスト生成、Ask の品質重視候補として使う枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_06",
+        "input_per_mtok_usd": 10.0,
+        "output_per_mtok_usd": 50.0,
+        "cache_write_per_mtok_usd": 12.50,
+        "cache_read_per_mtok_usd": 1.0
+      }
+    },
+    {
       "id": "gemini-3.5-flash",
       "provider": "google",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

@@ -270,6 +270,35 @@ func (h *SettingsHandler) ObsidianGitHubCallback(w http.ResponseWriter, r *http.
 	http.Redirect(w, r, "/settings?obsidian_github=connected", http.StatusFound)
 }
 
+func (h *SettingsHandler) resetChangedModelSplitUsage(ctx context.Context, userID string, before, after *model.UserSettings) {
+	if before == nil || after == nil {
+		return
+	}
+	if modelSplitConfigChanged(before.FactsModel, before.FactsSecondaryModel, before.FactsSecondaryRatePercent, after.FactsModel, after.FactsSecondaryModel, after.FactsSecondaryRatePercent) {
+		if err := service.ResetSplitPrimaryModelUsage(ctx, h.cache, userID, "facts"); err != nil {
+			log.Printf("facts model split usage reset failed user_id=%s err=%v", userID, err)
+		}
+	}
+	if modelSplitConfigChanged(before.SummaryModel, before.SummarySecondaryModel, before.SummarySecondaryRatePercent, after.SummaryModel, after.SummarySecondaryModel, after.SummarySecondaryRatePercent) {
+		if err := service.ResetSplitPrimaryModelUsage(ctx, h.cache, userID, "summary"); err != nil {
+			log.Printf("summary model split usage reset failed user_id=%s err=%v", userID, err)
+		}
+	}
+}
+
+func modelSplitConfigChanged(beforePrimary, beforeSecondary *string, beforeRate int, afterPrimary, afterSecondary *string, afterRate int) bool {
+	return settingsStringValue(beforePrimary) != settingsStringValue(afterPrimary) ||
+		settingsStringValue(beforeSecondary) != settingsStringValue(afterSecondary) ||
+		beforeRate != afterRate
+}
+
+func settingsStringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(*v)
+}
+
 func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
@@ -304,6 +333,11 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	beforeSettings, beforeErr := h.settings.GetUserSettings(r.Context(), userID)
+	if beforeErr != nil {
+		writeRepoError(w, beforeErr)
 		return
 	}
 	settings, err := h.settings.UpdateLLMModels(r.Context(), userID, service.UpdateLLMModelsInput{
@@ -345,6 +379,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		writeRepoError(w, err)
 		return
 	}
+	h.resetChangedModelSplitUsage(r.Context(), userID, beforeSettings, settings)
 	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
 		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}

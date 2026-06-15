@@ -388,9 +388,11 @@ func extractAndPersistFacts(
 	var fallbackModelOverride *string
 	var factsPrimaryModel *string
 	var factsSecondaryModel *string
+	var factsSecondaryRatePercent int
 	if userModelSettings != nil {
 		factsPrimaryModel = ptrStringOrNil(userModelSettings.FactsModel)
 		factsSecondaryModel = ptrStringOrNil(userModelSettings.FactsSecondaryModel)
+		factsSecondaryRatePercent = userModelSettings.FactsSecondaryRatePercent
 		primaryModelOverride = service.ChooseSplitPrimaryModelWithUsage(
 			ctx,
 			deps.cache,
@@ -398,7 +400,7 @@ func extractAndPersistFacts(
 			"facts",
 			factsPrimaryModel,
 			factsSecondaryModel,
-			userModelSettings.FactsSecondaryRatePercent,
+			factsSecondaryRatePercent,
 		)
 		fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
 	}
@@ -491,7 +493,7 @@ func extractAndPersistFacts(
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil, factsPromptResolution)
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts_localization", factsResp.FactsLocalizationLLM, attempt, userIDPtr, &data.SourceID, &itemID, nil, nil)
-		service.RecordSplitPrimaryModelUsage(ctx, deps.cache, ptrStringValue(userIDPtr), "facts", factsPrimaryModel, factsSecondaryModel, executionFailedModel(factsAttempt.Runtime, currentModelOverride))
+		service.RecordSplitPrimaryModelUsage(ctx, deps.cache, ptrStringValue(userIDPtr), "facts", factsPrimaryModel, factsSecondaryModel, factsSecondaryRatePercent, executionFailedModel(factsAttempt.Runtime, currentModelOverride))
 		log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
 		var factsCheckModel *string
@@ -623,9 +625,11 @@ func summarizeAndPersistItem(
 		var fallbackModelOverride *string
 		var summaryPrimaryModel *string
 		var summarySecondaryModel *string
+		var summarySecondaryRatePercent int
 		if userModelSettings != nil {
 			summaryPrimaryModel = ptrStringOrNil(userModelSettings.SummaryModel)
 			summarySecondaryModel = ptrStringOrNil(userModelSettings.SummarySecondaryModel)
+			summarySecondaryRatePercent = userModelSettings.SummarySecondaryRatePercent
 			primaryModelOverride = service.ChooseSplitPrimaryModelWithUsage(
 				ctx,
 				deps.cache,
@@ -633,7 +637,7 @@ func summarizeAndPersistItem(
 				"summary",
 				summaryPrimaryModel,
 				summarySecondaryModel,
-				userModelSettings.SummarySecondaryRatePercent,
+				summarySecondaryRatePercent,
 			)
 			fallbackModelOverride = ptrStringOrNil(userModelSettings.SummaryFallbackModel)
 		}
@@ -735,7 +739,7 @@ func summarizeAndPersistItem(
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil, summaryPromptResolution)
-		service.RecordSplitPrimaryModelUsage(ctx, deps.cache, ptrStringValue(userIDPtr), "summary", summaryPrimaryModel, summarySecondaryModel, executionFailedModel(summaryAttempt.Runtime, primaryModelOverride))
+		service.RecordSplitPrimaryModelUsage(ctx, deps.cache, ptrStringValue(userIDPtr), "summary", summaryPrimaryModel, summarySecondaryModel, summarySecondaryRatePercent, executionFailedModel(summaryAttempt.Runtime, primaryModelOverride))
 
 		var faithfulnessModel *string
 		var faithfulnessFallbackModel *string

@@ -479,6 +479,10 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 	return payload, nil
 }
 
+func (s *SettingsService) GetUserSettings(ctx context.Context, userID string) (*model.UserSettings, error) {
+	return s.repo.EnsureDefaults(ctx, userID)
+}
+
 func (s *SettingsService) populateNotificationPriority(ctx context.Context, userID string, payload *SettingsGetPayload) {
 	if s.notificationRuleRepo == nil {
 		return

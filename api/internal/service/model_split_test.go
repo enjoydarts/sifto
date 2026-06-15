@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,8 +35,15 @@ func (m *memoryJSONCache) SetJSON(_ context.Context, key string, value any, _ ti
 
 func (m *memoryJSONCache) GetVersion(context.Context, string) (int64, error)  { return 0, nil }
 func (m *memoryJSONCache) BumpVersion(context.Context, string) (int64, error) { return 0, nil }
-func (m *memoryJSONCache) DeleteByPrefix(context.Context, string, int64) (int64, error) {
-	return 0, nil
+func (m *memoryJSONCache) DeleteByPrefix(_ context.Context, prefix string, _ int64) (int64, error) {
+	var deleted int64
+	for key := range m.data {
+		if strings.HasPrefix(key, prefix) {
+			delete(m.data, key)
+			deleted++
+		}
+	}
+	return deleted, nil
 }
 func (m *memoryJSONCache) Ping(context.Context) error { return nil }
 func (m *memoryJSONCache) IncrMetric(context.Context, string, string, int64, time.Time, time.Duration) error {
@@ -80,17 +88,67 @@ func TestChooseSplitPrimaryModelWithUsageAndRecord(t *testing.T) {
 	if first == nil || *first != "secondary" {
 		t.Fatalf("first choose = %v, want secondary", modelSplitStringValue(first))
 	}
-	RecordSplitPrimaryModelUsage(ctx, cache, "u1", "facts", primary, secondary, first)
+	RecordSplitPrimaryModelUsage(ctx, cache, "u1", "facts", primary, secondary, 33, first)
 
 	second := ChooseSplitPrimaryModelWithUsage(ctx, cache, "u1", "facts", primary, secondary, 33)
 	if second == nil || *second != "primary" {
 		t.Fatalf("second choose = %v, want primary", modelSplitStringValue(second))
 	}
-	RecordSplitPrimaryModelUsage(ctx, cache, "u1", "facts", primary, secondary, second)
+	RecordSplitPrimaryModelUsage(ctx, cache, "u1", "facts", primary, secondary, 33, second)
 
 	third := ChooseSplitPrimaryModelWithUsage(ctx, cache, "u1", "facts", primary, secondary, 33)
 	if third == nil || *third != "primary" {
 		t.Fatalf("third choose = %v, want primary", modelSplitStringValue(third))
+	}
+}
+
+func TestModelSplitUsageCacheKeyIncludesSplitConfig(t *testing.T) {
+	primary := strptr("primary")
+	secondary := strptr("secondary")
+	otherSecondary := strptr("other-secondary")
+
+	base := modelSplitUsageCacheKey("u1", "facts", primary, secondary, 33)
+	if got := modelSplitUsageCacheKey("u1", "facts", primary, secondary, 50); got == base {
+		t.Fatal("rate change should use a different model split usage cache key")
+	}
+	if got := modelSplitUsageCacheKey("u1", "facts", primary, otherSecondary, 33); got == base {
+		t.Fatal("secondary model change should use a different model split usage cache key")
+	}
+}
+
+func TestShouldUseSecondaryForSequenceTracksTargetRate(t *testing.T) {
+	secondaryCount := 0
+	for i := int64(1); i <= 100; i++ {
+		if shouldUseSecondaryForSequence(i, 33) {
+			secondaryCount++
+		}
+	}
+	if secondaryCount != 33 {
+		t.Fatalf("secondary count = %d, want 33", secondaryCount)
+	}
+}
+
+func TestResetSplitPrimaryModelUsageDeletesPurposeHistory(t *testing.T) {
+	cache := &memoryJSONCache{data: map[string]any{}}
+	ctx := context.Background()
+	primary := strptr("primary")
+	secondary := strptr("secondary")
+
+	cache.data[modelSplitUsageCacheKey("u1", "facts", primary, secondary, 33)] = modelSplitUsageCounts{PrimaryCount: 2}
+	cache.data[modelSplitUsageCacheKey("u1", "facts", primary, secondary, 50)] = modelSplitUsageCounts{PrimaryCount: 1}
+	cache.data[modelSplitUsageCacheKey("u1", "summary", primary, secondary, 33)] = modelSplitUsageCounts{PrimaryCount: 9}
+
+	if err := ResetSplitPrimaryModelUsage(ctx, cache, "u1", "facts"); err != nil {
+		t.Fatalf("ResetSplitPrimaryModelUsage() error = %v", err)
+	}
+	if _, ok := cache.data[modelSplitUsageCacheKey("u1", "facts", primary, secondary, 33)]; ok {
+		t.Fatal("facts 33 history still exists")
+	}
+	if _, ok := cache.data[modelSplitUsageCacheKey("u1", "facts", primary, secondary, 50)]; ok {
+		t.Fatal("facts 50 history still exists")
+	}
+	if _, ok := cache.data[modelSplitUsageCacheKey("u1", "summary", primary, secondary, 33)]; !ok {
+		t.Fatal("summary history should be kept")
 	}
 }
 

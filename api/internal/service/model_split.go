@@ -35,15 +35,21 @@ func ChooseSplitPrimaryModelWithUsage(ctx context.Context, cache JSONCache, user
 	if !canUseModelSplitUsageCache(cache, userID, purpose) {
 		return ChooseSplitPrimaryModel(primary, secondary, secondaryRatePercent)
 	}
-	counts, ok := loadModelSplitUsageCounts(ctx, cache, userID, purpose)
+	if chosen, ok := chooseSplitPrimaryModelWithRedisSequence(ctx, cache, userID, purpose, primary, secondary, secondaryRatePercent); ok {
+		return chosen
+	}
+	counts, ok := loadModelSplitUsageCounts(ctx, cache, userID, purpose, primary, secondary, secondaryRatePercent)
 	if !ok {
 		return ChooseSplitPrimaryModel(primary, secondary, secondaryRatePercent)
 	}
 	return resolveSplitPrimaryModelByUsage(primary, secondary, secondaryRatePercent, counts)
 }
 
-func RecordSplitPrimaryModelUsage(ctx context.Context, cache JSONCache, userID, purpose string, primary, secondary, usedModel *string) {
+func RecordSplitPrimaryModelUsage(ctx context.Context, cache JSONCache, userID, purpose string, primary, secondary *string, secondaryRatePercent int, usedModel *string) {
 	if !canUseModelSplitUsageCache(cache, userID, purpose) || usedModel == nil {
+		return
+	}
+	if client, _ := RedisClientFromCache(cache); client != nil {
 		return
 	}
 	used := strings.TrimSpace(*usedModel)
@@ -58,7 +64,7 @@ func RecordSplitPrimaryModelUsage(ctx context.Context, cache JSONCache, userID, 
 	if used == "" || (used != primaryModel && used != secondaryModel) {
 		return
 	}
-	counts, ok := loadModelSplitUsageCounts(ctx, cache, userID, purpose)
+	counts, ok := loadModelSplitUsageCounts(ctx, cache, userID, purpose, primary, secondary, secondaryRatePercent)
 	if !ok {
 		return
 	}
@@ -67,7 +73,15 @@ func RecordSplitPrimaryModelUsage(ctx context.Context, cache JSONCache, userID, 
 	} else {
 		counts.PrimaryCount++
 	}
-	_ = cache.SetJSON(ctx, modelSplitUsageCacheKey(userID, purpose), counts, 180*24*time.Hour)
+	_ = cache.SetJSON(ctx, modelSplitUsageCacheKey(userID, purpose, primary, secondary, secondaryRatePercent), counts, 180*24*time.Hour)
+}
+
+func ResetSplitPrimaryModelUsage(ctx context.Context, cache JSONCache, userID, purpose string) error {
+	if !canUseModelSplitUsageCache(cache, userID, purpose) {
+		return nil
+	}
+	_, err := cache.DeleteByPrefix(ctx, modelSplitUsageCachePrefix(userID, purpose), 1000)
+	return err
 }
 
 func resolveSplitPrimaryModel(primary, secondary *string, secondaryRatePercent int, draw func(int) int) *string {
@@ -108,8 +122,69 @@ func resolveSplitPrimaryModelByUsage(primary, secondary *string, secondaryRatePe
 	return primary
 }
 
-func modelSplitUsageCacheKey(userID, purpose string) string {
-	return fmt.Sprintf("model_split_usage:%s:%s", strings.TrimSpace(userID), strings.TrimSpace(purpose))
+func chooseSplitPrimaryModelWithRedisSequence(ctx context.Context, cache JSONCache, userID, purpose string, primary, secondary *string, secondaryRatePercent int) (*string, bool) {
+	if secondary == nil || strings.TrimSpace(*secondary) == "" {
+		return primary, true
+	}
+	rate := normalizeModelSplitRatePercent(&secondaryRatePercent)
+	if rate <= 0 {
+		return primary, true
+	}
+	if rate >= 100 {
+		return secondary, true
+	}
+	client, prefix := RedisClientFromCache(cache)
+	if client == nil {
+		return nil, false
+	}
+	key := modelSplitUsageCacheKey(userID, purpose, primary, secondary, secondaryRatePercent) + ":seq"
+	if prefix != "" {
+		key = prefix + ":" + key
+	}
+	n, err := client.Incr(ctx, key).Result()
+	if err != nil {
+		return nil, false
+	}
+	_ = client.Expire(ctx, key, 180*24*time.Hour).Err()
+	if shouldUseSecondaryForSequence(n, rate) {
+		return secondary, true
+	}
+	return primary, true
+}
+
+func shouldUseSecondaryForSequence(n int64, rate int) bool {
+	if n <= 0 || rate <= 0 {
+		return false
+	}
+	if rate >= 100 {
+		return true
+	}
+	return ((n*int64(rate))+99)/100 > (((n-1)*int64(rate))+99)/100
+}
+
+func modelSplitUsageCacheKey(userID, purpose string, primary, secondary *string, secondaryRatePercent int) string {
+	return fmt.Sprintf(
+		"%s%s:%s:%d",
+		modelSplitUsageCachePrefix(userID, purpose),
+		modelSplitCachePart(primary),
+		modelSplitCachePart(secondary),
+		normalizeModelSplitRatePercent(&secondaryRatePercent),
+	)
+}
+
+func modelSplitUsageCachePrefix(userID, purpose string) string {
+	return fmt.Sprintf("model_split_usage:%s:%s:", strings.TrimSpace(userID), strings.TrimSpace(purpose))
+}
+
+func modelSplitCachePart(model *string) string {
+	if model == nil {
+		return "_"
+	}
+	v := strings.TrimSpace(*model)
+	if v == "" {
+		return "_"
+	}
+	return strings.NewReplacer(":", "_", "/", "_", " ", "_").Replace(v)
 }
 
 func canUseModelSplitUsageCache(cache JSONCache, userID, purpose string) bool {
@@ -120,9 +195,9 @@ func canUseModelSplitUsageCache(cache JSONCache, userID, purpose string) bool {
 	return !isNoop
 }
 
-func loadModelSplitUsageCounts(ctx context.Context, cache JSONCache, userID, purpose string) (modelSplitUsageCounts, bool) {
+func loadModelSplitUsageCounts(ctx context.Context, cache JSONCache, userID, purpose string, primary, secondary *string, secondaryRatePercent int) (modelSplitUsageCounts, bool) {
 	var counts modelSplitUsageCounts
-	ok, err := cache.GetJSON(ctx, modelSplitUsageCacheKey(userID, purpose), &counts)
+	ok, err := cache.GetJSON(ctx, modelSplitUsageCacheKey(userID, purpose, primary, secondary, secondaryRatePercent), &counts)
 	if err != nil {
 		return modelSplitUsageCounts{}, false
 	}

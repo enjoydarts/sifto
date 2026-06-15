@@ -269,6 +269,7 @@
         "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
         "google/gemma-4-31B-it",
         "google/gemma-3n-E4B-it",
+        "MiniMaxAI/MiniMax-M3",
         "MiniMaxAI/MiniMax-M2.7",
         "Qwen/Qwen2.5-7B-Instruct-Turbo",
         "Qwen/Qwen3.5-397B-A17B",
@@ -2908,6 +2909,29 @@
       }
     },
     {
+      "id": "qwen3p7-plus",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest", "fast"],
+      "comment": "Fireworks に追加された Qwen 3.7 Plus 枠。Qwen 3.6 Plus 後継として、要約や Ask の上位比較候補に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_fireworks_qwen3p7_plus_2026_06",
+        "input_per_mtok_usd": 0.4,
+        "output_per_mtok_usd": 1.6,
+        "cache_read_per_mtok_usd": 0.08
+      }
+    },
+    {
       "id": "deepseek-v4-flash",
       "provider": "deepseek",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
@@ -3754,6 +3778,30 @@
       },
       "pricing": {
         "pricing_source": "together_model_page_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.06
+      }
+    },
+    {
+      "id": "together::MiniMaxAI/MiniMax-M3",
+      "provider": "together",
+      "source_provider": "minimaxai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "Together AI 上の MiniMax M3。M2.7 後継の上位比較候補として、長めの要約や Ask、agentic workflow の評価に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_together_minimax_m3_2026_06",
         "input_per_mtok_usd": 0.3,
         "output_per_mtok_usd": 1.2,
         "cache_read_per_mtok_usd": 0.06

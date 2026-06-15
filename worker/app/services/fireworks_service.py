@@ -17,6 +17,7 @@ _LEGACY_MODEL_PRICING = {
     "fireworks/minimax-m2p5": {"input_per_mtok_usd": 0.30, "output_per_mtok_usd": 1.20, "cache_read_per_mtok_usd": 0.03},
     "fireworks/qwen3-8b": {"input_per_mtok_usd": 0.20, "output_per_mtok_usd": 0.20, "cache_read_per_mtok_usd": 0.10},
     "fireworks/qwen3p6-plus": {"input_per_mtok_usd": 0.50, "output_per_mtok_usd": 3.00, "cache_read_per_mtok_usd": 0.10},
+    "qwen3p7-plus": {"input_per_mtok_usd": 0.40, "output_per_mtok_usd": 1.60, "cache_read_per_mtok_usd": 0.08},
 }
 
 _config = ProviderConfig(

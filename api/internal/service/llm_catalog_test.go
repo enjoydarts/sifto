@@ -100,6 +100,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
 		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
 	}
+	if got := findModelCatalog("qwen3p7-plus"); got == nil {
+		t.Fatal("qwen3p7-plus not found in catalog")
+	}
 	if got := findModelCatalog("fireworks/deepseek-v4-pro"); got == nil {
 		t.Fatal("fireworks/deepseek-v4-pro not found in catalog")
 	}
@@ -187,6 +190,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("Qwen/Qwen3.6-Plus")); got == nil {
 		t.Fatal("together::Qwen/Qwen3.6-Plus not found in catalog")
 	}
+	if got := findModelCatalog(TogetherAliasModelID("MiniMaxAI/MiniMax-M3")); got == nil {
+		t.Fatal("together::MiniMaxAI/MiniMax-M3 not found in catalog")
+	}
 	if got := findModelCatalog(FeatherlessAliasModelID("Qwen/Qwen3.5-9B")); got == nil {
 		t.Fatal("featherless::Qwen/Qwen3.5-9B not found in catalog")
 	}
@@ -237,6 +243,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "fireworks/kimi-k2p6", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
+		{model: "qwen3p7-plus", provider: "fireworks"},
 		{model: "fireworks/deepseek-v4-pro", provider: "fireworks"},
 		{model: "kimi-k2.6", provider: "moonshot"},
 		{model: "kimi-k2.5", provider: "moonshot"},
@@ -256,6 +263,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3.6-Plus"), provider: "together"},
+		{model: TogetherAliasModelID("MiniMaxAI/MiniMax-M3"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
 		{model: "gpt-5.5-pro", provider: "openai"},

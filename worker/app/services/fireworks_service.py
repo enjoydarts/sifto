@@ -8,6 +8,7 @@ _LEGACY_MODEL_PRICING = {
     "fireworks/gpt-oss-120b": {"input_per_mtok_usd": 0.15, "output_per_mtok_usd": 0.60, "cache_read_per_mtok_usd": 0.01},
     "fireworks/glm-4p7": {"input_per_mtok_usd": 0.60, "output_per_mtok_usd": 2.20, "cache_read_per_mtok_usd": 0.30},
     "fireworks/glm-5": {"input_per_mtok_usd": 1.0, "output_per_mtok_usd": 3.2, "cache_read_per_mtok_usd": 0.2},
+    "fireworks/glm-5p2": {"input_per_mtok_usd": 1.40, "output_per_mtok_usd": 4.40, "cache_read_per_mtok_usd": 0.26},
     "fireworks/kimi-k2-instruct-0905": {"input_per_mtok_usd": 0.60, "output_per_mtok_usd": 2.50, "cache_read_per_mtok_usd": 0.30},
     "fireworks/kimi-k2-thinking": {"input_per_mtok_usd": 0.60, "output_per_mtok_usd": 2.50, "cache_read_per_mtok_usd": 0.30},
     "fireworks/kimi-k2p5": {"input_per_mtok_usd": 0.60, "output_per_mtok_usd": 3.00, "cache_read_per_mtok_usd": 0.10},

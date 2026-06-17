@@ -215,6 +215,7 @@
       "id": "zai",
       "api_key_header": "x-zai-api-key",
       "match_exact": [
+        "glm-5.2",
         "glm-5.1",
         "glm-5-turbo",
         "glm-5",
@@ -236,7 +237,7 @@
     {
       "id": "fireworks",
       "api_key_header": "x-fireworks-api-key",
-      "match_exact": [],
+      "match_exact": ["glm-5p2"],
       "match_prefixes": ["fireworks/", "cogito/"],
       "default_models": {
         "facts": "fireworks/glm-4p7",
@@ -2335,6 +2336,30 @@
       }
     },
     {
+      "id": "glm-5.2",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest"],
+      "comment": "Z.ai の GLM-5.2。GLM-5.1 後継として、要約・Ask・ダイジェストの上位比較候補に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_zai_glm_5p2_2026_06",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
+        "cache_write_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
       "id": "glm-5-turbo",
       "provider": "zai",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
@@ -2653,6 +2678,29 @@
         "input_per_mtok_usd": 1.0,
         "output_per_mtok_usd": 3.2,
         "cache_read_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "fireworks/glm-5p2",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["latest"],
+      "comment": "Fireworks 経由で使う GLM-5.2。Z.ai 直結とは別経路で、要約・Ask・ダイジェストの上位比較候補に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_fireworks_glm_5p2_2026_06",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
+        "cache_read_per_mtok_usd": 0.26
       }
     },
     {

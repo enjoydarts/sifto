@@ -28,7 +28,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("siliconflow", "siliconflow::MiniMaxAI/MiniMax-M3"),
     ("siliconflow", "siliconflow::Qwen/Qwen3.6-35B-A3B"),
     ("siliconflow", "siliconflow::Qwen/Qwen3.6-27B"),
-    ("siliconflow", "siliconflow::zai-org/GLM-5.1"),
+    ("siliconflow", "siliconflow::zai-org/GLM-5.2"),
     ("openai", "gpt-5-mini"),
 )
 

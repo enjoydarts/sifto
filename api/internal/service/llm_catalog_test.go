@@ -82,6 +82,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::zai-org/GLM-5.1"); got == nil {
 		t.Fatal("siliconflow::zai-org/GLM-5.1 not found in catalog")
 	}
+	if got := findModelCatalog("siliconflow::zai-org/GLM-5.2"); got == nil {
+		t.Fatal("siliconflow::zai-org/GLM-5.2 not found in catalog")
+	}
 	if got := findModelCatalog("qwen3.6-plus"); got == nil {
 		t.Fatal("qwen3.6-plus not found in catalog")
 	}
@@ -99,6 +102,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	}
 	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
 		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
+	}
+	if got := findModelCatalog("fireworks/glm-5p2"); got == nil {
+		t.Fatal("fireworks/glm-5p2 not found in catalog")
 	}
 	if got := findModelCatalog("qwen3p7-plus"); got == nil {
 		t.Fatal("qwen3p7-plus not found in catalog")
@@ -243,6 +249,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "fireworks/kimi-k2p6", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
+		{model: "fireworks/glm-5p2", provider: "fireworks"},
 		{model: "qwen3p7-plus", provider: "fireworks"},
 		{model: "fireworks/deepseek-v4-pro", provider: "fireworks"},
 		{model: "kimi-k2.6", provider: "moonshot"},
@@ -275,6 +282,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "siliconflow::Qwen/Qwen3.6-35B-A3B", provider: "siliconflow"},
 		{model: "siliconflow::Qwen/Qwen3.6-27B", provider: "siliconflow"},
 		{model: "siliconflow::zai-org/GLM-5.1", provider: "siliconflow"},
+		{model: "siliconflow::zai-org/GLM-5.2", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
 		{model: CerebrasAliasModelID("llama-4-scout-17b-16e-instruct"), provider: "cerebras"},

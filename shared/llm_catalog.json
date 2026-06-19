@@ -255,6 +255,7 @@
         "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.5",
         "moonshotai/Kimi-K2-Instruct",
+        "zai-org/GLM-5.2",
         "zai-org/GLM-5.1",
         "zai-org/GLM-5",
         "LiquidAI/LFM2-24B-A2B",
@@ -3484,6 +3485,30 @@
         "pricing_source": "together_pricing_2026_04",
         "input_per_mtok_usd": 1.4,
         "output_per_mtok_usd": 4.4
+      }
+    },
+    {
+      "id": "together::zai-org/GLM-5.2",
+      "provider": "together",
+      "source_provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["latest", "jsonStable"],
+      "comment": "Together 経由の GLM-5.2。GLM-5.1 後継として、長手数のエージェント系や難しめの実装相談、複雑な Ask の上位比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_pricing_2026_06",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
+        "cache_read_per_mtok_usd": 0.26
       }
     },
     {

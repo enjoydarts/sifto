@@ -23,6 +23,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("fireworks", "qwen3p7-plus"),
     ("together", "together::moonshotai/Kimi-K2.6"),
     ("together", "together::MiniMaxAI/MiniMax-M3"),
+    ("together", "together::zai-org/GLM-5.2"),
     ("featherless", "featherless::Qwen/Qwen3.5-9B"),
     ("siliconflow", "siliconflow::deepseek-ai/DeepSeek-V3.1"),
     ("siliconflow", "siliconflow::MiniMaxAI/MiniMax-M3"),

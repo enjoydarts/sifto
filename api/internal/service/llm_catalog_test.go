@@ -187,6 +187,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.1")); got == nil {
 		t.Fatal("together::zai-org/GLM-5.1 not found in catalog")
 	}
+	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.2")); got == nil {
+		t.Fatal("together::zai-org/GLM-5.2 not found in catalog")
+	}
 	if got := findModelCatalog(TogetherAliasModelID("openai/gpt-oss-120b")); got == nil {
 		t.Fatal("together::openai/gpt-oss-120b not found in catalog")
 	}
@@ -267,6 +270,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
 		{model: TogetherAliasModelID("deepseek-ai/DeepSeek-V4-Pro"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
+		{model: TogetherAliasModelID("zai-org/GLM-5.2"), provider: "together"},
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3.6-Plus"), provider: "together"},

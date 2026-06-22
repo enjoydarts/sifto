@@ -6,13 +6,7 @@ WORKDIR /src
 COPY api/ ./api/
 COPY shared/ ./shared/
 WORKDIR /src/api
-RUN go get \
-    github.com/go-chi/chi/v5@latest \
-    github.com/golang-jwt/jwt/v5@latest \
-    github.com/inngest/inngestgo@latest \
-    github.com/jackc/pgx/v5@latest \
-    github.com/mmcdole/gofeed@latest && \
-    go mod tidy && \
+RUN go mod download && \
     go build -o /out/server ./cmd/server
 
 FROM golang:alpine AS dev
@@ -21,14 +15,8 @@ WORKDIR /app
 
 COPY api/ ./
 
-RUN go get \
-    github.com/go-chi/chi/v5@latest \
-    github.com/golang-jwt/jwt/v5@latest \
-    github.com/inngest/inngestgo@latest \
-    github.com/jackc/pgx/v5@latest \
-    github.com/mmcdole/gofeed@latest && \
-    go install github.com/air-verse/air@latest && \
-    go mod tidy
+RUN go mod download && \
+    go install github.com/air-verse/air@latest
 
 ENV LLM_CATALOG_PATH=/shared/llm_catalog.json
 

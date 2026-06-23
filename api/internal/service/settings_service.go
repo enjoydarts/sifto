@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -32,78 +33,94 @@ type SettingsService struct {
 	githubApp               *GitHubAppClient
 }
 
+// APIKeyStatus is the keyed representation for a provider's key presence info.
+// Used to allow catalog-driven settings without per-provider fields in payload.
+type APIKeyStatus struct {
+	Has   bool    `json:"has"`
+	Last4 *string `json:"last4,omitempty"`
+}
+
 type SettingsGetPayload struct {
-	UserID                         string                          `json:"user_id"`
-	HasAnthropicAPIKey             bool                            `json:"has_anthropic_api_key"`
-	AnthropicAPIKeyLast4           *string                         `json:"anthropic_api_key_last4,omitempty"`
-	HasOpenAIAPIKey                bool                            `json:"has_openai_api_key"`
-	OpenAIAPIKeyLast4              *string                         `json:"openai_api_key_last4,omitempty"`
-	HasCerebrasAPIKey              bool                            `json:"has_cerebras_api_key"`
-	CerebrasAPIKeyLast4            *string                         `json:"cerebras_api_key_last4,omitempty"`
-	HasMiniMaxAPIKey               bool                            `json:"has_minimax_api_key"`
-	MiniMaxAPIKeyLast4             *string                         `json:"minimax_api_key_last4,omitempty"`
-	HasXiaomiMiMoTokenPlanAPIKey   bool                            `json:"has_xiaomi_mimo_token_plan_api_key"`
-	XiaomiMiMoTokenPlanAPIKeyLast4 *string                         `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
-	HasDeepInfraAPIKey             bool                            `json:"has_deepinfra_api_key"`
-	DeepInfraAPIKeyLast4           *string                         `json:"deepinfra_api_key_last4,omitempty"`
-	HasFeatherlessAPIKey           bool                            `json:"has_featherless_api_key"`
-	FeatherlessAPIKeyLast4         *string                         `json:"featherless_api_key_last4,omitempty"`
-	HasGoogleAPIKey                bool                            `json:"has_google_api_key"`
-	GoogleAPIKeyLast4              *string                         `json:"google_api_key_last4,omitempty"`
-	HasGroqAPIKey                  bool                            `json:"has_groq_api_key"`
-	GroqAPIKeyLast4                *string                         `json:"groq_api_key_last4,omitempty"`
-	HasDeepSeekAPIKey              bool                            `json:"has_deepseek_api_key"`
-	DeepSeekAPIKeyLast4            *string                         `json:"deepseek_api_key_last4,omitempty"`
-	HasAlibabaAPIKey               bool                            `json:"has_alibaba_api_key"`
-	AlibabaAPIKeyLast4             *string                         `json:"alibaba_api_key_last4,omitempty"`
-	HasMistralAPIKey               bool                            `json:"has_mistral_api_key"`
-	MistralAPIKeyLast4             *string                         `json:"mistral_api_key_last4,omitempty"`
-	HasMoonshotAPIKey              bool                            `json:"has_moonshot_api_key"`
-	MoonshotAPIKeyLast4            *string                         `json:"moonshot_api_key_last4,omitempty"`
-	HasXAIAPIKey                   bool                            `json:"has_xai_api_key"`
-	XAIAPIKeyLast4                 *string                         `json:"xai_api_key_last4,omitempty"`
-	HasZAIAPIKey                   bool                            `json:"has_zai_api_key"`
-	ZAIAPIKeyLast4                 *string                         `json:"zai_api_key_last4,omitempty"`
-	HasFireworksAPIKey             bool                            `json:"has_fireworks_api_key"`
-	FireworksAPIKeyLast4           *string                         `json:"fireworks_api_key_last4,omitempty"`
-	HasTogetherAPIKey              bool                            `json:"has_together_api_key"`
-	TogetherAPIKeyLast4            *string                         `json:"together_api_key_last4,omitempty"`
-	HasPoeAPIKey                   bool                            `json:"has_poe_api_key"`
-	PoeAPIKeyLast4                 *string                         `json:"poe_api_key_last4,omitempty"`
-	HasSiliconFlowAPIKey           bool                            `json:"has_siliconflow_api_key"`
-	SiliconFlowAPIKeyLast4         *string                         `json:"siliconflow_api_key_last4,omitempty"`
-	HasAzureSpeechAPIKey           bool                            `json:"has_azure_speech_api_key"`
-	AzureSpeechAPIKeyLast4         *string                         `json:"azure_speech_api_key_last4,omitempty"`
-	AzureSpeechRegion              *string                         `json:"azure_speech_region,omitempty"`
-	HasOpenRouterAPIKey            bool                            `json:"has_openrouter_api_key"`
-	OpenRouterAPIKeyLast4          *string                         `json:"openrouter_api_key_last4,omitempty"`
-	HasAivisAPIKey                 bool                            `json:"has_aivis_api_key"`
-	AivisAPIKeyLast4               *string                         `json:"aivis_api_key_last4,omitempty"`
-	HasFishAudioAPIKey             bool                            `json:"has_fish_api_key"`
-	FishAudioAPIKeyLast4           *string                         `json:"fish_api_key_last4,omitempty"`
-	HasElevenLabsAPIKey            bool                            `json:"has_elevenlabs_api_key"`
-	ElevenLabsAPIKeyLast4          *string                         `json:"elevenlabs_api_key_last4,omitempty"`
-	HasCartesiaAPIKey              bool                            `json:"has_cartesia_api_key"`
-	CartesiaAPIKeyLast4            *string                         `json:"cartesia_api_key_last4,omitempty"`
-	AivisUserDictionaryUUID        *string                         `json:"aivis_user_dictionary_uuid,omitempty"`
-	GeminiTTSEnabled               bool                            `json:"gemini_tts_enabled"`
-	Podcast                        PodcastView                     `json:"podcast"`
-	HasInoreaderOAuth              bool                            `json:"has_inoreader_oauth"`
-	InoreaderTokenExpiresAt        *time.Time                      `json:"inoreader_token_expires_at,omitempty"`
-	MonthlyBudgetUSD               *float64                        `json:"monthly_budget_usd,omitempty"`
-	BudgetAlertEnabled             bool                            `json:"budget_alert_enabled"`
-	BudgetAlertThresholdPct        int                             `json:"budget_alert_threshold_pct"`
-	DigestEmailEnabled             bool                            `json:"digest_email_enabled"`
-	ReadingPlan                    ReadingPlanView                 `json:"reading_plan"`
-	LLMModels                      LLMModelsView                   `json:"llm_models"`
-	AudioBriefing                  AudioBriefingView               `json:"audio_briefing"`
-	AudioBriefingVoices            []AudioBriefingPersonaVoiceView `json:"audio_briefing_persona_voices"`
-	SummaryAudio                   SummaryAudioView                `json:"summary_audio"`
-	UIFontSansKey                  string                          `json:"ui_font_sans_key"`
-	UIFontSerifKey                 string                          `json:"ui_font_serif_key"`
-	CurrentMonth                   CurrentMonthView                `json:"current_month"`
-	ObsidianExport                 ObsidianExportView              `json:"obsidian_export"`
-	NotificationPriority           *NotificationPriorityView       `json:"notification_priority"`
+	UserID string `json:"user_id"`
+	// LLM flat fields (has_*_api_key / *_api_key_last4) are kept for wire/UI compatibility.
+	// Existing frontend code (system-access-cards, voice resources, TTS readiness etc.)
+	// still reads these directly. llm_api_keys map is the catalog-driven primary source (AC2).
+	// Do not remove these flats until all consumers are migrated.
+	HasAnthropicAPIKey             bool    `json:"has_anthropic_api_key"`
+	AnthropicAPIKeyLast4           *string `json:"anthropic_api_key_last4,omitempty"`
+	HasOpenAIAPIKey                bool    `json:"has_openai_api_key"`
+	OpenAIAPIKeyLast4              *string `json:"openai_api_key_last4,omitempty"`
+	HasGoogleAPIKey                bool    `json:"has_google_api_key"`
+	GoogleAPIKeyLast4              *string `json:"google_api_key_last4,omitempty"`
+	HasGroqAPIKey                  bool    `json:"has_groq_api_key"`
+	GroqAPIKeyLast4                *string `json:"groq_api_key_last4,omitempty"`
+	HasDeepSeekAPIKey              bool    `json:"has_deepseek_api_key"`
+	DeepSeekAPIKeyLast4            *string `json:"deepseek_api_key_last4,omitempty"`
+	HasAlibabaAPIKey               bool    `json:"has_alibaba_api_key"`
+	AlibabaAPIKeyLast4             *string `json:"alibaba_api_key_last4,omitempty"`
+	HasMistralAPIKey               bool    `json:"has_mistral_api_key"`
+	MistralAPIKeyLast4             *string `json:"mistral_api_key_last4,omitempty"`
+	HasCerebrasAPIKey              bool    `json:"has_cerebras_api_key"`
+	CerebrasAPIKeyLast4            *string `json:"cerebras_api_key_last4,omitempty"`
+	HasMoonshotAPIKey              bool    `json:"has_moonshot_api_key"`
+	MoonshotAPIKeyLast4            *string `json:"moonshot_api_key_last4,omitempty"`
+	HasMiniMaxAPIKey               bool    `json:"has_minimax_api_key"`
+	MiniMaxAPIKeyLast4             *string `json:"minimax_api_key_last4,omitempty"`
+	HasXiaomiMiMoTokenPlanAPIKey   bool    `json:"has_xiaomi_mimo_token_plan_api_key"`
+	XiaomiMiMoTokenPlanAPIKeyLast4 *string `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
+	HasXAIAPIKey                   bool    `json:"has_xai_api_key"`
+	XAIAPIKeyLast4                 *string `json:"xai_api_key_last4,omitempty"`
+	HasZAIAPIKey                   bool    `json:"has_zai_api_key"`
+	ZAIAPIKeyLast4                 *string `json:"zai_api_key_last4,omitempty"`
+	HasFireworksAPIKey             bool    `json:"has_fireworks_api_key"`
+	FireworksAPIKeyLast4           *string `json:"fireworks_api_key_last4,omitempty"`
+	HasTogetherAPIKey              bool    `json:"has_together_api_key"`
+	TogetherAPIKeyLast4            *string `json:"together_api_key_last4,omitempty"`
+	HasPoeAPIKey                   bool    `json:"has_poe_api_key"`
+	PoeAPIKeyLast4                 *string `json:"poe_api_key_last4,omitempty"`
+	HasSiliconFlowAPIKey           bool    `json:"has_siliconflow_api_key"`
+	SiliconFlowAPIKeyLast4         *string `json:"siliconflow_api_key_last4,omitempty"`
+	HasOpenRouterAPIKey            bool    `json:"has_openrouter_api_key"`
+	OpenRouterAPIKeyLast4          *string `json:"openrouter_api_key_last4,omitempty"`
+	HasDeepInfraAPIKey             bool    `json:"has_deepinfra_api_key"`
+	DeepInfraAPIKeyLast4           *string `json:"deepinfra_api_key_last4,omitempty"`
+	HasFeatherlessAPIKey           bool    `json:"has_featherless_api_key"`
+	FeatherlessAPIKeyLast4         *string `json:"featherless_api_key_last4,omitempty"`
+
+	// TTS and other non-LLM keys
+	HasAzureSpeechAPIKey    bool    `json:"has_azure_speech_api_key"`
+	AzureSpeechAPIKeyLast4  *string `json:"azure_speech_api_key_last4,omitempty"`
+	AzureSpeechRegion       *string `json:"azure_speech_region,omitempty"`
+	HasAivisAPIKey          bool    `json:"has_aivis_api_key"`
+	AivisAPIKeyLast4        *string `json:"aivis_api_key_last4,omitempty"`
+	HasFishAudioAPIKey      bool    `json:"has_fish_api_key"`
+	FishAudioAPIKeyLast4    *string `json:"fish_api_key_last4,omitempty"`
+	HasElevenLabsAPIKey     bool    `json:"has_elevenlabs_api_key"`
+	ElevenLabsAPIKeyLast4   *string `json:"elevenlabs_api_key_last4,omitempty"`
+	HasCartesiaAPIKey       bool    `json:"has_cartesia_api_key"`
+	CartesiaAPIKeyLast4     *string `json:"cartesia_api_key_last4,omitempty"`
+	AivisUserDictionaryUUID *string `json:"aivis_user_dictionary_uuid,omitempty"`
+
+	// Primary catalog-driven LLM key status (new). Flats above kept for compat.
+	LLMAPIKeys              map[string]APIKeyStatus         `json:"llm_api_keys,omitempty"`
+	GeminiTTSEnabled        bool                            `json:"gemini_tts_enabled"`
+	Podcast                 PodcastView                     `json:"podcast"`
+	HasInoreaderOAuth       bool                            `json:"has_inoreader_oauth"`
+	InoreaderTokenExpiresAt *time.Time                      `json:"inoreader_token_expires_at,omitempty"`
+	MonthlyBudgetUSD        *float64                        `json:"monthly_budget_usd,omitempty"`
+	BudgetAlertEnabled      bool                            `json:"budget_alert_enabled"`
+	BudgetAlertThresholdPct int                             `json:"budget_alert_threshold_pct"`
+	DigestEmailEnabled      bool                            `json:"digest_email_enabled"`
+	ReadingPlan             ReadingPlanView                 `json:"reading_plan"`
+	LLMModels               LLMModelsView                   `json:"llm_models"`
+	AudioBriefing           AudioBriefingView               `json:"audio_briefing"`
+	AudioBriefingVoices     []AudioBriefingPersonaVoiceView `json:"audio_briefing_persona_voices"`
+	SummaryAudio            SummaryAudioView                `json:"summary_audio"`
+	UIFontSansKey           string                          `json:"ui_font_sans_key"`
+	UIFontSerifKey          string                          `json:"ui_font_serif_key"`
+	CurrentMonth            CurrentMonthView                `json:"current_month"`
+	ObsidianExport          ObsidianExportView              `json:"obsidian_export"`
+	NotificationPriority    *NotificationPriorityView       `json:"notification_priority"`
 }
 
 type UpdateLLMModelsInput struct {
@@ -356,6 +373,46 @@ func podcastRSSURL(slug *string) *string {
 	return &v
 }
 
+// buildLLMAPIKeyStatus iterates catalog providers (GetLLMProviders) to build keyed status.
+// Uses reflect + small override map so adding a new provider does **not** require a new case here (AC2).
+// Only the model/repo flat + catalog entry + DB column are needed (non-goal prevents full generic map).
+func buildLLMAPIKeyStatus(settings *model.UserSettings, providerIDs []string) map[string]APIKeyStatus {
+	if settings == nil {
+		return nil
+	}
+	m := make(map[string]APIKeyStatus, len(providerIDs))
+	v := reflect.ValueOf(settings).Elem()
+	for _, id := range providerIDs {
+		base := ProviderSettingsFieldBase(id)
+		if base == "" {
+			// fallback derive (should not hit for catalog providers)
+			parts := strings.Split(id, "_")
+			for i := range parts {
+				if len(parts[i]) > 0 {
+					parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+				}
+			}
+			base = strings.Join(parts, "")
+		}
+		hasField := "Has" + base + "APIKey"
+		last4Field := base + "APIKeyLast4"
+
+		st := APIKeyStatus{}
+		if f := v.FieldByName(hasField); f.IsValid() && f.Kind() == reflect.Bool {
+			st.Has = f.Bool()
+		}
+		if f := v.FieldByName(last4Field); f.IsValid() && f.Kind() == reflect.Ptr {
+			if !f.IsNil() {
+				if s, ok := f.Interface().(*string); ok {
+					st.Last4 = s
+				}
+			}
+		}
+		m[id] = st
+	}
+	return m
+}
+
 func PodcastSettingsPayload(settings *model.UserSettings) PodcastView {
 	return NewPodcastView(settings)
 }
@@ -404,77 +461,64 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		remainingPct = &p
 	}
 	payload := &SettingsGetPayload{
-		UserID:                         settings.UserID,
-		HasAnthropicAPIKey:             settings.HasAnthropicAPIKey,
-		AnthropicAPIKeyLast4:           settings.AnthropicAPIKeyLast4,
-		HasOpenAIAPIKey:                settings.HasOpenAIAPIKey,
-		OpenAIAPIKeyLast4:              settings.OpenAIAPIKeyLast4,
-		HasCerebrasAPIKey:              settings.HasCerebrasAPIKey,
-		CerebrasAPIKeyLast4:            settings.CerebrasAPIKeyLast4,
-		HasMiniMaxAPIKey:               settings.HasMiniMaxAPIKey,
-		MiniMaxAPIKeyLast4:             settings.MiniMaxAPIKeyLast4,
-		HasXiaomiMiMoTokenPlanAPIKey:   settings.HasXiaomiMiMoTokenPlanAPIKey,
-		XiaomiMiMoTokenPlanAPIKeyLast4: settings.XiaomiMiMoTokenPlanAPIKeyLast4,
-		HasDeepInfraAPIKey:             settings.HasDeepInfraAPIKey,
-		DeepInfraAPIKeyLast4:           settings.DeepInfraAPIKeyLast4,
-		HasFeatherlessAPIKey:           settings.HasFeatherlessAPIKey,
-		FeatherlessAPIKeyLast4:         settings.FeatherlessAPIKeyLast4,
-		HasGoogleAPIKey:                settings.HasGoogleAPIKey,
-		GoogleAPIKeyLast4:              settings.GoogleAPIKeyLast4,
-		HasGroqAPIKey:                  settings.HasGroqAPIKey,
-		GroqAPIKeyLast4:                settings.GroqAPIKeyLast4,
-		HasDeepSeekAPIKey:              settings.HasDeepSeekAPIKey,
-		DeepSeekAPIKeyLast4:            settings.DeepSeekAPIKeyLast4,
-		HasAlibabaAPIKey:               settings.HasAlibabaAPIKey,
-		AlibabaAPIKeyLast4:             settings.AlibabaAPIKeyLast4,
-		HasMistralAPIKey:               settings.HasMistralAPIKey,
-		MistralAPIKeyLast4:             settings.MistralAPIKeyLast4,
-		HasMoonshotAPIKey:              settings.HasMoonshotAPIKey,
-		MoonshotAPIKeyLast4:            settings.MoonshotAPIKeyLast4,
-		HasXAIAPIKey:                   settings.HasXAIAPIKey,
-		XAIAPIKeyLast4:                 settings.XAIAPIKeyLast4,
-		HasZAIAPIKey:                   settings.HasZAIAPIKey,
-		ZAIAPIKeyLast4:                 settings.ZAIAPIKeyLast4,
-		HasFireworksAPIKey:             settings.HasFireworksAPIKey,
-		FireworksAPIKeyLast4:           settings.FireworksAPIKeyLast4,
-		HasTogetherAPIKey:              settings.HasTogetherAPIKey,
-		TogetherAPIKeyLast4:            settings.TogetherAPIKeyLast4,
-		HasPoeAPIKey:                   settings.HasPoeAPIKey,
-		PoeAPIKeyLast4:                 settings.PoeAPIKeyLast4,
-		HasSiliconFlowAPIKey:           settings.HasSiliconFlowAPIKey,
-		SiliconFlowAPIKeyLast4:         settings.SiliconFlowAPIKeyLast4,
-		HasAzureSpeechAPIKey:           settings.HasAzureSpeechAPIKey,
-		AzureSpeechAPIKeyLast4:         settings.AzureSpeechAPIKeyLast4,
-		AzureSpeechRegion:              settings.AzureSpeechRegion,
-		HasOpenRouterAPIKey:            settings.HasOpenRouterAPIKey,
-		OpenRouterAPIKeyLast4:          settings.OpenRouterAPIKeyLast4,
-		HasAivisAPIKey:                 settings.HasAivisAPIKey,
-		AivisAPIKeyLast4:               settings.AivisAPIKeyLast4,
-		HasFishAudioAPIKey:             settings.HasFishAudioAPIKey,
-		FishAudioAPIKeyLast4:           settings.FishAudioAPIKeyLast4,
-		HasElevenLabsAPIKey:            settings.HasElevenLabsAPIKey,
-		ElevenLabsAPIKeyLast4:          settings.ElevenLabsAPIKeyLast4,
-		HasCartesiaAPIKey:              settings.HasCartesiaAPIKey,
-		CartesiaAPIKeyLast4:            settings.CartesiaAPIKeyLast4,
-		AivisUserDictionaryUUID:        settings.AivisUserDictionaryUUID,
-		GeminiTTSEnabled:               GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
-		Podcast:                        NewPodcastView(settings),
-		HasInoreaderOAuth:              settings.HasInoreaderOAuth,
-		InoreaderTokenExpiresAt:        settings.InoreaderTokenExpiresAt,
-		MonthlyBudgetUSD:               settings.MonthlyBudgetUSD,
-		BudgetAlertEnabled:             settings.BudgetAlertEnabled,
-		BudgetAlertThresholdPct:        settings.BudgetAlertThresholdPct,
-		DigestEmailEnabled:             settings.DigestEmailEnabled,
-		ReadingPlan:                    NewReadingPlanView(settings),
-		LLMModels:                      NewLLMModelsView(settings),
-		AudioBriefing:                  NewAudioBriefingView(audioBriefingSettings),
-		AudioBriefingVoices:            NewAudioBriefingPersonaVoiceViews(audioBriefingVoices),
-		SummaryAudio:                   NewSummaryAudioView(summaryAudioSettings),
-		UIFontSansKey:                  normalizeUIFontKeyOrDefault(settings.UIFontSansKey, DefaultUIFontSansKey),
-		UIFontSerifKey:                 normalizeUIFontKeyOrDefault(settings.UIFontSerifKey, DefaultUIFontSerifKey),
-		ObsidianExport:                 NewObsidianExportView(obsidianSettings, s.githubApp),
-		CurrentMonth:                   NewCurrentMonthView(monthStart, nextMonth, usedCostUSD, remainingBudgetUSD, remainingPct),
+		UserID: settings.UserID,
+		// LLMAPIKeys is the primary catalog-driven map. Legacy flat fields are populated below
+		// via sync for existing frontend consumers.
+		LLMAPIKeys:              buildLLMAPIKeyStatus(settings, GetLLMProviders()),
+		HasAzureSpeechAPIKey:    settings.HasAzureSpeechAPIKey,
+		AzureSpeechAPIKeyLast4:  settings.AzureSpeechAPIKeyLast4,
+		AzureSpeechRegion:       settings.AzureSpeechRegion,
+		HasAivisAPIKey:          settings.HasAivisAPIKey,
+		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
+		HasFishAudioAPIKey:      settings.HasFishAudioAPIKey,
+		FishAudioAPIKeyLast4:    settings.FishAudioAPIKeyLast4,
+		HasElevenLabsAPIKey:     settings.HasElevenLabsAPIKey,
+		ElevenLabsAPIKeyLast4:   settings.ElevenLabsAPIKeyLast4,
+		HasCartesiaAPIKey:       settings.HasCartesiaAPIKey,
+		CartesiaAPIKeyLast4:     settings.CartesiaAPIKeyLast4,
+		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
+		GeminiTTSEnabled:        GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
+		Podcast:                 NewPodcastView(settings),
+		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
+		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
+		MonthlyBudgetUSD:        settings.MonthlyBudgetUSD,
+		BudgetAlertEnabled:      settings.BudgetAlertEnabled,
+		BudgetAlertThresholdPct: settings.BudgetAlertThresholdPct,
+		DigestEmailEnabled:      settings.DigestEmailEnabled,
+		ReadingPlan:             NewReadingPlanView(settings),
+		LLMModels:               NewLLMModelsView(settings),
+		AudioBriefing:           NewAudioBriefingView(audioBriefingSettings),
+		AudioBriefingVoices:     NewAudioBriefingPersonaVoiceViews(audioBriefingVoices),
+		SummaryAudio:            NewSummaryAudioView(summaryAudioSettings),
+		UIFontSansKey:           normalizeUIFontKeyOrDefault(settings.UIFontSansKey, DefaultUIFontSansKey),
+		UIFontSerifKey:          normalizeUIFontKeyOrDefault(settings.UIFontSerifKey, DefaultUIFontSerifKey),
+		ObsidianExport:          NewObsidianExportView(obsidianSettings, s.githubApp),
+		CurrentMonth:            NewCurrentMonthView(monthStart, nextMonth, usedCostUSD, remainingBudgetUSD, remainingPct),
 	}
+	// Populate legacy LLM flat fields from LLMAPIKeys map for frontend compatibility.
+	// Many UI components (system-access-cards.ts, use-settings-resources.ts, use-settings-page-data.ts)
+	// still read has_*_api_key and *_api_key_last4 directly. We keep both the map (primary, catalog-driven)
+	// and the flats (compat) until all consumers are updated.
+	pv := reflect.ValueOf(payload).Elem()
+	for pid, st := range payload.LLMAPIKeys {
+		base := ProviderSettingsFieldBase(pid)
+		if base == "" {
+			parts := strings.Split(pid, "_")
+			for i := range parts {
+				if len(parts[i]) > 0 {
+					parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+				}
+			}
+			base = strings.Join(parts, "")
+		}
+		if f := pv.FieldByName("Has" + base + "APIKey"); f.IsValid() && f.CanSet() {
+			f.SetBool(st.Has)
+		}
+		if f := pv.FieldByName(base + "APIKeyLast4"); f.IsValid() && f.CanSet() {
+			f.Set(reflect.ValueOf(st.Last4))
+		}
+	}
+
 	s.populateNotificationPriority(ctx, userID, payload)
 	return payload, nil
 }

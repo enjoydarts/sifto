@@ -3,8 +3,12 @@
     {
       "id": "anthropic",
       "api_key_header": "x-anthropic-api-key",
+      "service_module": "claude_service",
+      "requires_anthropic_args": true,
       "match_exact": [],
-      "match_prefixes": ["claude-"],
+      "match_prefixes": [
+        "claude-"
+      ],
       "default_models": {
         "facts": "claude-haiku-4-5",
         "summary": "claude-sonnet-4-6",
@@ -12,13 +16,21 @@
         "digest": "claude-sonnet-4-6",
         "ask": "claude-sonnet-4-6",
         "source_suggestion": "claude-haiku-4-5"
-      }
+      },
+      "settings_field_base": "Anthropic"
     },
     {
       "id": "google",
       "api_key_header": "x-google-api-key",
-      "match_prefixes": ["gemini-", "models/gemini-"],
-      "match_exact": ["gemma-4-31b-it", "gemma-4-26b-a4b-it"],
+      "service_module": "gemini_service",
+      "match_prefixes": [
+        "gemini-",
+        "models/gemini-"
+      ],
+      "match_exact": [
+        "gemma-4-31b-it",
+        "gemma-4-26b-a4b-it"
+      ],
       "default_models": {
         "facts": "gemini-2.5-flash-lite",
         "summary": "gemini-2.5-flash",
@@ -26,13 +38,19 @@
         "digest": "gemini-2.5-flash",
         "ask": "gemini-2.5-flash",
         "source_suggestion": "gemini-2.5-flash-lite"
-      }
+      },
+      "settings_field_base": "Google"
     },
     {
       "id": "groq",
       "api_key_header": "x-groq-api-key",
       "match_exact": [],
-      "match_prefixes": ["openai/gpt-oss-", "qwen/", "meta-llama/", "llama-"],
+      "match_prefixes": [
+        "openai/gpt-oss-",
+        "qwen/",
+        "meta-llama/",
+        "llama-"
+      ],
       "default_models": {
         "facts": "openai/gpt-oss-20b",
         "summary": "openai/gpt-oss-120b",
@@ -40,12 +58,18 @@
         "digest": "openai/gpt-oss-120b",
         "ask": "openai/gpt-oss-20b",
         "source_suggestion": "openai/gpt-oss-20b"
-      }
+      },
+      "settings_field_base": "Groq"
     },
     {
       "id": "deepseek",
       "api_key_header": "x-deepseek-api-key",
-      "match_exact": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+      "match_exact": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
       "match_prefixes": [],
       "default_models": {
         "facts": "deepseek-chat",
@@ -54,7 +78,8 @@
         "digest": "deepseek-chat",
         "ask": "deepseek-chat",
         "source_suggestion": "deepseek-chat"
-      }
+      },
+      "settings_field_base": "DeepSeek"
     },
     {
       "id": "alibaba",
@@ -80,7 +105,8 @@
         "digest": "qwen3-max",
         "ask": "qwen3.5-plus",
         "source_suggestion": "qwen3.5-flash"
-      }
+      },
+      "settings_field_base": "Alibaba"
     },
     {
       "id": "mistral",
@@ -105,12 +131,14 @@
         "digest": "mistral-medium-2508",
         "ask": "mistral-small-2603",
         "source_suggestion": "mistral-small-2603"
-      }
+      },
+      "settings_field_base": "Mistral"
     },
     {
       "id": "cerebras",
       "label": "Cerebras AI",
       "api_key_header": "x-cerebras-api-key",
+      "alias_prefix": "cerebras::",
       "match_exact": [
         "gpt-oss-120b",
         "llama3.1-8b",
@@ -125,7 +153,8 @@
         "digest": "gpt-oss-120b",
         "ask": "gpt-oss-120b",
         "source_suggestion": "llama3.1-8b"
-      }
+      },
+      "settings_field_base": "Cerebras"
     },
     {
       "id": "minimax",
@@ -145,7 +174,8 @@
         "digest": "MiniMax-M2.7",
         "ask": "MiniMax-M2.7-highspeed",
         "source_suggestion": "MiniMax-M2.5-highspeed"
-      }
+      },
+      "settings_field_base": "MiniMax"
     },
     {
       "id": "xiaomi_mimo_token_plan",
@@ -164,7 +194,8 @@
         "digest": "mimo-v2-omni",
         "ask": "mimo-v2-pro",
         "source_suggestion": "mimo-v2-pro"
-      }
+      },
+      "settings_field_base": "XiaomiMiMoTokenPlan"
     },
     {
       "id": "moonshot",
@@ -178,7 +209,9 @@
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo"
       ],
-      "match_prefixes": ["kimi-k2-"],
+      "match_prefixes": [
+        "kimi-k2-"
+      ],
       "default_models": {
         "facts": "kimi-k2.6",
         "summary": "kimi-k2.6",
@@ -186,7 +219,8 @@
         "digest": "kimi-k2.6",
         "ask": "kimi-k2.6",
         "source_suggestion": "kimi-k2-turbo-preview"
-      }
+      },
+      "settings_field_base": "Moonshot"
     },
     {
       "id": "xai",
@@ -209,7 +243,8 @@
         "digest": "grok-4",
         "ask": "grok-4-1-fast-non-reasoning",
         "source_suggestion": "grok-4-fast-non-reasoning"
-      }
+      },
+      "settings_field_base": "XAI"
     },
     {
       "id": "zai",
@@ -232,13 +267,20 @@
         "digest": "glm-5",
         "ask": "glm-5-turbo",
         "source_suggestion": "glm-4.7-flashx"
-      }
+      },
+      "settings_field_base": "ZAI"
     },
     {
       "id": "fireworks",
       "api_key_header": "x-fireworks-api-key",
-      "match_exact": ["glm-5p2", "qwen3p7-plus"],
-      "match_prefixes": ["fireworks/", "cogito/"],
+      "match_exact": [
+        "glm-5p2",
+        "qwen3p7-plus"
+      ],
+      "match_prefixes": [
+        "fireworks/",
+        "cogito/"
+      ],
       "default_models": {
         "facts": "fireworks/glm-4p7",
         "summary": "fireworks/deepseek-v3p1",
@@ -246,11 +288,13 @@
         "digest": "fireworks/glm-5",
         "ask": "fireworks/kimi-k2-instruct-0905",
         "source_suggestion": "fireworks/gpt-oss-20b"
-      }
+      },
+      "settings_field_base": "Fireworks"
     },
     {
       "id": "together",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "together::",
       "match_exact": [
         "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.5",
@@ -287,12 +331,14 @@
         "digest": "together::moonshotai/Kimi-K2.5",
         "ask": "together::openai/gpt-oss-120b",
         "source_suggestion": "together::LiquidAI/LFM2-24B-A2B"
-      }
+      },
+      "settings_field_base": "Together"
     },
     {
       "id": "featherless",
       "label": "Featherless.ai",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "featherless::",
       "match_exact": [],
       "match_prefixes": [],
       "default_models": {
@@ -302,42 +348,53 @@
         "digest": "featherless::Qwen/Qwen3.5-9B",
         "ask": "featherless::Qwen/Qwen3.5-9B",
         "source_suggestion": "featherless::Qwen/Qwen3.5-9B"
-      }
+      },
+      "settings_field_base": "Featherless"
     },
     {
       "id": "deepinfra",
       "label": "DeepInfra",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "deepinfra::",
       "match_exact": [],
       "match_prefixes": [],
-      "default_models": {}
+      "default_models": {},
+      "settings_field_base": "DeepInfra"
     },
     {
       "id": "openrouter",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "openrouter::",
       "match_exact": [],
       "match_prefixes": [],
-      "default_models": {}
+      "default_models": {},
+      "settings_field_base": "OpenRouter"
     },
     {
       "id": "poe",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "poe::",
       "match_exact": [],
       "match_prefixes": [],
-      "default_models": {}
+      "default_models": {},
+      "settings_field_base": "Poe"
     },
     {
       "id": "siliconflow",
       "api_key_header": "x-openai-api-key",
+      "alias_prefix": "siliconflow::",
       "match_exact": [],
       "match_prefixes": [],
-      "default_models": {}
+      "default_models": {},
+      "settings_field_base": "SiliconFlow"
     },
     {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_exact": [],
-      "match_prefixes": ["gpt-5"],
+      "match_prefixes": [
+        "gpt-5"
+      ],
       "default_models": {
         "facts": "gpt-5.4-mini",
         "summary": "gpt-5.4-mini",
@@ -345,7 +402,8 @@
         "digest": "gpt-5.4",
         "ask": "gpt-5.4-mini",
         "source_suggestion": "gpt-5.4-mini"
-      }
+      },
+      "settings_field_base": "OpenAI"
     }
   ],
   "chat_models": [
@@ -353,10 +411,19 @@
       "id": "gpt-oss-120b",
       "provider": "cerebras",
       "source_provider": "OpenAI",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Cerebras の Production 主力。高速な要約・質問・ダイジェスト向け。reasoning_effort は worker 側で low に抑える。",
       "capabilities": {
         "supports_structured_output": true,
@@ -377,10 +444,18 @@
       "id": "llama3.1-8b",
       "provider": "cerebras",
       "source_provider": "Meta",
-      "available_purposes": ["facts", "summary", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast", "lowestCost"],
+      "highlights": [
+        "fast",
+        "lowestCost"
+      ],
       "comment": "Cerebras の軽量 Production 枠。事実抽出や候補生成向け。公式 docs では 2026-05-27 deprecation 予定のため、既定は軽量用途に限定する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -392,8 +467,8 @@
       },
       "pricing": {
         "pricing_source": "cerebras_manual_2026_04",
-        "input_per_mtok_usd": 0.10,
-        "output_per_mtok_usd": 0.10,
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.1,
         "cache_read_per_mtok_usd": 0
       }
     },
@@ -401,10 +476,20 @@
       "id": "qwen-3-235b-a22b-instruct-2507",
       "provider": "cerebras",
       "source_provider": "Qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "experimental",
-      "highlights": ["experimental", "fast"],
+      "highlights": [
+        "experimental",
+        "fast"
+      ],
       "comment": "Cerebras Preview model。評価用に手動選択可能にするが、Preview かつ 2026-05-27 deprecation 予定のため既定にはしない。",
       "capabilities": {
         "supports_structured_output": true,
@@ -416,8 +501,8 @@
       },
       "pricing": {
         "pricing_source": "cerebras_manual_2026_04",
-        "input_per_mtok_usd": 0.60,
-        "output_per_mtok_usd": 1.20,
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 1.2,
         "cache_read_per_mtok_usd": 0
       }
     },
@@ -425,10 +510,20 @@
       "id": "zai-glm-4.7",
       "provider": "cerebras",
       "source_provider": "Z.ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "experimental",
-      "highlights": ["experimental", "fast"],
+      "highlights": [
+        "experimental",
+        "fast"
+      ],
       "comment": "Cerebras Preview model。coding / agent 寄りの比較用途として手動選択用に載せる。Preview のため既定にはしない。",
       "capabilities": {
         "supports_structured_output": true,
@@ -449,10 +544,19 @@
       "id": "featherless::Qwen/Qwen3.5-9B",
       "provider": "featherless",
       "source_provider": "Qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "experimental",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "Featherless.ai 疎通用の最小 static model。将来は dynamic snapshot の alias model を merge して置き換える前提。",
       "capabilities": {
         "supports_structured_output": true,
@@ -473,10 +577,19 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V3.1",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "DeepSeek 系の比較用ベースライン。SiliconFlow 側の固定モデルとして残す。",
       "capabilities": {
         "supports_structured_output": true,
@@ -496,10 +609,19 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V3.1-Terminus",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "DeepSeek 系の比較候補。重めの整理や生成品質の見比べ用に残す。",
       "capabilities": {
         "supports_structured_output": true,
@@ -519,10 +641,19 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V3.2",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "DeepSeek 系の標準候補。SiliconFlow で使う代表モデルとして静的登録する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -542,10 +673,19 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V3.2-Exp",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "experimental",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "実験系の比較候補。通常枠とは分けて挙動を見たい時に使う前提の静的登録。",
       "capabilities": {
         "supports_structured_output": true,
@@ -565,10 +705,20 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V4-Flash",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast", "latest"],
+      "highlights": [
+        "fast",
+        "latest"
+      ],
       "comment": "SiliconFlow 経由の DeepSeek V4 軽量枠。1M context と低コストを活かし、抽出、要約、Ask の比較候補として使いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -589,10 +739,20 @@
       "id": "siliconflow::deepseek-ai/DeepSeek-V4-Pro",
       "provider": "siliconflow",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["reasoning", "latest"],
+      "highlights": [
+        "reasoning",
+        "latest"
+      ],
       "comment": "SiliconFlow 経由の DeepSeek V4 上位枠。複雑な要約、長文統合、RAG回答の品質比較に使う候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -613,10 +773,19 @@
       "id": "siliconflow::Qwen/Qwen3-235B-A22B-Instruct-2507",
       "provider": "siliconflow",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "Qwen3 の大型 instruct 枠。JSON mode 前提で、重めの整理や比較用途を SiliconFlow で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -636,10 +805,19 @@
       "id": "siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507",
       "provider": "siliconflow",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["experimental"],
+      "highlights": [
+        "experimental"
+      ],
       "comment": "Qwen3 の中量 instruct 枠。軽めの事実抽出や要約比較を SiliconFlow で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -659,10 +837,20 @@
       "id": "siliconflow::Qwen/Qwen3.6-35B-A3B",
       "provider": "siliconflow",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の Qwen3.6 35B-A3B。長文 context と軽量 MoE を活かし、coding、Ask、要約の比較候補として使う枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -682,10 +870,20 @@
       "id": "siliconflow::Qwen/Qwen3.6-27B",
       "provider": "siliconflow",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の Qwen3.6 27B。dense 系の品質比較として、要約、Ask、事実抽出の置き換え検証に使う候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -705,10 +903,20 @@
       "id": "siliconflow::zai-org/GLM-5.1",
       "provider": "siliconflow",
       "source_provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の GLM-5.1。agentic engineering や長めの実装相談、複雑な Ask の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -729,10 +937,20 @@
       "id": "siliconflow::zai-org/GLM-5.2",
       "provider": "siliconflow",
       "source_provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の GLM-5.2。GLM-5.1 後継として、agentic engineering、長めの実装相談、複雑な Ask の上位比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -753,10 +971,20 @@
       "id": "siliconflow::moonshotai/Kimi-K2.6",
       "provider": "siliconflow",
       "source_provider": "moonshotai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の Kimi K2.6。長文 RAG、要約、ダイジェストの比較候補として使う最新枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -777,10 +1005,20 @@
       "id": "siliconflow::MiniMaxAI/MiniMax-M3",
       "provider": "siliconflow",
       "source_provider": "minimaxai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "SiliconFlow 経由の MiniMax M3。長文 context、coding、agentic な整理を比較したい時に使う最新 MiniMax 枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -800,7 +1038,14 @@
     {
       "id": "claude-haiku-4-5",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
       "highlights": [],
@@ -818,16 +1063,25 @@
         "input_per_mtok_usd": 1.0,
         "output_per_mtok_usd": 5.0,
         "cache_write_per_mtok_usd": 1.25,
-        "cache_read_per_mtok_usd": 0.10
+        "cache_read_per_mtok_usd": 0.1
       }
     },
     {
       "id": "claude-sonnet-4-6",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "全体の標準構成に向く安定枠。要約・質問・ダイジェストまで広く無難に任せやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -842,13 +1096,20 @@
         "input_per_mtok_usd": 3.0,
         "output_per_mtok_usd": 15.0,
         "cache_write_per_mtok_usd": 3.75,
-        "cache_read_per_mtok_usd": 0.30
+        "cache_read_per_mtok_usd": 0.3
       }
     },
     {
       "id": "claude-opus-4-6",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -866,13 +1127,20 @@
         "input_per_mtok_usd": 5.0,
         "output_per_mtok_usd": 25.0,
         "cache_write_per_mtok_usd": 6.25,
-        "cache_read_per_mtok_usd": 0.50
+        "cache_read_per_mtok_usd": 0.5
       }
     },
     {
       "id": "claude-opus-4-7",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -890,13 +1158,20 @@
         "input_per_mtok_usd": 5.0,
         "output_per_mtok_usd": 25.0,
         "cache_write_per_mtok_usd": 6.25,
-        "cache_read_per_mtok_usd": 0.50
+        "cache_read_per_mtok_usd": 0.5
       }
     },
     {
       "id": "claude-opus-4-8",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -914,16 +1189,25 @@
         "input_per_mtok_usd": 5.0,
         "output_per_mtok_usd": 25.0,
         "cache_write_per_mtok_usd": 6.25,
-        "cache_read_per_mtok_usd": 0.50
+        "cache_read_per_mtok_usd": 0.5
       }
     },
     {
       "id": "claude-fable-5",
       "provider": "anthropic",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["long-context"],
+      "highlights": [
+        "long-context"
+      ],
       "comment": "Anthropic の最上位 Fable 5。1M context と高い推論力を活かし、長く複雑な整理、重いダイジェスト生成、Ask の品質重視候補として使う枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -937,17 +1221,26 @@
         "pricing_source": "anthropic_static_2026_06",
         "input_per_mtok_usd": 10.0,
         "output_per_mtok_usd": 50.0,
-        "cache_write_per_mtok_usd": 12.50,
+        "cache_write_per_mtok_usd": 12.5,
         "cache_read_per_mtok_usd": 1.0
       }
     },
     {
       "id": "gemini-3.5-flash",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Gemini 3.5 Flash の安定版。agentic workflow、コーディング、複数段階の要約を高速に回したい時の上位 Flash 枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -967,7 +1260,14 @@
     {
       "id": "gemini-3.1-pro-preview",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -984,16 +1284,26 @@
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 12.0,
-        "cache_read_per_mtok_usd": 0.20
+        "cache_read_per_mtok_usd": 0.2
       }
     },
     {
       "id": "gemini-3.1-flash-lite",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Gemini 3.1 Flash-Lite の安定版。低遅延・低コストの抽出、分類、軽い要約向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1013,10 +1323,20 @@
     {
       "id": "gemini-3.1-flash-lite-preview",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Gemini 系の軽量高速枠。事実抽出や軽い分類を安く回したい時に使いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1036,10 +1356,19 @@
     {
       "id": "gemini-3-flash-preview",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "速度と要約品質のバランスが良く、通常要約の比較候補として扱いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1059,10 +1388,19 @@
     {
       "id": "gemini-2.5-flash",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "RAG質問応答や日常利用で軽快に使える実用枠。応答速度を重視する場面に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1082,10 +1420,20 @@
     {
       "id": "gemini-2.5-flash-lite",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Gemini 系の最安寄り候補。大量の抽出や軽作業を低予算で回す用途に向いている。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1105,7 +1453,14 @@
     {
       "id": "gemini-2.5-pro",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -1128,10 +1483,19 @@
     {
       "id": "gemma-4-31b-it",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "Gemma 4 の上位 Instruct 枠。2026年4月9日時点では Google AI Studio で使える無料枠前提として扱い、正式 pricing 未掲載のため暫定で無料扱いにする。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1150,10 +1514,20 @@
     {
       "id": "gemma-4-26b-a4b-it",
       "provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "fast"],
+      "highlights": [
+        "jsonStable",
+        "fast"
+      ],
       "comment": "Gemma 4 の 26B A4B MoE Instruct 枠。2026年4月9日時点では Google AI Studio で使える無料枠前提として扱い、正式 pricing 未掲載のため暫定で無料扱いにする。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1172,10 +1546,20 @@
     {
       "id": "openai/gpt-oss-20b",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["jsonStable", "fast"],
+      "highlights": [
+        "jsonStable",
+        "fast"
+      ],
       "comment": "超高速でコスパ抜群。事実抽出・RAG質問・ソース提案の標準候補として回しやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1195,10 +1579,20 @@
     {
       "id": "openai/gpt-oss-120b",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "fast"],
+      "highlights": [
+        "jsonStable",
+        "fast"
+      ],
       "comment": "要約・チェック・ダイジェストまで広く任せやすい低コスト主力。全体のコスパ重視構成で中心に置きやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1218,10 +1612,20 @@
     {
       "id": "llama-3.1-8b-instant",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "最安かつ爆速で日常タスク向き。複雑推論は弱いが低予算運用の第一候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1241,10 +1645,19 @@
     {
       "id": "llama-3.3-70b-versatile",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1264,10 +1677,19 @@
     {
       "id": "meta-llama/llama-4-scout-17b-16e-instruct",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1287,7 +1709,14 @@
     {
       "id": "qwen/qwen3-32b",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
       "highlights": [],
@@ -1310,10 +1739,19 @@
     {
       "id": "moonshotai/kimi-k2-instruct-0905",
       "provider": "groq",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "長文コンテキストと JSON Schema に対応した Groq の実験枠。質問応答や要約の比較候補として入れておく価値がある。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1333,7 +1771,14 @@
     {
       "id": "qwen3.7-max",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -1355,10 +1800,20 @@
     {
       "id": "qwen3.7-plus",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "Alibaba Model Studio の qwen3.7-plus。マルチモーダル agent、coding、tool use に向く Plus 枠で、Max より低コストな上位比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1377,7 +1832,14 @@
     {
       "id": "qwen3-max",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -1399,10 +1861,19 @@
     {
       "id": "qwen3.6-plus",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Alibaba Model Studio の qwen3.6-plus。標準寄りの Plus 枠として、要約や質問応答の比較候補に追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1421,10 +1892,20 @@
     {
       "id": "qwen3.6-flash",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Qwen3.6-35B-A3B 系を Alibaba Model Studio API で呼ぶ軽量エントリ。公式ブログと Model Studio doc group は確認できるが価格は未確認のため、まずは比較候補として載せる。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1443,10 +1924,20 @@
     {
       "id": "qwen3.6-35b-a3b",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Qwen3.6 の 35B/3B MoE open model 名称。Model Studio の group-qwen3.6 系ドキュメントに合わせて選択肢へ追加し、価格は未確認のため暫定扱いにする。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1465,10 +1956,19 @@
     {
       "id": "qwen3.5-plus",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Virginia の Global endpoint 前提の標準候補。要約や質問応答を安定して回しやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1487,10 +1987,20 @@
     {
       "id": "qwen3.5-flash",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Qwen 3.5 系の軽量枠。Virginia の Global endpoint 前提で、大量の抽出や候補生成を低コストで回したい時に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1509,7 +2019,14 @@
     {
       "id": "qwen3.5-397b-a17b",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
       "highlights": [],
@@ -1531,10 +2048,19 @@
     {
       "id": "qwen3.5-35b-a3b",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Virginia の Global endpoint 前提の中量級 MoE 枠。速度と品質のバランスを取りやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1553,10 +2079,19 @@
     {
       "id": "qwen3.5-27b",
       "provider": "alibaba",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Virginia の Global endpoint 前提の密結合 27B 枠。軽さと安定性を優先した比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1575,10 +2110,20 @@
     {
       "id": "mistral-small-2603",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Mistral Small 4。小型枠の更新版で、抽出・要約・質問応答を広く任せやすい新しい主力候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1597,7 +2142,14 @@
     {
       "id": "mistral-large-2512",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -1619,10 +2171,20 @@
     {
       "id": "mistral-medium-3.5",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "Mistral Medium 3.5。agentic・coding用途に最適化されたMistralの最新medium枠で、要約、Ask、ダイジェストの品質比較に使いやすい候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1641,10 +2203,19 @@
     {
       "id": "mistral-medium-2508",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Mistral Medium 3.1。日常的な要約や質問応答を広く担当させやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1663,10 +2234,19 @@
     {
       "id": "mistral-small-2506",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Mistral Small 3.2。旧 small default 枠で、抽出や軽めの要約でコストと品質のバランスが良い。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1685,10 +2265,19 @@
     {
       "id": "ministral-14b-2512",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Ministral 3 の上位軽量枠。ローカル志向の軽量系として扱いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1707,10 +2296,20 @@
     {
       "id": "ministral-8b-2512",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Ministral 3 8B。候補生成や軽量タスクを安く回したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1729,10 +2328,20 @@
     {
       "id": "ministral-3b-2512",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Ministral 3 3B。Mistral 系で最軽量寄りの選択肢。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1751,7 +2360,14 @@
     {
       "id": "magistral-medium-2509",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -1773,7 +2389,14 @@
     {
       "id": "magistral-small-2509",
       "provider": "mistral",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
       "highlights": [],
@@ -1795,10 +2418,20 @@
     {
       "id": "MiniMax-M3",
       "provider": "minimax",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "MiniMax の最新 M3。1M context とマルチモーダル、coding/agentic タスクを重視する長文整理や複雑な Ask の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1818,10 +2451,19 @@
     {
       "id": "MiniMax-M2.7",
       "provider": "minimax",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "MiniMax の標準候補。要約・質問・ダイジェストを広く任せやすい主力モデルとして追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1842,10 +2484,20 @@
     {
       "id": "MiniMax-M2.7-highspeed",
       "provider": "minimax",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "MiniMax の高速候補。Ask や応答速度を優先した比較で使いやすい highspeed 枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1866,7 +2518,14 @@
     {
       "id": "MiniMax-M2.5",
       "provider": "minimax",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
       "highlights": [],
@@ -1890,10 +2549,19 @@
     {
       "id": "MiniMax-M2.5-highspeed",
       "provider": "minimax",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "軽量寄りの既定候補。事実抽出やソース提案を速く回したい時の highspeed 枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1914,10 +2582,20 @@
     {
       "id": "mimo-v2.5",
       "provider": "xiaomi_mimo_token_plan",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["openaiCompat", "reasoning"],
+      "highlights": [
+        "openaiCompat",
+        "reasoning"
+      ],
       "comment": "Xiaomi MiMo (TokenPlan) の 2.5 系ベースモデル。V2 世代より新しい比較候補として、事実抽出や要約の置き換え検証に使う枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1936,10 +2614,20 @@
     {
       "id": "mimo-v2.5-pro",
       "provider": "xiaomi_mimo_token_plan",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["openaiCompat", "reasoning"],
+      "highlights": [
+        "openaiCompat",
+        "reasoning"
+      ],
       "comment": "Xiaomi MiMo (TokenPlan) の 2.5 系上位モデル。より強い推論や整理力を見込みつつ、購読枠で比較運用したい時の候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1958,10 +2646,20 @@
     {
       "id": "mimo-v2-pro",
       "provider": "xiaomi_mimo_token_plan",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["openaiCompat", "reasoning"],
+      "highlights": [
+        "openaiCompat",
+        "reasoning"
+      ],
       "comment": "Xiaomi MiMo (TokenPlan) の主力候補。事実抽出、要約、質問応答をゼロ単価の購読枠で広く回す前提の標準モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -1980,10 +2678,20 @@
     {
       "id": "mimo-v2-omni",
       "provider": "xiaomi_mimo_token_plan",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["multimodal", "openaiCompat"],
+      "highlights": [
+        "multimodal",
+        "openaiCompat"
+      ],
       "comment": "Xiaomi MiMo (TokenPlan) の上位候補。ダイジェストやまとまった整理を一段上のモデルで回したい時の比較枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2002,10 +2710,20 @@
     {
       "id": "kimi-k2.6",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "longContext"],
+      "highlights": [
+        "jsonStable",
+        "longContext"
+      ],
       "comment": "Moonshot AI の最新 Kimi。K2.5 後継として、長めの要約や Ask を OpenAI 互換で安定して回す時の標準候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2025,10 +2743,20 @@
     {
       "id": "kimi-k2.5",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "longContext"],
+      "highlights": [
+        "jsonStable",
+        "longContext"
+      ],
       "comment": "Moonshot AI の主力 Kimi。長めの要約や Ask を OpenAI 互換でまとめて試したい時の標準候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2048,10 +2776,20 @@
     {
       "id": "kimi-k2-0905-preview",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["jsonStable", "longContext"],
+      "highlights": [
+        "jsonStable",
+        "longContext"
+      ],
       "comment": "Kimi K2 の 0905 preview。agentic coding と文脈理解が強化された snapshot を比較したい時の本命候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2071,7 +2809,14 @@
     {
       "id": "kimi-k2-0711-preview",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "ask",
       "highlights": [],
@@ -2094,10 +2839,19 @@
     {
       "id": "kimi-k2-turbo-preview",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["longContext"],
+      "highlights": [
+        "longContext"
+      ],
       "comment": "Moonshot の軽量寄り Kimi。候補絞りや短めの整形を安く回したい時の比較枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2117,10 +2871,20 @@
     {
       "id": "kimi-k2-thinking",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "reasoning",
-      "highlights": ["reasoning", "longContext"],
+      "highlights": [
+        "reasoning",
+        "longContext"
+      ],
       "comment": "Moonshot の thinking 枠。複雑な整理や reasoning の比較用に試す上位モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2140,10 +2904,21 @@
     {
       "id": "kimi-k2-thinking-turbo",
       "provider": "moonshot",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "reasoning",
-      "highlights": ["reasoning", "fast", "longContext"],
+      "highlights": [
+        "reasoning",
+        "fast",
+        "longContext"
+      ],
       "comment": "Kimi thinking の高速版。深い推論を保ちつつ応答速度も欲しい時の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2163,7 +2938,14 @@
     {
       "id": "grok-4",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -2185,10 +2967,19 @@
     {
       "id": "grok-4-fast-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "xAI の高速 reasoning 枠。整理や比較を速く回したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2207,10 +2998,20 @@
     {
       "id": "grok-4-fast-non-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "xAI の軽量高速枠。抽出や候補生成を低コストで回したい時に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2229,10 +3030,19 @@
     {
       "id": "grok-4-1-fast-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Grok 4.1 系の高速 reasoning 枠。質問応答や比較検討の候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2251,10 +3061,19 @@
     {
       "id": "grok-4-1-fast-non-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Grok 4.1 系の通常高速枠。日常的な要約や質問応答を広く担当させやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2273,7 +3092,14 @@
     {
       "id": "grok-4.20-0309-non-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
       "highlights": [],
@@ -2295,7 +3121,14 @@
     {
       "id": "grok-4.20-0309-reasoning",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "reasoning",
       "highlights": [],
@@ -2317,10 +3150,19 @@
     {
       "id": "grok-4.3",
       "provider": "xai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest"],
+      "highlights": [
+        "latest"
+      ],
       "comment": "xAI の Grok 4.3。公式モデルページで推奨される最新 Grok 系として、要約、事実抽出、Ask、ダイジェストの比較候補に追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2340,7 +3182,14 @@
     {
       "id": "glm-5.1",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": [],
@@ -2363,10 +3212,19 @@
     {
       "id": "glm-5.2",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest"],
+      "highlights": [
+        "latest"
+      ],
       "comment": "Z.ai の GLM-5.2。GLM-5.1 後継として、要約・Ask・ダイジェストの上位比較候補に使う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2387,10 +3245,19 @@
     {
       "id": "glm-5-turbo",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "GLM-5 系の高速候補。質問応答や通常要約で速度と品質のバランスを見たい時に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2410,7 +3277,14 @@
     {
       "id": "glm-5",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -2433,7 +3307,14 @@
     {
       "id": "glm-4.7",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "summary",
       "highlights": [],
@@ -2456,10 +3337,19 @@
     {
       "id": "glm-4.5-air",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "軽快で安い Air 枠。コストを抑えつつ要約や質問応答を回したい時の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2479,10 +3369,19 @@
     {
       "id": "glm-4.7-flashx",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Flash より一段上の高速枠。抽出や候補生成を低コストで広く回したい時に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2502,10 +3401,20 @@
     {
       "id": "glm-4.7-flash",
       "provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "無料で使える軽量 GLM 枠。大量の事実抽出や軽い質問応答をまず試すには最有力。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2524,10 +3433,19 @@
     {
       "id": "fireworks/deepseek-v3p1",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Fireworks の Serverless で使える DeepSeek V3.1 系。要約や質問応答の比較候補として試しやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2547,10 +3465,19 @@
     {
       "id": "fireworks/deepseek-v3p2",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "DeepSeek V3.2 系の実験枠。最新寄りの推論品質を Fireworks 経由で試したい時の候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2570,10 +3497,20 @@
     {
       "id": "fireworks/deepseek-v4-pro",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["reasoning", "latest"],
+      "highlights": [
+        "reasoning",
+        "latest"
+      ],
       "comment": "Fireworks Serverless の DeepSeek V4 Pro。複雑な要約、長文統合、Ask の品質比較に使う上位 DeepSeek 系モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2593,7 +3530,14 @@
     {
       "id": "cogito/cogito-671b-v2-p1",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
@@ -2616,10 +3560,20 @@
     {
       "id": "fireworks/gpt-oss-20b",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["jsonStable", "fast"],
+      "highlights": [
+        "jsonStable",
+        "fast"
+      ],
       "comment": "Fireworks 経由で使う GPT-OSS 20B。事実抽出や軽い質問応答を低コストで回したい時の主力候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2639,10 +3593,19 @@
     {
       "id": "fireworks/gpt-oss-120b",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "Fireworks の高品質 GPT-OSS 枠。要約やダイジェストまで広く比較しやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2662,7 +3625,14 @@
     {
       "id": "fireworks/glm-4p7",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
       "highlights": [],
@@ -2685,7 +3655,14 @@
     {
       "id": "fireworks/glm-5",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
@@ -2708,10 +3685,19 @@
     {
       "id": "fireworks/glm-5p2",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest"],
+      "highlights": [
+        "latest"
+      ],
       "comment": "Fireworks 経由で使う GLM-5.2。Z.ai 直結とは別経路で、要約・Ask・ダイジェストの上位比較候補に使う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2731,10 +3717,19 @@
     {
       "id": "fireworks/kimi-k2-instruct-0905",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "ask",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "長文 RAG と応答品質のバランスが良い Kimi K2 instruct。Ask の有力候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2754,7 +3749,14 @@
     {
       "id": "fireworks/kimi-k2-thinking",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "ask",
       "highlights": [],
@@ -2777,10 +3779,19 @@
     {
       "id": "fireworks/kimi-k2p6",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["long-context"],
+      "highlights": [
+        "long-context"
+      ],
       "comment": "Fireworks の Kimi K2.6。K2.5 後継として、長文要約や Ask の上位比較枠に使う最新候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2800,10 +3811,19 @@
     {
       "id": "fireworks/kimi-k2p5",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
-      "highlights": ["long-context"],
+      "highlights": [
+        "long-context"
+      ],
       "comment": "Fireworks の Kimi K2.5。長文要約や Ask の上位比較枠として試す実験モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2823,10 +3843,19 @@
     {
       "id": "fireworks/qwen3-vl-30b-a3b-instruct",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
-      "highlights": ["multimodal"],
+      "highlights": [
+        "multimodal"
+      ],
       "comment": "Qwen3 VL の instruct 枠。今の Sifto ではテキスト前提だが、長めの要約や Ask の比較用実験モデルとして追加。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2846,7 +3875,14 @@
     {
       "id": "fireworks/llama-v3p3-70b-instruct",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
       "highlights": [],
@@ -2869,10 +3905,19 @@
     {
       "id": "fireworks/minimax-m2p1",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "MiniMax M2.1 の比較枠。中長文の要約や汎用応答を Fireworks 経由で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2892,10 +3937,19 @@
     {
       "id": "fireworks/minimax-m2p5",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "MiniMax M2.5 の上位実験枠。Ask や要約でのバランス比較向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2915,10 +3969,19 @@
     {
       "id": "fireworks/minimax-m2p7",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "MiniMax M2.7 の新規比較枠。M2.5 より新しい agentic 系の挙動を Fireworks 経由で検証したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2938,10 +4001,19 @@
     {
       "id": "fireworks/qwen3-8b",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "軽量な Qwen3 比較枠。小さめの事実抽出やソース提案を Fireworks 経由で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2961,10 +4033,19 @@
     {
       "id": "fireworks/qwen3p6-plus",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "balanced",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Fireworks に追加された Qwen 3.6 Plus 枠。要約や質問応答の比較候補として使える上位 Qwen 系モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2984,10 +4065,20 @@
     {
       "id": "qwen3p7-plus",
       "provider": "fireworks",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest", "fast"],
+      "highlights": [
+        "latest",
+        "fast"
+      ],
       "comment": "Fireworks に追加された Qwen 3.7 Plus 枠。Qwen 3.6 Plus 後継として、要約や Ask の上位比較候補に使う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3007,10 +4098,20 @@
     {
       "id": "deepseek-v4-flash",
       "provider": "deepseek",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast", "latest"],
+      "highlights": [
+        "fast",
+        "latest"
+      ],
       "comment": "DeepSeek V4 系の軽量側。1M context と低コストを両立し、抽出や通常要約の主力候補として使いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3030,10 +4131,20 @@
     {
       "id": "deepseek-v4-pro",
       "provider": "deepseek",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "digest",
-      "highlights": ["reasoning", "latest"],
+      "highlights": [
+        "reasoning",
+        "latest"
+      ],
       "comment": "DeepSeek V4 系の上位側。1M context と高い推論力を持ち、複雑な要約や長文の統合・質問応答で有力。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3053,10 +4164,19 @@
     {
       "id": "deepseek-chat",
       "provider": "deepseek",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "互換 alias。将来的には deepseek-v4-flash へ寄せる前提だが、既存設定の互換維持用として残している。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3076,7 +4196,14 @@
     {
       "id": "deepseek-reasoner",
       "provider": "deepseek",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
@@ -3099,10 +4226,20 @@
     {
       "id": "gpt-5-nano",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "jsonStable"],
+      "highlights": [
+        "lowestCost",
+        "jsonStable"
+      ],
       "comment": "OpenAI系の最安枠。軽い抽出や比較用途で試しやすいが、長文生成の主力には向かない。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3122,10 +4259,20 @@
     {
       "id": "gpt-5-mini",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "facts",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "OpenAI系の実用最小構成。事実抽出や短めの要約でコストと安定性のバランスが良い。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3145,10 +4292,19 @@
     {
       "id": "gpt-5",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "OpenAI 内で品質を少し上げたい時の主力。mini から一段引き上げる用途に収まりが良い。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3168,7 +4324,14 @@
     {
       "id": "gpt-5-pro",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
@@ -3191,10 +4354,19 @@
     {
       "id": "gpt-5.1",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "gpt-5 系の安定比較枠。標準的な要約品質を見たい時に選びやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3214,10 +4386,19 @@
     {
       "id": "gpt-5.2",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "gpt-5 より一段強めの比較候補。RAG質問応答や少し難しい整理で試す価値がある。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3237,7 +4418,14 @@
     {
       "id": "gpt-5.2-pro",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
@@ -3260,10 +4448,19 @@
     {
       "id": "gpt-5.4",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "品質比較には有用だが、コスパ重視の常用設定では gpt-5 や mini を先に検討したい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3283,10 +4480,20 @@
     {
       "id": "gpt-5.4-mini",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "gpt-5.4 系の実用主力。事実抽出、要約、質問応答まで広く回しやすく、既定候補にしやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3306,10 +4513,20 @@
     {
       "id": "gpt-5.4-nano",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "jsonStable"],
+      "highlights": [
+        "lowestCost",
+        "jsonStable"
+      ],
       "comment": "gpt-5.4 系の最安枠。軽い抽出や短い判定を安く回したい時の候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3329,7 +4546,14 @@
     {
       "id": "gpt-5.4-pro",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
@@ -3352,10 +4576,20 @@
     {
       "id": "gpt-5.5",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "ask",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "OpenAI の GPT-5.5。複雑な推論、coding、RAG質問応答の上位比較候補。コストは高めなので常用前に実測したい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3375,10 +4609,19 @@
     {
       "id": "gpt-5.5-pro",
       "provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
-      "highlights": ["latest"],
+      "highlights": [
+        "latest"
+      ],
       "comment": "GPT-5.5 の高精度版。非常に高価なため、難問や品質ベンチマーク向けの比較枠として扱う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3399,10 +4642,20 @@
       "id": "together::moonshotai/Kimi-K2.6",
       "provider": "together",
       "source_provider": "moonshotai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Together AI 上の Kimi K2.6。K2.5 の後継比較候補として、要約、質問応答、ダイジェストまで広く試せる追加枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3422,10 +4675,20 @@
       "id": "together::moonshotai/Kimi-K2.5",
       "provider": "together",
       "source_provider": "moonshotai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Together AI の主力候補。要約、質問応答、ダイジェストまで広く回せる高品質枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3445,10 +4708,19 @@
       "id": "together::moonshotai/Kimi-K2-Instruct",
       "provider": "together",
       "source_provider": "moonshotai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "ask",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "K2.5 より一段古いが、JSON mode と agentic な応答を試したい時の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3468,10 +4740,19 @@
       "id": "together::zai-org/GLM-5.1",
       "provider": "together",
       "source_provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "coding",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "GLM-5 系の更新版。Together 上でも GLM-5 を使っていた処理の比較候補として選べるようにする追加枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3491,10 +4772,20 @@
       "id": "together::zai-org/GLM-5.2",
       "provider": "together",
       "source_provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "Together 経由の GLM-5.2。GLM-5.1 後継として、長手数のエージェント系や難しめの実装相談、複雑な Ask の上位比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3515,10 +4806,19 @@
       "id": "together::zai-org/GLM-5",
       "provider": "together",
       "source_provider": "zai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "長手数のエージェント系や難しめの実装相談に向く Together の Z.ai 上位枠。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3538,10 +4838,20 @@
       "id": "together::openai/gpt-oss-120b",
       "provider": "together",
       "source_provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "recommended",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "fast"],
+      "highlights": [
+        "jsonStable",
+        "fast"
+      ],
       "comment": "Together の低コスト主力。要約、チェック、質問応答を安定して回しやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3561,10 +4871,21 @@
       "id": "together::openai/gpt-oss-20b",
       "provider": "together",
       "source_provider": "openai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "jsonStable", "fast"],
+      "highlights": [
+        "lowestCost",
+        "jsonStable",
+        "fast"
+      ],
       "comment": "軽量高速でかなり安い。抽出、軽い質問応答、ソース提案の第一候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3584,10 +4905,20 @@
       "id": "together::LiquidAI/LFM2-24B-A2B",
       "provider": "together",
       "source_provider": "liquidai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "source_suggestion",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "低価格で高スループットな Together 専用候補。RAG 前段や候補生成を安く回す用途向け。",
       "capabilities": {
         "supports_structured_output": false,
@@ -3607,10 +4938,19 @@
       "id": "together::deepseek-ai/DeepSeek-V3.1",
       "provider": "together",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "DeepSeek 系の高性能枠。要約や技術整理の比較対象として Together にも残す。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3630,10 +4970,21 @@
       "id": "together::deepseek-ai/DeepSeek-V4-Pro",
       "provider": "together",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "digest",
-      "highlights": ["reasoning", "latest", "jsonStable"],
+      "highlights": [
+        "reasoning",
+        "latest",
+        "jsonStable"
+      ],
       "comment": "Together AI 経由の DeepSeek V4 Pro。ユーザー提示価格に基づく追加枠で、複雑な要約やAskの比較候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3645,18 +4996,27 @@
       },
       "pricing": {
         "pricing_source": "user_provided_together_deepseek_v4_pro_2026_04",
-        "input_per_mtok_usd": 2.10,
-        "output_per_mtok_usd": 4.40
+        "input_per_mtok_usd": 2.1,
+        "output_per_mtok_usd": 4.4
       }
     },
     {
       "id": "together::deepseek-ai/DeepSeek-R1",
       "provider": "together",
       "source_provider": "deepseek-ai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "reasoning",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "Together 上では DeepSeek-R1-0528 系の endpoint。難しめの推論比較用として入れておく。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3676,7 +5036,14 @@
       "id": "together::deepcogito/cogito-v2-1-671b",
       "provider": "together",
       "source_provider": "deepcogito",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "reasoning",
       "highlights": [],
@@ -3699,10 +5066,19 @@
       "id": "together::essentialai/rnj-1-instruct",
       "provider": "together",
       "source_provider": "essentialai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "軽量だが coding と tool use が強い。技術寄りの質問応答や実験用途向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3722,7 +5098,14 @@
       "id": "together::mistralai/Mixtral-8x7B-Instruct-v0.1",
       "provider": "together",
       "source_provider": "mistralai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
       "highlights": [],
@@ -3745,10 +5128,19 @@
       "id": "together::mistralai/Mistral-7B-Instruct-v0.2",
       "provider": "together",
       "source_provider": "mistralai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "小型 Mistral の比較枠。軽い抽出や簡単な整形タスクを低負荷で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3768,10 +5160,19 @@
       "id": "together::meta-llama/Llama-3.3-70B-Instruct-Turbo",
       "provider": "together",
       "source_provider": "meta-llama",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "summary",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Together docs が最初の推奨候補に挙げる Meta 枠。標準的な比較対象として追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3791,10 +5192,20 @@
       "id": "together::meta-llama/Meta-Llama-3-8B-Instruct-Lite",
       "provider": "together",
       "source_provider": "meta-llama",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "Meta 系の最軽量候補。安い比較枠として残し、軽い前処理や抽出に向ける。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3814,10 +5225,21 @@
       "id": "together::google/gemma-4-31B-it",
       "provider": "together",
       "source_provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["reasoning", "toolCalling", "jsonStable"],
+      "highlights": [
+        "reasoning",
+        "toolCalling",
+        "jsonStable"
+      ],
       "comment": "Together AI 上の Gemma 4 31B。推論、コーディング、structured output の比較候補として追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3837,10 +5259,20 @@
       "id": "together::google/gemma-3n-E4B-it",
       "provider": "together",
       "source_provider": "google",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["lowestCost", "fast"],
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
       "comment": "かなり安い Google 系候補。軽量な比較や大量バッチ処理の下限として使いやすい。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3860,10 +5292,20 @@
       "id": "together::MiniMaxAI/MiniMax-M2.7",
       "provider": "together",
       "source_provider": "minimaxai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "experimental",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Together AI 上の MiniMax M2.7。長い agentic 実行やコーディング寄りの比較候補として追加する。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3884,10 +5326,20 @@
       "id": "together::MiniMaxAI/MiniMax-M3",
       "provider": "together",
       "source_provider": "minimaxai",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["latest", "jsonStable"],
+      "highlights": [
+        "latest",
+        "jsonStable"
+      ],
       "comment": "Together AI 上の MiniMax M3。M2.7 後継の上位比較候補として、長めの要約や Ask、agentic workflow の評価に使う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3908,10 +5360,19 @@
       "id": "together::Qwen/Qwen2.5-7B-Instruct-Turbo",
       "provider": "together",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["fast"],
+      "highlights": [
+        "fast"
+      ],
       "comment": "Qwen の小型 turbo 枠。function calling と JSON mode を安く試す用途に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3931,10 +5392,19 @@
       "id": "together::Qwen/Qwen3.5-397B-A17B",
       "provider": "together",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "reasoning",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "Qwen 系の上位 multimodal reasoning 枠。高価だが難しい整理や agent 比較に向く。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3954,10 +5424,20 @@
       "id": "together::Qwen/Qwen3.5-9B",
       "provider": "together",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["fast", "jsonStable"],
+      "highlights": [
+        "fast",
+        "jsonStable"
+      ],
       "comment": "Qwen3.5 の軽量上位枠。tool use と reasoning を安価に試せる実用候補。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3977,10 +5457,19 @@
       "id": "together::Qwen/Qwen3-Coder-Next-FP8",
       "provider": "together",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "coding",
-      "highlights": ["jsonStable"],
+      "highlights": [
+        "jsonStable"
+      ],
       "comment": "Together 上の coding agent 比較候補。長文コンテキストと tool use が強い。",
       "capabilities": {
         "supports_structured_output": true,
@@ -4000,10 +5489,20 @@
       "id": "together::Qwen/Qwen3.6-Plus",
       "provider": "together",
       "source_provider": "qwen",
-      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": ["jsonStable", "latest"],
+      "highlights": [
+        "jsonStable",
+        "latest"
+      ],
       "comment": "Together AI 上の Qwen3.6 Plus。要約、事実抽出、Ask の比較候補として使う最新 Qwen 系モデル。",
       "capabilities": {
         "supports_structured_output": true,
@@ -4024,10 +5523,14 @@
     {
       "id": "text-embedding-3-small",
       "provider": "openai",
-      "available_purposes": ["embedding"],
+      "available_purposes": [
+        "embedding"
+      ],
       "recommendation": "recommended",
       "best_for": "embedding",
-      "highlights": ["lowestCost"],
+      "highlights": [
+        "lowestCost"
+      ],
       "comment": "埋め込みの既定候補。コストが非常に低く、関連記事判定や検索基盤を安く維持しやすい。",
       "pricing": {
         "pricing_source": "openai_static_embeddings_2026_02",
@@ -4039,7 +5542,9 @@
     {
       "id": "text-embedding-3-large",
       "provider": "openai",
-      "available_purposes": ["embedding"],
+      "available_purposes": [
+        "embedding"
+      ],
       "recommendation": "strong",
       "best_for": "embedding",
       "highlights": [],

@@ -96,6 +96,11 @@ type AccessCardMetadata = {
   selectStatus: (settings: UserSettings) => { configured: boolean; last4: string | null | undefined };
 };
 
+// IMPORTANT for abstraction: Adding only to llm_catalog.json + llm_api_keys map is NOT enough
+// for a complete settings card to appear. This static metadata table (and the AccessProviderID
+// union type) still needs an entry for labels, placeholders and type checking.
+// Dynamic data from backend drives the has/last4 state and some visibility, but metadata is
+// the remaining manual surface. Update here + i18n when adding providers that need cards.
 const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
   {
     id: "anthropic",

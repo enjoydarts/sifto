@@ -1240,6 +1240,19 @@ export const api = {
       "/settings/featherless-key",
       { method: "DELETE" }
     ),
+  // Generic for catalog-driven LLM providers (reduces per-provider methods needed in UI specs).
+  // Uses /settings/{slug}-key where slug = id with _ -> - (matches existing routes for catalog ids).
+  setLlmApiKey: (provider: string, apiKey: string) => {
+    const slug = provider.replace(/_/g, "-");
+    return apiFetch<Record<string, unknown>>(`/settings/${slug}-key`, {
+      method: "POST",
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+  },
+  deleteLlmApiKey: (provider: string) => {
+    const slug = provider.replace(/_/g, "-");
+    return apiFetch<Record<string, unknown>>(`/settings/${slug}-key`, { method: "DELETE" });
+  },
   setAivisApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_aivis_api_key: boolean; aivis_api_key_last4: string | null }>(
       "/settings/aivis-key",

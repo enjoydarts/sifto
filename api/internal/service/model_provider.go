@@ -2,7 +2,9 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "xiaomi_mimo_token_plan", "featherless", "deepinfra", "cerebras", "siliconflow", "openrouter", "openai", "anthropic"}
+// costEfficientProviderPriority is empty/deprecated. Real provider list + order comes exclusively
+// from GetLLMProviders() (catalog json order). No long provider enumeration here.
+var costEfficientProviderPriority []string
 
 func isModelByProvider(model *string, provider string) bool {
 	if model == nil {
@@ -26,12 +28,18 @@ func IsOpenAIModel(model *string) bool   { return isModelByProvider(model, "open
 
 func LLMProviderForModel(model *string) string {
 	if model == nil {
-		return "anthropic"
+		if p := GetLLMProviders(); len(p) > 0 {
+			return p[0]
+		}
+		return "openai"
 	}
 	if provider := CatalogProviderForModel(strings.TrimSpace(*model)); provider != "" {
 		return provider
 	}
-	return "anthropic"
+	if p := GetLLMProviders(); len(p) > 0 {
+		return p[0]
+	}
+	return "openai"
 }
 
 func DefaultLLMModelForPurpose(provider, purpose string) string {
@@ -50,19 +58,23 @@ func DefaultLLMModelForPurpose(provider, purpose string) string {
 			}
 		}
 	}
-	if v := CatalogDefaultModelForPurpose("anthropic", purpose); v != "" {
-		return v
+	if ps := GetLLMProviders(); len(ps) > 0 {
+		if v := CatalogDefaultModelForPurpose(ps[0], purpose); v != "" {
+			return v
+		}
 	}
 	return "claude-sonnet-4-6"
 }
 
 func CostEfficientLLMProviders(exclude string) []string {
-	out := make([]string, 0, len(costEfficientProviderPriority))
-	for _, provider := range costEfficientProviderPriority {
-		if provider == exclude {
+	// exclusively from catalog via GetLLMProviders(); no static provider list
+	ids := GetLLMProviders()
+	out := make([]string, 0, len(ids))
+	for _, p := range ids {
+		if p == exclude {
 			continue
 		}
-		out = append(out, provider)
+		out = append(out, p)
 	}
 	return out
 }

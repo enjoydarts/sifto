@@ -18,12 +18,15 @@ type LLMCatalog struct {
 }
 
 type LLMProviderCatalog struct {
-	ID            string            `json:"id"`
-	Label         string            `json:"label,omitempty"`
-	APIKeyHeader  string            `json:"api_key_header"`
-	MatchExact    []string          `json:"match_exact"`
-	MatchPrefixes []string          `json:"match_prefixes"`
-	DefaultModels map[string]string `json:"default_models"`
+	ID                string            `json:"id"`
+	Label             string            `json:"label,omitempty"`
+	APIKeyHeader      string            `json:"api_key_header"`
+	ServiceModule     string            `json:"service_module,omitempty"`
+	AliasPrefix       string            `json:"alias_prefix,omitempty"`
+	SettingsFieldBase string            `json:"settings_field_base,omitempty"`
+	MatchExact        []string          `json:"match_exact"`
+	MatchPrefixes     []string          `json:"match_prefixes"`
+	DefaultModels     map[string]string `json:"default_models"`
 }
 
 type LLMModelCatalog struct {
@@ -496,44 +499,34 @@ func CatalogProviderForModel(model string) string {
 	if m == "" {
 		return ""
 	}
-	if IsOpenRouterAliasedModel(m) {
-		return "openrouter"
-	}
-	if IsPoeAliasedModel(m) {
-		return "poe"
-	}
-	if IsSiliconFlowAliasedModel(m) {
-		return "siliconflow"
-	}
-	if IsTogetherAliasedModel(m) {
-		return "together"
-	}
-	if IsFeatherlessAliasedModel(m) {
-		return "featherless"
-	}
-	if IsDeepInfraAliasedModel(m) {
-		return "deepinfra"
-	}
-	if IsCerebrasAliasedModel(m) {
-		return "cerebras"
-	}
-	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
-		return entry.Provider
-	}
 	lower := strings.ToLower(m)
-	for _, provider := range LLMCatalogData().Providers {
-		for _, exact := range provider.MatchExact {
-			if lower == strings.ToLower(strings.TrimSpace(exact)) {
-				return provider.ID
+	c := LLMCatalogData()
+
+	// Prioritize catalog data (alias_prefix + match rules) so hardcoded alias ladders are not the first source.
+	if c != nil {
+		for _, prov := range c.Providers {
+			if prov.AliasPrefix != "" && strings.HasPrefix(m, prov.AliasPrefix) {
+				return prov.ID
+			}
+			for _, exact := range prov.MatchExact {
+				if lower == strings.ToLower(strings.TrimSpace(exact)) {
+					return prov.ID
+				}
+			}
+			for _, pr := range prov.MatchPrefixes {
+				p := strings.ToLower(strings.TrimSpace(pr))
+				if p != "" && strings.HasPrefix(lower, p) {
+					return prov.ID
+				}
 			}
 		}
-		for _, prefix := range provider.MatchPrefixes {
-			p := strings.ToLower(strings.TrimSpace(prefix))
-			if p != "" && strings.HasPrefix(lower, p) {
-				return provider.ID
-			}
+		if e := findModelCatalogInCatalog(c, m); e != nil && e.Provider != "" {
+			return e.Provider
 		}
 	}
+
+	// Legacy alias Is* removed; catalog alias_prefix + match_exact/prefixes + findModelCatalogInCatalog are authoritative.
+	// (Individual Is*AliasedModel funcs kept for other call sites if any.)
 	return ""
 }
 
@@ -635,4 +628,54 @@ func CatalogIsEmbeddingModelInCatalog(catalog *LLMCatalog, model string) bool {
 		}
 	}
 	return false
+}
+
+// GetLLMProviders returns provider IDs from the catalog (the exclusive source for dispatch eligibility and key support).
+func GetLLMProviders() []string {
+	c := LLMCatalogData()
+	if c == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(c.Providers))
+	for _, p := range c.Providers {
+		if p.ID != "" {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}
+
+// ProviderServiceModule returns the module name for dispatch (from catalog "service_module" or default "{id}_service").
+func ProviderServiceModule(id string) string {
+	c := LLMCatalogData()
+	if c == nil {
+		return ""
+	}
+	for _, p := range c.Providers {
+		if p.ID == id {
+			if p.ServiceModule != "" {
+				return p.ServiceModule
+			}
+			return id + "_service"
+		}
+	}
+	return ""
+}
+
+// ProviderSettingsFieldBase returns the base name for Has{Base}APIKey etc from catalog.
+// This replaces duplicate override maps; adding provider only needs catalog entry.
+func ProviderSettingsFieldBase(id string) string {
+	c := LLMCatalogData()
+	if c == nil {
+		return ""
+	}
+	for _, p := range c.Providers {
+		if p.ID == id {
+			if p.SettingsFieldBase != "" {
+				return p.SettingsFieldBase
+			}
+			return ""
+		}
+	}
+	return ""
 }

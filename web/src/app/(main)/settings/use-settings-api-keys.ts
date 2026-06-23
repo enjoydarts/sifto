@@ -5,7 +5,7 @@ import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { api, type UserSettings } from "@/lib/api";
 import { createAPIKeyActionHandlers } from "@/components/settings/settings-api-key-actions";
 import { buildApiKeyCardLabels } from "@/components/settings/settings-system-helpers";
-import { buildAccessCards, createAccessCardRuntime } from "@/components/settings/system-access-cards";
+import { buildAccessCards, createAccessCardRuntime, type AccessCardRuntime } from "@/components/settings/system-access-cards";
 
 type ToastTone = "success" | "error";
 type ShowToast = (message: string, tone: ToastTone) => void;
@@ -37,83 +37,67 @@ export function useSettingsApiKeys({
   onClearAivisUserDictionarySelection,
   onResetElevenLabsVoices,
 }: UseSettingsApiKeysArgs) {
-  const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
-  const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
-  const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
-  const [deletingOpenAIKey, setDeletingOpenAIKey] = useState(false);
-  const [savingGoogleKey, setSavingGoogleKey] = useState(false);
-  const [deletingGoogleKey, setDeletingGoogleKey] = useState(false);
-  const [savingGroqKey, setSavingGroqKey] = useState(false);
-  const [deletingGroqKey, setDeletingGroqKey] = useState(false);
-  const [savingDeepSeekKey, setSavingDeepSeekKey] = useState(false);
-  const [deletingDeepSeekKey, setDeletingDeepSeekKey] = useState(false);
-  const [savingAlibabaKey, setSavingAlibabaKey] = useState(false);
-  const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
-  const [savingMistralKey, setSavingMistralKey] = useState(false);
-  const [deletingMistralKey, setDeletingMistralKey] = useState(false);
-  const [savingCerebrasKey, setSavingCerebrasKey] = useState(false);
-  const [deletingCerebrasKey, setDeletingCerebrasKey] = useState(false);
-  const [savingMiniMaxKey, setSavingMiniMaxKey] = useState(false);
-  const [deletingMiniMaxKey, setDeletingMiniMaxKey] = useState(false);
-  const [savingXiaomiMiMoTokenPlanKey, setSavingXiaomiMiMoTokenPlanKey] = useState(false);
-  const [deletingXiaomiMiMoTokenPlanKey, setDeletingXiaomiMiMoTokenPlanKey] = useState(false);
-  const [savingMoonshotKey, setSavingMoonshotKey] = useState(false);
-  const [deletingMoonshotKey, setDeletingMoonshotKey] = useState(false);
-  const [savingXAIKey, setSavingXAIKey] = useState(false);
-  const [deletingXAIKey, setDeletingXAIKey] = useState(false);
-  const [savingZAIKey, setSavingZAIKey] = useState(false);
-  const [deletingZAIKey, setDeletingZAIKey] = useState(false);
-  const [savingFireworksKey, setSavingFireworksKey] = useState(false);
-  const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
-  const [savingTogetherKey, setSavingTogetherKey] = useState(false);
-  const [deletingTogetherKey, setDeletingTogetherKey] = useState(false);
-  const [savingPoeKey, setSavingPoeKey] = useState(false);
-  const [deletingPoeKey, setDeletingPoeKey] = useState(false);
-  const [savingSiliconFlowKey, setSavingSiliconFlowKey] = useState(false);
-  const [deletingSiliconFlowKey, setDeletingSiliconFlowKey] = useState(false);
+  // Use maps for LLM key states (data-driven, no per-provider useState declarations).
+  // Adding a provider no longer requires new useState lines here.
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+
+  const setSavingFor = (p: string) => (v: boolean) => setSaving(m => ({...m, [p]: v}));
+  const setDeletingFor = (p: string) => (v: boolean) => setDeleting(m => ({...m, [p]: v}));
+  const getInput = (p: string) => inputs[p] || "";
+  const setInputFor = (p: string) => (v: string) => setInputs(m => ({...m, [p]: v}));
+
+  // Early ids from payload (catalog) for generation, before later memo. Avoids TDZ and drives data-only lists.
+  const llmIdsForGeneration = (() => {
+    const s = settings as { llm_api_keys?: Record<string, { has: boolean; last4?: string | null }> } | null;
+    const keyed = s?.llm_api_keys;
+    return keyed && Object.keys(keyed).length > 0 ? Object.keys(keyed) : [];
+  })();
+
+  // Azure region is special (non-LLM map for now)
+  const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
+
   const [savingAzureSpeechConfig, setSavingAzureSpeechConfig] = useState(false);
   const [deletingAzureSpeechConfig, setDeletingAzureSpeechConfig] = useState(false);
-  const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
-  const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
-  const [savingDeepInfraKey, setSavingDeepInfraKey] = useState(false);
-  const [deletingDeepInfraKey, setDeletingDeepInfraKey] = useState(false);
-  const [savingFeatherlessKey, setSavingFeatherlessKey] = useState(false);
-  const [deletingFeatherlessKey, setDeletingFeatherlessKey] = useState(false);
-  const [savingAivisKey, setSavingAivisKey] = useState(false);
-  const [deletingAivisKey, setDeletingAivisKey] = useState(false);
-  const [savingElevenLabsKey, setSavingElevenLabsKey] = useState(false);
-  const [deletingElevenLabsKey, setDeletingElevenLabsKey] = useState(false);
-  const [savingCartesiaKey, setSavingCartesiaKey] = useState(false);
-  const [deletingCartesiaKey, setDeletingCartesiaKey] = useState(false);
-  const [savingFishKey, setSavingFishKey] = useState(false);
-  const [deletingFishKey, setDeletingFishKey] = useState(false);
 
-  const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
-  const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
-  const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
-  const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
-  const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
-  const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
-  const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
-  const [cerebrasApiKeyInput, setCerebrasApiKeyInput] = useState("");
-  const [miniMaxApiKeyInput, setMiniMaxApiKeyInput] = useState("");
-  const [xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput] = useState("");
-  const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
-  const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
-  const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
-  const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
-  const [togetherApiKeyInput, setTogetherApiKeyInput] = useState("");
-  const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
-  const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
-  const [azureSpeechApiKeyInput, setAzureSpeechApiKeyInput] = useState("");
-  const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
-  const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
-  const [deepInfraApiKeyInput, setDeepInfraApiKeyInput] = useState("");
-  const [featherlessApiKeyInput, setFeatherlessApiKeyInput] = useState("");
-  const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
-  const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
-  const [cartesiaApiKeyInput, setCartesiaApiKeyInput] = useState("");
-  const [fishApiKeyInput, setFishApiKeyInput] = useState("");
+  // Small map only for LLM providers that have special after* side effects.
+  // Plain catalog LLM providers require ZERO entries here thanks to generic + i18n convention.
+  const llmSpecialCallbacks: Record<string, { afterSave?: () => void; afterDelete?: () => void }> = {
+    xai: { afterSave: onResetXAIVoices, afterDelete: onResetXAIVoices },
+  };
+
+  // Convert catalog id (e.g. xiaomi_mimo_token_plan) to the camelCase used in i18n dictionaries
+  // (e.g. xiaomiMimoTokenPlan). Simple ids pass through unchanged.
+  const toI18nProviderBase = (id: string): string =>
+    id.split('_').map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))).join('');
+
+  // Generate definitions purely from llm ids in data (catalog) using generic api + i18n convention.
+  // Adding a standard LLM provider: no change to this file (i18n keys still needed per AGENTS).
+  const llmDefinitionsBase = (() => {
+    const ids = llmIdsForGeneration.length > 0 ? llmIdsForGeneration : [];
+    const out: Record<string, unknown> = {};
+    for (const id of ids) {
+      const cb = llmSpecialCallbacks[id] || {};
+      const base = toI18nProviderBase(id);
+      out[id] = {
+        value: getInput(id),
+        setValue: setInputFor(id),
+        setSaving: setSavingFor(id),
+        setDeleting: setDeletingFor(id),
+        save: (k: string) => api.setLlmApiKey(id, k),
+        remove: () => api.deleteLlmApiKey(id),
+        deleteTitle: t(`settings.${base}DeleteTitle`),
+        deleteMessage: t(`settings.${base}DeleteMessage`),
+        emptyValueMessage: t("settings.error.enterApiKey"),
+        saveSuccessMessage: t(`settings.toast.${base}Saved`),
+        deleteSuccessMessage: t(`settings.toast.${base}Deleted`),
+        afterSave: cb.afterSave,
+        afterDelete: cb.afterDelete,
+      };
+    }
+    return out;
+  })();
 
   const apiKeyHandlers = createAPIKeyActionHandlers({
     confirm,
@@ -121,130 +105,9 @@ export function useSettingsApiKeys({
     reload,
     showToast,
     definitions: {
-      anthropic: {
-        value: anthropicApiKeyInput, setValue: setAnthropicApiKeyInput, setSaving: setSavingAnthropicKey, setDeleting: setDeletingAnthropicKey,
-        save: api.setAnthropicApiKey, remove: api.deleteAnthropicApiKey,
-        deleteTitle: t("settings.anthropicDeleteTitle"), deleteMessage: t("settings.anthropicDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.anthropicSaved"), deleteSuccessMessage: t("settings.toast.anthropicDeleted"),
-      },
-      openai: {
-        value: openAIApiKeyInput, setValue: setOpenAIApiKeyInput, setSaving: setSavingOpenAIKey, setDeleting: setDeletingOpenAIKey,
-        save: api.setOpenAIApiKey, remove: api.deleteOpenAIApiKey,
-        deleteTitle: t("settings.openaiDeleteTitle"), deleteMessage: t("settings.openaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.openaiSaved"), deleteSuccessMessage: t("settings.toast.openaiDeleted"),
-      },
-      google: {
-        value: googleApiKeyInput, setValue: setGoogleApiKeyInput, setSaving: setSavingGoogleKey, setDeleting: setDeletingGoogleKey,
-        save: api.setGoogleApiKey, remove: api.deleteGoogleApiKey,
-        deleteTitle: t("settings.googleDeleteTitle"), deleteMessage: t("settings.googleDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.googleSaved"), deleteSuccessMessage: t("settings.toast.googleDeleted"),
-      },
-      groq: {
-        value: groqApiKeyInput, setValue: setGroqApiKeyInput, setSaving: setSavingGroqKey, setDeleting: setDeletingGroqKey,
-        save: api.setGroqApiKey, remove: api.deleteGroqApiKey,
-        deleteTitle: t("settings.groqDeleteTitle"), deleteMessage: t("settings.groqDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.groqSaved"), deleteSuccessMessage: t("settings.toast.groqDeleted"),
-      },
-      deepseek: {
-        value: deepseekApiKeyInput, setValue: setDeepseekApiKeyInput, setSaving: setSavingDeepSeekKey, setDeleting: setDeletingDeepSeekKey,
-        save: api.setDeepSeekApiKey, remove: api.deleteDeepSeekApiKey,
-        deleteTitle: t("settings.deepseekDeleteTitle"), deleteMessage: t("settings.deepseekDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.deepseekSaved"), deleteSuccessMessage: t("settings.toast.deepseekDeleted"),
-      },
-      alibaba: {
-        value: alibabaApiKeyInput, setValue: setAlibabaApiKeyInput, setSaving: setSavingAlibabaKey, setDeleting: setDeletingAlibabaKey,
-        save: api.setAlibabaApiKey, remove: api.deleteAlibabaApiKey,
-        deleteTitle: t("settings.alibabaDeleteTitle"), deleteMessage: t("settings.alibabaDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.alibabaSaved"), deleteSuccessMessage: t("settings.toast.alibabaDeleted"),
-      },
-      mistral: {
-        value: mistralApiKeyInput, setValue: setMistralApiKeyInput, setSaving: setSavingMistralKey, setDeleting: setDeletingMistralKey,
-        save: api.setMistralApiKey, remove: api.deleteMistralApiKey,
-        deleteTitle: t("settings.mistralDeleteTitle"), deleteMessage: t("settings.mistralDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.mistralSaved"), deleteSuccessMessage: t("settings.toast.mistralDeleted"),
-      },
-      cerebras: {
-        value: cerebrasApiKeyInput, setValue: setCerebrasApiKeyInput, setSaving: setSavingCerebrasKey, setDeleting: setDeletingCerebrasKey,
-        save: api.setCerebrasApiKey, remove: api.deleteCerebrasApiKey,
-        deleteTitle: t("settings.cerebrasDeleteTitle"), deleteMessage: t("settings.cerebrasDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cerebrasSaved"), deleteSuccessMessage: t("settings.toast.cerebrasDeleted"),
-      },
-      minimax: {
-        value: miniMaxApiKeyInput, setValue: setMiniMaxApiKeyInput, setSaving: setSavingMiniMaxKey, setDeleting: setDeletingMiniMaxKey,
-        save: api.setMiniMaxApiKey, remove: api.deleteMiniMaxApiKey,
-        deleteTitle: t("settings.minimaxDeleteTitle"), deleteMessage: t("settings.minimaxDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.minimaxSaved"), deleteSuccessMessage: t("settings.toast.minimaxDeleted"),
-      },
-      xiaomi_mimo_token_plan: {
-        value: xiaomiMiMoTokenPlanApiKeyInput, setValue: setXiaomiMiMoTokenPlanApiKeyInput, setSaving: setSavingXiaomiMiMoTokenPlanKey, setDeleting: setDeletingXiaomiMiMoTokenPlanKey,
-        save: api.setXiaomiMiMoTokenPlanApiKey, remove: api.deleteXiaomiMiMoTokenPlanApiKey,
-        deleteTitle: t("settings.xiaomiMimoTokenPlanDeleteTitle"), deleteMessage: t("settings.xiaomiMimoTokenPlanDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanSaved"), deleteSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanDeleted"),
-      },
-      moonshot: {
-        value: moonshotApiKeyInput, setValue: setMoonshotApiKeyInput, setSaving: setSavingMoonshotKey, setDeleting: setDeletingMoonshotKey,
-        save: api.setMoonshotApiKey, remove: api.deleteMoonshotApiKey,
-        deleteTitle: t("settings.moonshotDeleteTitle"), deleteMessage: t("settings.moonshotDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.moonshotSaved"), deleteSuccessMessage: t("settings.toast.moonshotDeleted"),
-      },
-      xai: {
-        value: xaiApiKeyInput, setValue: setXaiApiKeyInput, setSaving: setSavingXAIKey, setDeleting: setDeletingXAIKey,
-        save: api.setXAIApiKey, remove: api.deleteXAIApiKey,
-        deleteTitle: t("settings.xaiDeleteTitle"), deleteMessage: t("settings.xaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.xaiSaved"), deleteSuccessMessage: t("settings.toast.xaiDeleted"),
-        afterSave: onResetXAIVoices,
-        afterDelete: onResetXAIVoices,
-      },
-      zai: {
-        value: zaiApiKeyInput, setValue: setZaiApiKeyInput, setSaving: setSavingZAIKey, setDeleting: setDeletingZAIKey,
-        save: api.setZAIApiKey, remove: api.deleteZAIApiKey,
-        deleteTitle: t("settings.zaiDeleteTitle"), deleteMessage: t("settings.zaiDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.zaiSaved"), deleteSuccessMessage: t("settings.toast.zaiDeleted"),
-      },
-      fireworks: {
-        value: fireworksApiKeyInput, setValue: setFireworksApiKeyInput, setSaving: setSavingFireworksKey, setDeleting: setDeletingFireworksKey,
-        save: api.setFireworksApiKey, remove: api.deleteFireworksApiKey,
-        deleteTitle: t("settings.fireworksDeleteTitle"), deleteMessage: t("settings.fireworksDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.fireworksSaved"), deleteSuccessMessage: t("settings.toast.fireworksDeleted"),
-      },
-      together: {
-        value: togetherApiKeyInput, setValue: setTogetherApiKeyInput, setSaving: setSavingTogetherKey, setDeleting: setDeletingTogetherKey,
-        save: api.setTogetherApiKey, remove: api.deleteTogetherApiKey,
-        deleteTitle: t("settings.togetherDeleteTitle"), deleteMessage: t("settings.togetherDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.togetherSaved"), deleteSuccessMessage: t("settings.toast.togetherDeleted"),
-      },
-      poe: {
-        value: poeApiKeyInput, setValue: setPoeApiKeyInput, setSaving: setSavingPoeKey, setDeleting: setDeletingPoeKey,
-        save: api.setPoeApiKey, remove: api.deletePoeApiKey,
-        deleteTitle: t("settings.poeDeleteTitle"), deleteMessage: t("settings.poeDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.poeSaved"), deleteSuccessMessage: t("settings.toast.poeDeleted"),
-      },
-      siliconflow: {
-        value: siliconFlowApiKeyInput, setValue: setSiliconFlowApiKeyInput, setSaving: setSavingSiliconFlowKey, setDeleting: setDeletingSiliconFlowKey,
-        save: api.setSiliconFlowApiKey, remove: api.deleteSiliconFlowApiKey,
-        deleteTitle: t("settings.siliconflowDeleteTitle"), deleteMessage: t("settings.siliconflowDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.siliconflowSaved"), deleteSuccessMessage: t("settings.toast.siliconflowDeleted"),
-      },
-      openrouter: {
-        value: openRouterApiKeyInput, setValue: setOpenRouterApiKeyInput, setSaving: setSavingOpenRouterKey, setDeleting: setDeletingOpenRouterKey,
-        save: api.setOpenRouterApiKey, remove: api.deleteOpenRouterApiKey,
-        deleteTitle: t("settings.openrouterDeleteTitle"), deleteMessage: t("settings.openrouterDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.openrouterSaved"), deleteSuccessMessage: t("settings.toast.openrouterDeleted"),
-      },
-      deepinfra: {
-        value: deepInfraApiKeyInput, setValue: setDeepInfraApiKeyInput, setSaving: setSavingDeepInfraKey, setDeleting: setDeletingDeepInfraKey,
-        save: api.setDeepInfraApiKey, remove: api.deleteDeepInfraApiKey,
-        deleteTitle: t("settings.deepinfraDeleteTitle"), deleteMessage: t("settings.deepinfraDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.deepinfraSaved"), deleteSuccessMessage: t("settings.toast.deepinfraDeleted"),
-      },
-      featherless: {
-        value: featherlessApiKeyInput, setValue: setFeatherlessApiKeyInput, setSaving: setSavingFeatherlessKey, setDeleting: setDeletingFeatherlessKey,
-        save: api.setFeatherlessApiKey, remove: api.deleteFeatherlessApiKey,
-        deleteTitle: t("settings.featherlessDeleteTitle"), deleteMessage: t("settings.featherlessDeleteMessage"),
-        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.featherlessSaved"), deleteSuccessMessage: t("settings.toast.featherlessDeleted"),
-      },
+      ...llmDefinitionsBase,
       aivis: {
-        value: aivisApiKeyInput, setValue: setAivisApiKeyInput, setSaving: setSavingAivisKey, setDeleting: setDeletingAivisKey,
+        value: getInput("aivis"), setValue: setInputFor("aivis"), setSaving: setSavingFor("aivis"), setDeleting: setDeletingFor("aivis"),
         save: api.setAivisApiKey, remove: api.deleteAivisApiKey,
         deleteTitle: t("settings.aivisDeleteTitle"), deleteMessage: t("settings.aivisDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.aivisSaved"), deleteSuccessMessage: t("settings.toast.aivisDeleted"),
@@ -255,7 +118,7 @@ export function useSettingsApiKeys({
         },
       },
       elevenlabs: {
-        value: elevenLabsApiKeyInput, setValue: setElevenLabsApiKeyInput, setSaving: setSavingElevenLabsKey, setDeleting: setDeletingElevenLabsKey,
+        value: getInput("elevenlabs"), setValue: setInputFor("elevenlabs"), setSaving: setSavingFor("elevenlabs"), setDeleting: setDeletingFor("elevenlabs"),
         save: api.setElevenLabsApiKey, remove: api.deleteElevenLabsApiKey,
         deleteTitle: t("settings.elevenlabsDeleteTitle"), deleteMessage: t("settings.elevenlabsDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.elevenlabsSaved"), deleteSuccessMessage: t("settings.toast.elevenlabsDeleted"),
@@ -263,13 +126,13 @@ export function useSettingsApiKeys({
         afterDelete: onResetElevenLabsVoices,
       },
       cartesia: {
-        value: cartesiaApiKeyInput, setValue: setCartesiaApiKeyInput, setSaving: setSavingCartesiaKey, setDeleting: setDeletingCartesiaKey,
+        value: getInput("cartesia"), setValue: setInputFor("cartesia"), setSaving: setSavingFor("cartesia"), setDeleting: setDeletingFor("cartesia"),
         save: api.setCartesiaApiKey, remove: api.deleteCartesiaApiKey,
         deleteTitle: t("settings.cartesiaDeleteTitle"), deleteMessage: t("settings.cartesiaDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.cartesiaSaved"), deleteSuccessMessage: t("settings.toast.cartesiaDeleted"),
       },
       fish: {
-        value: fishApiKeyInput, setValue: setFishApiKeyInput, setSaving: setSavingFishKey, setDeleting: setDeletingFishKey,
+        value: getInput("fish"), setValue: setInputFor("fish"), setSaving: setSavingFor("fish"), setDeleting: setDeletingFor("fish"),
         save: api.setFishApiKey, remove: api.deleteFishApiKey,
         deleteTitle: t("settings.fishDeleteTitle"), deleteMessage: t("settings.fishDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.fishSaved"), deleteSuccessMessage: t("settings.toast.fishDeleted"),
@@ -277,16 +140,25 @@ export function useSettingsApiKeys({
     },
   });
 
+  // Data-driven providers list (from llm_api_keys populated via catalog iteration).
+  const llmProvidersFromData = useMemo(() => {
+    const s = settings as { llm_api_keys?: Record<string, { has: boolean; last4?: string | null }> } | null;
+    const keyed = s?.llm_api_keys;
+    return keyed && Object.keys(keyed).length > 0 ? Object.keys(keyed) : [];
+  }, [settings]);
+  // llmProvidersFromData is now actively used to produce data-driven cards (see below)
+
+
   const submitAzureSpeechConfig = useCallback(async (event: FormEvent) => {
     event.preventDefault();
     setSavingAzureSpeechConfig(true);
     try {
-      const apiKey = azureSpeechApiKeyInput.trim();
+      const apiKey = getInput("azurespeech").trim();
       const region = azureSpeechRegionInput.trim();
       if (!apiKey) throw new Error(t("settings.error.enterApiKey"));
       if (!region) throw new Error(t("settings.azureSpeechRegionRequired"));
       await api.setAzureSpeechConfig(apiKey, region);
-      setAzureSpeechApiKeyInput("");
+      setInputFor("azurespeech")("");
       await reload();
       showToast(t("settings.toast.azureSpeechSaved"), "success");
     } catch (error) {
@@ -294,7 +166,7 @@ export function useSettingsApiKeys({
     } finally {
       setSavingAzureSpeechConfig(false);
     }
-  }, [azureSpeechApiKeyInput, azureSpeechRegionInput, reload, showToast, t]);
+  }, [getInput("azurespeech"), azureSpeechRegionInput, reload, showToast, t]);
 
   const deleteAzureSpeechConfig = useCallback(async () => {
     if (!(await confirm({
@@ -320,49 +192,63 @@ export function useSettingsApiKeys({
 
   const apiKeyCardLabels = useMemo(() => buildApiKeyCardLabels(t), [t]);
 
-  const accessCards = buildAccessCards(
+  // State registry built purely from llm ids in data (catalog-driven) + fixed TTS list.
+  // No fallback to specs; new LLM from llm_api_keys just works (no edit to this file).
+  const llmStateRegistry: Record<string, {value: string; setValue: (v: string) => void; saving: boolean; deleting: boolean}> = (() => {
+    const ttsIds = ["aivis", "elevenlabs", "cartesia", "fish"];
+    const ids = [...(llmIdsForGeneration.length > 0 ? llmIdsForGeneration : []), ...ttsIds];
+    const r: Record<string, {value: string; setValue: (v: string) => void; saving: boolean; deleting: boolean}> = {};
+    for (const id of ids) {
+      r[id] = { value: getInput(id), setValue: setInputFor(id), saving: saving[id] || false, deleting: deleting[id] || false };
+    }
+    return r;
+  })();
+
+  const llmCardConfig: Record<string, AccessCardRuntime> = {};
+  // Strictly data-driven for LLM (from catalog via llm_api_keys); TTS handled via registry add-below.
+  const providersForCards = llmProvidersFromData.length > 0 ? llmProvidersFromData : [];
+  providersForCards.forEach((id: string) => {
+    const st = llmStateRegistry[id];
+    const h = (apiKeyHandlers as unknown as Record<string, { submit: (e: FormEvent) => Promise<void>; remove: () => Promise<void> }>)[id];
+    if (st && h) {
+      llmCardConfig[id] = createAccessCardRuntime(st.value, st.setValue, h.submit, h.remove, st.saving, st.deleting);
+    }
+  });
+
+  // Special non-LLM / TTS cards always included (using direct for specials that have extra like region)
+  llmCardConfig.azure_speech = createAccessCardRuntime(
+    getInput("azurespeech"),
+    setInputFor("azurespeech"),
+    submitAzureSpeechConfig,
+    deleteAzureSpeechConfig,
+    savingAzureSpeechConfig,
+    deletingAzureSpeechConfig,
+    azureSpeechRegionInput,
+    setAzureSpeechRegionInput,
+  );
+
+  // Add any remaining from registry (TTS etc) that weren't added as LLM
+  Object.keys(llmStateRegistry).forEach(id => {
+    if (!llmCardConfig[id]) {
+      const st = llmStateRegistry[id];
+      const h = (apiKeyHandlers as unknown as Record<string, { submit: (e: FormEvent) => Promise<void>; remove: () => Promise<void> }>)[id];
+      if (st && st.value !== undefined && h) {
+        llmCardConfig[id] = createAccessCardRuntime(st.value, st.setValue, h.submit, h.remove, st.saving, st.deleting);
+      }
+    }
+  });
+
+  const rawAccessCards = buildAccessCards(
     settings,
-    {
-      anthropic: createAccessCardRuntime(anthropicApiKeyInput, setAnthropicApiKeyInput, apiKeyHandlers.anthropic!.submit, apiKeyHandlers.anthropic!.remove, savingAnthropicKey, deletingAnthropicKey),
-      openai: createAccessCardRuntime(openAIApiKeyInput, setOpenAIApiKeyInput, apiKeyHandlers.openai!.submit, apiKeyHandlers.openai!.remove, savingOpenAIKey, deletingOpenAIKey),
-      google: createAccessCardRuntime(googleApiKeyInput, setGoogleApiKeyInput, apiKeyHandlers.google!.submit, apiKeyHandlers.google!.remove, savingGoogleKey, deletingGoogleKey),
-      groq: createAccessCardRuntime(groqApiKeyInput, setGroqApiKeyInput, apiKeyHandlers.groq!.submit, apiKeyHandlers.groq!.remove, savingGroqKey, deletingGroqKey),
-      deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek!.submit, apiKeyHandlers.deepseek!.remove, savingDeepSeekKey, deletingDeepSeekKey),
-      alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba!.submit, apiKeyHandlers.alibaba!.remove, savingAlibabaKey, deletingAlibabaKey),
-      minimax: createAccessCardRuntime(miniMaxApiKeyInput, setMiniMaxApiKeyInput, apiKeyHandlers.minimax!.submit, apiKeyHandlers.minimax!.remove, savingMiniMaxKey, deletingMiniMaxKey),
-      xiaomi_mimo_token_plan: createAccessCardRuntime(xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput, apiKeyHandlers.xiaomi_mimo_token_plan!.submit, apiKeyHandlers.xiaomi_mimo_token_plan!.remove, savingXiaomiMiMoTokenPlanKey, deletingXiaomiMiMoTokenPlanKey),
-      mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
-      cerebras: createAccessCardRuntime(cerebrasApiKeyInput, setCerebrasApiKeyInput, apiKeyHandlers.cerebras!.submit, apiKeyHandlers.cerebras!.remove, savingCerebrasKey, deletingCerebrasKey),
-      moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
-      xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),
-      zai: createAccessCardRuntime(zaiApiKeyInput, setZaiApiKeyInput, apiKeyHandlers.zai!.submit, apiKeyHandlers.zai!.remove, savingZAIKey, deletingZAIKey),
-      fireworks: createAccessCardRuntime(fireworksApiKeyInput, setFireworksApiKeyInput, apiKeyHandlers.fireworks!.submit, apiKeyHandlers.fireworks!.remove, savingFireworksKey, deletingFireworksKey),
-      together: createAccessCardRuntime(togetherApiKeyInput, setTogetherApiKeyInput, apiKeyHandlers.together!.submit, apiKeyHandlers.together!.remove, savingTogetherKey, deletingTogetherKey),
-      poe: createAccessCardRuntime(poeApiKeyInput, setPoeApiKeyInput, apiKeyHandlers.poe!.submit, apiKeyHandlers.poe!.remove, savingPoeKey, deletingPoeKey),
-      siliconflow: createAccessCardRuntime(siliconFlowApiKeyInput, setSiliconFlowApiKeyInput, apiKeyHandlers.siliconflow!.submit, apiKeyHandlers.siliconflow!.remove, savingSiliconFlowKey, deletingSiliconFlowKey),
-      azure_speech: createAccessCardRuntime(
-        azureSpeechApiKeyInput,
-        setAzureSpeechApiKeyInput,
-        submitAzureSpeechConfig,
-        deleteAzureSpeechConfig,
-        savingAzureSpeechConfig,
-        deletingAzureSpeechConfig,
-        azureSpeechRegionInput,
-        setAzureSpeechRegionInput,
-      ),
-      openrouter: createAccessCardRuntime(openRouterApiKeyInput, setOpenRouterApiKeyInput, apiKeyHandlers.openrouter!.submit, apiKeyHandlers.openrouter!.remove, savingOpenRouterKey, deletingOpenRouterKey),
-      deepinfra: createAccessCardRuntime(deepInfraApiKeyInput, setDeepInfraApiKeyInput, apiKeyHandlers.deepinfra!.submit, apiKeyHandlers.deepinfra!.remove, savingDeepInfraKey, deletingDeepInfraKey),
-      featherless: createAccessCardRuntime(featherlessApiKeyInput, setFeatherlessApiKeyInput, apiKeyHandlers.featherless!.submit, apiKeyHandlers.featherless!.remove, savingFeatherlessKey, deletingFeatherlessKey),
-      aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis!.submit, apiKeyHandlers.aivis!.remove, savingAivisKey, deletingAivisKey),
-      elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs!.submit, apiKeyHandlers.elevenlabs!.remove, savingElevenLabsKey, deletingElevenLabsKey),
-      cartesia: createAccessCardRuntime(cartesiaApiKeyInput, setCartesiaApiKeyInput, apiKeyHandlers.cartesia!.submit, apiKeyHandlers.cartesia!.remove, savingCartesiaKey, deletingCartesiaKey),
-      fish: createAccessCardRuntime(fishApiKeyInput, setFishApiKeyInput, apiKeyHandlers.fish!.submit, apiKeyHandlers.fish!.remove, savingFishKey, deletingFishKey),
-    },
+    llmCardConfig,
     t,
   );
+
+  const accessCards = rawAccessCards;
 
   return {
     accessCards,
     apiKeyCardLabels,
+    llmProviders: llmProvidersFromData,
   };
 }

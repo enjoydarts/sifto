@@ -378,11 +378,11 @@ func TestSettingsPayloadIncludesDeepInfraAPIKeyState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if !payload.HasDeepInfraAPIKey {
-		t.Fatal("HasDeepInfraAPIKey = false, want true")
+	if !payload.LLMAPIKeys["deepinfra"].Has {
+		t.Fatal("LLMAPIKeys[deepinfra].Has = false, want true")
 	}
-	if payload.DeepInfraAPIKeyLast4 == nil || *payload.DeepInfraAPIKeyLast4 != "cret" {
-		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want %q", payload.DeepInfraAPIKeyLast4, "cret")
+	if payload.LLMAPIKeys["deepinfra"].Last4 == nil || *payload.LLMAPIKeys["deepinfra"].Last4 != "cret" {
+		t.Fatalf("LLMAPIKeys[deepinfra].Last4 = %#v, want %q", payload.LLMAPIKeys["deepinfra"].Last4, "cret")
 	}
 }
 
@@ -541,11 +541,11 @@ func TestSettingsServiceGetIncludesMiniMaxAPIKeyPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if !payload.HasMiniMaxAPIKey {
-		t.Fatal("HasMiniMaxAPIKey = false, want true")
+	if !payload.LLMAPIKeys["minimax"].Has {
+		t.Fatal("LLMAPIKeys[minimax].Has = false, want true")
 	}
-	if payload.MiniMaxAPIKeyLast4 == nil || *payload.MiniMaxAPIKeyLast4 != "cret" {
-		t.Fatalf("MiniMaxAPIKeyLast4 = %#v, want %q", payload.MiniMaxAPIKeyLast4, "cret")
+	if payload.LLMAPIKeys["minimax"].Last4 == nil || *payload.LLMAPIKeys["minimax"].Last4 != "cret" {
+		t.Fatalf("LLMAPIKeys[minimax].Last4 = %#v, want %q", payload.LLMAPIKeys["minimax"].Last4, "cret")
 	}
 }
 
@@ -596,11 +596,11 @@ func TestSettingsServiceGetIncludesFeatherlessAPIKeyPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if !payload.HasFeatherlessAPIKey {
-		t.Fatal("HasFeatherlessAPIKey = false, want true")
+	if !payload.LLMAPIKeys["featherless"].Has {
+		t.Fatal("LLMAPIKeys[featherless].Has = false, want true")
 	}
-	if payload.FeatherlessAPIKeyLast4 == nil || *payload.FeatherlessAPIKeyLast4 != "cret" {
-		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want %q", payload.FeatherlessAPIKeyLast4, "cret")
+	if payload.LLMAPIKeys["featherless"].Last4 == nil || *payload.LLMAPIKeys["featherless"].Last4 != "cret" {
+		t.Fatalf("LLMAPIKeys[featherless].Last4 = %#v, want %q", payload.LLMAPIKeys["featherless"].Last4, "cret")
 	}
 }
 
@@ -691,43 +691,46 @@ func TestResolveAINavigatorBriefModelUsesBriefSpecificOverrides(t *testing.T) {
 
 func TestSettingsGetPayloadSupportsPoeFields(t *testing.T) {
 	payload := &SettingsGetPayload{
-		HasPoeAPIKey:   true,
-		PoeAPIKeyLast4: strptr("abcd"),
+		LLMAPIKeys: map[string]APIKeyStatus{
+			"poe": {Has: true, Last4: strptr("abcd")},
+		},
 	}
 
-	if !payload.HasPoeAPIKey {
-		t.Fatal("HasPoeAPIKey should be true")
+	if !payload.LLMAPIKeys["poe"].Has {
+		t.Fatal("LLMAPIKeys[poe].Has should be true")
 	}
-	if payload.PoeAPIKeyLast4 == nil || *payload.PoeAPIKeyLast4 != "abcd" {
-		t.Fatalf("PoeAPIKeyLast4 = %v, want %q", payload.PoeAPIKeyLast4, "abcd")
+	if payload.LLMAPIKeys["poe"].Last4 == nil || *payload.LLMAPIKeys["poe"].Last4 != "abcd" {
+		t.Fatalf("LLMAPIKeys[poe].Last4 = %v, want %q", payload.LLMAPIKeys["poe"].Last4, "abcd")
 	}
 }
 
 func TestSettingsGetPayloadSupportsSiliconFlowFields(t *testing.T) {
 	payload := &SettingsGetPayload{
-		HasSiliconFlowAPIKey:   true,
-		SiliconFlowAPIKeyLast4: strptr("sf42"),
+		LLMAPIKeys: map[string]APIKeyStatus{
+			"siliconflow": {Has: true, Last4: strptr("sf42")},
+		},
 	}
 
-	if !payload.HasSiliconFlowAPIKey {
-		t.Fatal("HasSiliconFlowAPIKey should be true")
+	if !payload.LLMAPIKeys["siliconflow"].Has {
+		t.Fatal("LLMAPIKeys[siliconflow].Has should be true")
 	}
-	if payload.SiliconFlowAPIKeyLast4 == nil || *payload.SiliconFlowAPIKeyLast4 != "sf42" {
-		t.Fatalf("SiliconFlowAPIKeyLast4 = %v, want %q", payload.SiliconFlowAPIKeyLast4, "sf42")
+	if payload.LLMAPIKeys["siliconflow"].Last4 == nil || *payload.LLMAPIKeys["siliconflow"].Last4 != "sf42" {
+		t.Fatalf("LLMAPIKeys[siliconflow].Last4 = %v, want %q", payload.LLMAPIKeys["siliconflow"].Last4, "sf42")
 	}
 }
 
 func TestSettingsGetPayloadSupportsMoonshotFields(t *testing.T) {
 	payload := &SettingsGetPayload{
-		HasMoonshotAPIKey:   true,
-		MoonshotAPIKeyLast4: strptr("k25x"),
+		LLMAPIKeys: map[string]APIKeyStatus{
+			"moonshot": {Has: true, Last4: strptr("k25x")},
+		},
 	}
 
-	if !payload.HasMoonshotAPIKey {
-		t.Fatal("HasMoonshotAPIKey should be true")
+	if !payload.LLMAPIKeys["moonshot"].Has {
+		t.Fatal("LLMAPIKeys[moonshot].Has should be true")
 	}
-	if payload.MoonshotAPIKeyLast4 == nil || *payload.MoonshotAPIKeyLast4 != "k25x" {
-		t.Fatalf("MoonshotAPIKeyLast4 = %v, want %q", payload.MoonshotAPIKeyLast4, "k25x")
+	if payload.LLMAPIKeys["moonshot"].Last4 == nil || *payload.LLMAPIKeys["moonshot"].Last4 != "k25x" {
+		t.Fatalf("LLMAPIKeys[moonshot].Last4 = %v, want %q", payload.LLMAPIKeys["moonshot"].Last4, "k25x")
 	}
 }
 

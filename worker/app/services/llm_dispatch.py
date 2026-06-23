@@ -1,20 +1,16 @@
 import logging
 from collections.abc import Callable
-from typing import Literal
 
 from fastapi import Request
 
-from app.services.llm_catalog import provider_api_key_header, provider_for_model
+from app.services.llm_catalog import provider_api_key_header, provider_for_model, get_llm_providers
 from app.services.openai_compat_transport import provider_request_context
 
 logger = logging.getLogger(__name__)
 
-Provider = Literal[
-    "openai", "anthropic", "google", "groq", "deepseek",
-    "openrouter", "together", "mistral", "xai", "alibaba",
-    "poe", "siliconflow", "fireworks", "zai", "moonshot", "minimax", "xiaomi_mimo_token_plan",
-    "featherless", "deepinfra", "cerebras",
-]
+# Provider IDs are obtained exclusively at runtime from shared/llm_catalog.json via get_llm_providers().
+# The static list below is kept only for reference / legacy type hints; do not extend it when adding providers.
+Provider = str  # was Literal[...] hard-coded list; now catalog-driven (see get_llm_providers)
 
 
 def dispatch_by_model(

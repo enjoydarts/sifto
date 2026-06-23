@@ -121,6 +121,11 @@ def provider_config(provider_id: str | None) -> dict | None:
     return None
 
 
+def provider_requires_anthropic_args(provider_id: str | None) -> bool:
+    cfg = provider_config(provider_id) or {}
+    return bool(cfg.get("requires_anthropic_args"))
+
+
 def model_pricing(model: str | None) -> dict | None:
     m = str(model or "").strip()
     if not m:
@@ -163,3 +168,29 @@ def model_supports(model: str | None, capability: str) -> bool:
 def provider_api_key_header(provider_id: str | None) -> str:
     provider = provider_config(provider_id) or {}
     return str(provider.get("api_key_header") or "").strip()
+
+
+def get_llm_providers() -> list[str]:
+    """LLM provider IDs sourced exclusively from catalog (for dispatch eligibility and key lists)."""
+    catalog = load_llm_catalog()
+    return [str(p.get("id") or "").strip() for p in catalog.get("providers", []) if p.get("id")]
+
+
+def provider_service_module(provider_id: str | None) -> str:
+    """Return service module name from catalog or default {id}_service. Supports declarative dispatch registration."""
+    provider = provider_config(provider_id) or {}
+    if mod := provider.get("service_module"):
+        return str(mod)
+    pid = str(provider_id or "").strip()
+    if pid:
+        return f"{pid}_service"
+    return ""
+
+
+def provider_settings_field_base(provider_id: str | None) -> str:
+    """Base name for Has{Base}APIKey / Get{Base}APIKeyEncrypted from catalog settings_field_base.
+    Replaces duplicate override maps so new providers only need catalog data."""
+    provider = provider_config(provider_id) or {}
+    if base := provider.get("settings_field_base"):
+        return str(base)
+    return ""

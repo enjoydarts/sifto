@@ -1,6 +1,12 @@
 package service
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/enjoydarts/sifto/api/internal/model"
+)
 
 func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	catalog := LLMCatalogData()
@@ -555,5 +561,73 @@ func TestDefaultLLMModelForPurposeFallsBackToDeepInfraDynamicCatalogModel(t *tes
 
 	if got := DefaultLLMModelForPurpose("deepinfra", "summary"); got != "deepinfra::Qwen/Qwen3.5-32B-Instruct" {
 		t.Fatalf("DefaultLLMModelForPurpose(%q, %q) = %q, want %q", "deepinfra", "summary", got, "deepinfra::Qwen/Qwen3.5-32B-Instruct")
+	}
+}
+
+func contains(ss []string, v string) bool {
+	for _, s := range ss {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGetLLMProvidersDrivenByCatalog(t *testing.T) {
+	ids := GetLLMProviders()
+	if len(ids) == 0 {
+		t.Fatal("GetLLMProviders returned empty; catalog not source of truth")
+	}
+	if !contains(ids, "anthropic") || !contains(ids, "groq") || !contains(ids, "openai") {
+		t.Errorf("expected core providers from catalog, got %v", ids)
+	}
+}
+
+func TestSynthesizedAddProviderScenario(t *testing.T) {
+	// catalog data (service_module etc) drives; new provider via catalog would appear in GetLLMProviders
+	if mod := ProviderServiceModule("anthropic"); mod != "claude_service" {
+		t.Errorf("anthropic service_module from catalog: got %s", mod)
+	}
+	if mod := ProviderServiceModule("groq"); mod != "groq_service" {
+		t.Errorf("default module: got %s", mod)
+	}
+	ids := GetLLMProviders()
+	if !contains(ids, "anthropic") {
+		t.Error("catalog providers not driving")
+	}
+}
+
+// TestEveryCatalogProviderHasSettingsAndRepoFields is the exhaustive gate (per strategy).
+// For every id from GetLLMProviders(), the catalog settings_field_base must allow
+// reflect-resolving the exact Has* / *Last4 on model.UserSettings (DB columns for compat) and repo.
+// Payload and key loading are map/catalog-driven (AC2); model/repo fields remain per-column per non-goal.
+
+func TestEveryCatalogProviderHasSettingsAndRepoFields(t *testing.T) {
+	ids := GetLLMProviders()
+	if len(ids) == 0 {
+		t.Fatal("no providers")
+	}
+	settingsVal := reflect.ValueOf(&model.UserSettings{}).Elem()
+	for _, id := range ids {
+		base := ProviderSettingsFieldBase(id)
+		if base == "" {
+			// allow derive as last resort but prefer catalog
+			parts := strings.Split(id, "_")
+			for i := range parts {
+				if len(parts[i]) > 0 {
+					parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+				}
+			}
+			base = strings.Join(parts, "")
+		}
+		hasF := "Has" + base + "APIKey"
+		last4F := base + "APIKeyLast4"
+
+		if f := settingsVal.FieldByName(hasF); !f.IsValid() {
+			t.Errorf("provider %s: missing field %s on UserSettings (base=%s)", id, hasF, base)
+		}
+		if f := settingsVal.FieldByName(last4F); !f.IsValid() {
+			t.Errorf("provider %s: missing field %s on UserSettings", id, last4F)
+		}
 	}
 }

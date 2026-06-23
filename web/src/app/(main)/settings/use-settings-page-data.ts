@@ -683,7 +683,7 @@ export function useSettingsPageData() {
     return "text-zinc-700";
   }, [settings?.current_month.remaining_budget_pct, thresholdPct]);
 
-  const { accessCards, apiKeyCardLabels } = useSettingsApiKeys({
+  const { accessCards, apiKeyCardLabels, llmProviders } = useSettingsApiKeys({
     settings,
     reload: load,
     confirm,
@@ -696,7 +696,23 @@ export function useSettingsPageData() {
     onResetElevenLabsVoices: resetElevenLabsVoices,
   });
 
-  const { configuredProviderCount, activeAccessCard } = resolveAccessCardSelection(accessCards, activeAccessProvider);
+  // Pure data-driven filter for LLM (from llm_api_keys / catalog). No fallback to static/ full registry for LLM cards.
+  // TTS/special always included via explicit small list (LLM providers are exclusively data-driven).
+  const nonLLMSpecials = ['azure_speech', 'aivis', 'elevenlabs', 'cartesia', 'fish'];
+  const filteredAccessCards = Array.isArray(accessCards)
+    ? accessCards.filter((c: unknown) => {
+        const card = c as { id?: string };
+        const id = card?.id || '';
+        if (!id) return true;
+        if (llmProviders && llmProviders.length > 0) {
+          return llmProviders.includes(id) || nonLLMSpecials.includes(id);
+        }
+        // no LLM data: explicitly exclude any LLM cards; only TTS/special
+        return nonLLMSpecials.includes(id);
+      })
+    : accessCards;
+
+  const { configuredProviderCount, activeAccessCard } = resolveAccessCardSelection(filteredAccessCards, activeAccessProvider);
   const {
     savedSansKey: savedUIFontSansKey,
     savedSerifKey: savedUIFontSerifKey,
@@ -1398,7 +1414,7 @@ export function useSettingsPageData() {
   const sectionNavItems = buildSettingsSectionNavItems({
     t,
     configuredProviderCount,
-    accessCardCount: accessCards.length,
+    accessCardCount: filteredAccessCards.length,
     readingPlanWindow,
     readingPlanSize,
     readingPlanDiversifyTopics,
@@ -1816,7 +1832,7 @@ export function useSettingsPageData() {
 
   const systemAccessState = buildSystemAccessState({
     configuredProviderCount,
-    accessCards,
+    accessCards: filteredAccessCards,
     activeAccessCard,
     apiKeyCardLabels,
     onSelectProvider: setActiveAccessProvider,

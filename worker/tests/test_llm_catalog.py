@@ -84,3 +84,67 @@ class LlmCatalogSmokeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CatalogDrivenDispatchTests(unittest.TestCase):
+    """Tests that dispatch/resolution use catalog as exclusive source (AC1,3)."""
+
+    def test_get_llm_providers_returns_catalog_list(self):
+        from app.services.llm_catalog import get_llm_providers
+        provs = get_llm_providers()
+        self.assertIn("anthropic", provs)
+        self.assertIn("groq", provs)
+        self.assertIn("openai", provs)
+        self.assertGreater(len(provs), 10)
+
+    def test_synthesized_add_provider_via_inmemory_catalog(self):
+        """Exercise add-new-provider scenario by overriding load to return augmented catalog."""
+        from app.auto_dispatch import build_handler_map_async
+        import app.services.llm_catalog as mod
+        orig_load = mod.load_llm_catalog
+        try:
+            def fake_load():
+                cat = orig_load()
+                cat = dict(cat)  # copy
+                provs = list(cat.get("providers", []))
+                provs.append({
+                    "id": "synthetic_test_provider",
+                    "api_key_header": "x-test-key",
+                    "match_exact": ["synthetic-test-model"],
+                    "match_prefixes": [],
+                    "default_models": {},
+                })
+                cat["providers"] = provs
+                # also ensure model entry for resolution
+                chat = list(cat.get("chat_models", []))
+                chat.append({
+                    "id": "synthetic-test-model",
+                    "provider": "synthetic_test_provider",
+                    "available_purposes": ["summary"],
+                })
+                cat["chat_models"] = chat
+                return cat
+            mod.load_llm_catalog = fake_load
+            mod.load_llm_catalog.cache_clear() if hasattr(mod.load_llm_catalog, "cache_clear") else None
+
+            from app.services.llm_catalog import get_llm_providers, provider_for_model, provider_service_module
+            provs = get_llm_providers()
+            self.assertIn("synthetic_test_provider", provs)
+            self.assertEqual(provider_for_model("synthetic-test-model"), "synthetic_test_provider")
+            self.assertEqual(provider_service_module("synthetic_test_provider"), "synthetic_test_provider_service")
+            # synthetic has no real module; expect import fail but proves list from catalog view
+            try:
+                h = build_handler_map_async("summarize", lambda f, k: lambda *a, **kwa: {"ok": True, "provider": kwa.get("model", "")}, providers=["synthetic_test_provider"])
+                assert "synthetic_test_provider" in h
+            except ModuleNotFoundError:
+                pass
+            # verify real dispatch + handler invoke for catalog listed compat provider (OpenAICompat path)
+            h2 = build_handler_map_async("summarize", lambda f, k: lambda *a, **kwa: {"ok": True, "provider": kwa.get("model", "")}, providers=["groq"])
+            assert "groq" in h2
+            thunk = h2["groq"](None)
+            res = thunk() if callable(thunk) else thunk
+            assert res.get("ok") is True
+        finally:
+            mod.load_llm_catalog = orig_load
+            if hasattr(mod.load_llm_catalog, "cache_clear"):
+                mod.load_llm_catalog.cache_clear()

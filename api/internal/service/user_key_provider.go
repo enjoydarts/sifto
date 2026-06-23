@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"reflect"
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -28,26 +29,46 @@ func (p *UserKeyProvider) registerLoaders() {
 	if p.settingsRepo == nil {
 		return
 	}
-	p.loaders["anthropic"] = p.settingsRepo.GetAnthropicAPIKeyEncrypted
-	p.loaders["google"] = p.settingsRepo.GetGoogleAPIKeyEncrypted
-	p.loaders["groq"] = p.settingsRepo.GetGroqAPIKeyEncrypted
-	p.loaders["deepseek"] = p.settingsRepo.GetDeepSeekAPIKeyEncrypted
-	p.loaders["alibaba"] = p.settingsRepo.GetAlibabaAPIKeyEncrypted
-	p.loaders["minimax"] = p.settingsRepo.GetMiniMaxAPIKeyEncrypted
-	p.loaders["xiaomi_mimo_token_plan"] = p.settingsRepo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted
-	p.loaders["deepinfra"] = p.settingsRepo.GetDeepInfraAPIKeyEncrypted
-	p.loaders["featherless"] = p.settingsRepo.GetFeatherlessAPIKeyEncrypted
-	p.loaders["mistral"] = p.settingsRepo.GetMistralAPIKeyEncrypted
-	p.loaders["moonshot"] = p.settingsRepo.GetMoonshotAPIKeyEncrypted
-	p.loaders["xai"] = p.settingsRepo.GetXAIAPIKeyEncrypted
-	p.loaders["zai"] = p.settingsRepo.GetZAIAPIKeyEncrypted
-	p.loaders["fireworks"] = p.settingsRepo.GetFireworksAPIKeyEncrypted
-	p.loaders["together"] = p.settingsRepo.GetTogetherAPIKeyEncrypted
-	p.loaders["openrouter"] = p.settingsRepo.GetOpenRouterAPIKeyEncrypted
-	p.loaders["poe"] = p.settingsRepo.GetPoeAPIKeyEncrypted
-	p.loaders["siliconflow"] = p.settingsRepo.GetSiliconFlowAPIKeyEncrypted
-	p.loaders["openai"] = p.settingsRepo.GetOpenAIAPIKeyEncrypted
-	p.loaders["cerebras"] = p.settingsRepo.GetCerebrasAPIKeyEncrypted
+	// iterate over catalog providers (GetLLMProviders).
+	// Use reflect to lookup repo method "Get" + base + "APIKeyEncrypted" so adding provider does not require case here (reduction per AC2).
+	// Repo methods and DB columns still needed (non-goal).
+	repoVal := reflect.ValueOf(p.settingsRepo)
+	for _, pid := range GetLLMProviders() {
+		base := ProviderSettingsFieldBase(pid)
+		if base == "" {
+			// fallback (for non-catalog or legacy)
+			parts := strings.Split(pid, "_")
+			for i := range parts {
+				if len(parts[i]) > 0 {
+					parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+				}
+			}
+			base = strings.Join(parts, "")
+		}
+		methName := "Get" + base + "APIKeyEncrypted"
+		m := repoVal.MethodByName(methName)
+		if m.IsValid() {
+			p.loaders[pid] = func(ctx context.Context, userID string) (*string, error) {
+				res := m.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(userID)})
+				if len(res) != 2 {
+					return nil, nil
+				}
+				if errIface := res[1].Interface(); errIface != nil {
+					if err, ok := errIface.(error); ok && err != nil {
+						return nil, err
+					}
+				}
+				if res[0].IsNil() {
+					return nil, nil
+				}
+				if s, ok := res[0].Interface().(*string); ok {
+					return s, nil
+				}
+				return nil, nil
+			}
+		}
+		// else: not registered (no method yet)
+	}
 }
 
 func (p *UserKeyProvider) GetAPIKey(ctx context.Context, userID, provider string) (*string, error) {

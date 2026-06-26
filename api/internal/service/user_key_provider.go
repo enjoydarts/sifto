@@ -112,7 +112,7 @@ func (p *UserKeyProvider) GetAllKeys(ctx context.Context, userID string) map[str
 func (p *UserKeyProvider) ResolveOpenAIKey(keys map[string]*string, model *string) *string {
 	provider := LLMProviderForModel(model)
 	switch provider {
-	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax", "xiaomi_mimo_token_plan", "featherless", "deepinfra", "cerebras":
+	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax", "plamo", "xiaomi_mimo_token_plan", "featherless", "deepinfra", "cerebras":
 		return keys[provider]
 	default:
 		return keys["openai"]

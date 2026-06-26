@@ -1110,6 +1110,20 @@ func (h *SettingsHandler) DeleteMiniMaxAPIKey(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (h *SettingsHandler) SetPLaMoAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "plamo", map[string]func(*model.UserSettings) any{
+		"has_plamo_api_key":   func(s *model.UserSettings) any { return s.HasPLaMoAPIKey },
+		"plamo_api_key_last4": func(s *model.UserSettings) any { return s.PLaMoAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeletePLaMoAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "plamo", map[string]func(*model.UserSettings) any{
+		"has_plamo_api_key":   func(s *model.UserSettings) any { return s.HasPLaMoAPIKey },
+		"plamo_api_key_last4": func(s *model.UserSettings) any { return s.PLaMoAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetXiaomiMiMoTokenPlanAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "xiaomi_mimo_token_plan", map[string]func(*model.UserSettings) any{
 		"has_xiaomi_mimo_token_plan_api_key":   func(s *model.UserSettings) any { return s.HasXiaomiMiMoTokenPlanAPIKey },

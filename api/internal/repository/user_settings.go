@@ -74,6 +74,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var openAIKeyEnc *string
 	var cerebrasAPIKeyEnc *string
 	var miniMaxAPIKeyEnc *string
+	var pLaMoAPIKeyEnc *string
 	var xiaomiMiMoTokenPlanAPIKeyEnc *string
 	var deepinfraAPIKeyEnc *string
 	var featherlessAPIKeyEnc *string
@@ -106,6 +107,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       cerebras_api_key_last4,
 		       minimax_api_key_enc,
 		       minimax_api_key_last4,
+		       plamo_api_key_enc,
+		       plamo_api_key_last4,
 		       xiaomi_mimo_token_plan_api_key_enc,
 		       xiaomi_mimo_token_plan_api_key_last4,
 		       deepinfra_api_key_enc,
@@ -215,6 +218,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.CerebrasAPIKeyLast4,
 		&miniMaxAPIKeyEnc,
 		&v.MiniMaxAPIKeyLast4,
+		&pLaMoAPIKeyEnc,
+		&v.PLaMoAPIKeyLast4,
 		&xiaomiMiMoTokenPlanAPIKeyEnc,
 		&v.XiaomiMiMoTokenPlanAPIKeyLast4,
 		&deepinfraAPIKeyEnc,
@@ -319,6 +324,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
 	v.HasCerebrasAPIKey = cerebrasAPIKeyEnc != nil && *cerebrasAPIKeyEnc != ""
 	v.HasMiniMaxAPIKey = miniMaxAPIKeyEnc != nil && *miniMaxAPIKeyEnc != ""
+	v.HasPLaMoAPIKey = pLaMoAPIKeyEnc != nil && *pLaMoAPIKeyEnc != ""
 	v.HasXiaomiMiMoTokenPlanAPIKey = xiaomiMiMoTokenPlanAPIKeyEnc != nil && *xiaomiMiMoTokenPlanAPIKeyEnc != ""
 	v.HasDeepInfraAPIKey = deepinfraAPIKeyEnc != nil && *deepinfraAPIKeyEnc != ""
 	v.HasFeatherlessAPIKey = featherlessAPIKeyEnc != nil && *featherlessAPIKeyEnc != ""
@@ -702,6 +708,26 @@ func (r *UserSettingsRepo) GetMiniMaxAPIKeyEncrypted(ctx context.Context, userID
 	var v *string
 	err := r.db.QueryRow(ctx, `
 		SELECT minimax_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetPLaMoAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT plamo_api_key_enc
 		FROM user_settings
 		WHERE user_id = $1`,
 		userID,
@@ -1280,6 +1306,22 @@ func (r *UserSettingsRepo) SetMiniMaxAPIKey(ctx context.Context, userID, encrypt
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetPLaMoAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, plamo_api_key_enc, plamo_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET plamo_api_key_enc = EXCLUDED.plamo_api_key_enc,
+		    plamo_api_key_last4 = EXCLUDED.plamo_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetXiaomiMiMoTokenPlanAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, xiaomi_mimo_token_plan_api_key_enc, xiaomi_mimo_token_plan_api_key_last4)
@@ -1701,6 +1743,22 @@ func (r *UserSettingsRepo) ClearMiniMaxAPIKey(ctx context.Context, userID string
 		ON CONFLICT (user_id) DO UPDATE
 		SET minimax_api_key_enc = NULL,
 		    minimax_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearPLaMoAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, plamo_api_key_enc, plamo_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET plamo_api_key_enc = NULL,
+		    plamo_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

@@ -13,6 +13,7 @@ export type AccessProviderID =
   | "mistral"
   | "cerebras"
   | "minimax"
+  | "plamo"
   | "xiaomi_mimo_token_plan"
   | "moonshot"
   | "xai"
@@ -157,6 +158,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.minimaxNotSet",
     placeholder: "sk-...",
     selectStatus: (settings) => ({ configured: settings.has_minimax_api_key, last4: settings.minimax_api_key_last4 }),
+  },
+  {
+    id: "plamo",
+    titleKey: "settings.plamoTitle",
+    descriptionKey: "settings.plamoDescription",
+    notSetKey: "settings.plamoNotSet",
+    placeholder: "plamo-...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_plamo_api_key), last4: settings.plamo_api_key_last4 ?? null }),
   },
   {
     id: "xiaomi_mimo_token_plan",

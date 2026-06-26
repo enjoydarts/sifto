@@ -14,6 +14,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("mistral", "mistral-small-2603"),
     ("cerebras", "gpt-oss-120b"),
     ("minimax", "MiniMax-M3"),
+    ("plamo", "plamo-3.0-prime"),
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
     ("moonshot", "kimi-k2.6"),
     ("xai", "grok-4"),

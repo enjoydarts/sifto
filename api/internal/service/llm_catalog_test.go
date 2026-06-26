@@ -160,6 +160,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("MiniMax-M2.5-highspeed"); got == nil {
 		t.Fatal("MiniMax-M2.5-highspeed not found in catalog")
 	}
+	if got := findModelCatalog("plamo-3.0-prime"); got == nil {
+		t.Fatal("plamo-3.0-prime not found in catalog")
+	}
 	if got := findModelCatalog("mimo-v2-pro"); got == nil {
 		t.Fatal("mimo-v2-pro not found in catalog")
 	}
@@ -267,6 +270,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},
 		{model: "MiniMax-M2.5", provider: "minimax"},
 		{model: "MiniMax-M2.7", provider: "minimax"},
+		{model: "plamo-3.0-prime", provider: "plamo"},
 		{model: "mimo-v2-pro", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2.5", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2.5-pro", provider: "xiaomi_mimo_token_plan"},
@@ -324,6 +328,9 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "minimax", purpose: "digest", want: "MiniMax-M2.7"},
 		{provider: "minimax", purpose: "ask", want: "MiniMax-M2.7-highspeed"},
 		{provider: "minimax", purpose: "source_suggestion", want: "MiniMax-M2.5-highspeed"},
+		{provider: "plamo", purpose: "summary", want: "plamo-3.0-prime"},
+		{provider: "plamo", purpose: "digest", want: "plamo-3.0-prime"},
+		{provider: "plamo", purpose: "ask", want: "plamo-3.0-prime"},
 		{provider: "xiaomi_mimo_token_plan", purpose: "facts", want: "mimo-v2-pro"},
 		{provider: "xiaomi_mimo_token_plan", purpose: "digest", want: "mimo-v2-omni"},
 		{provider: "xiaomi_mimo_token_plan", purpose: "ask", want: "mimo-v2-pro"},

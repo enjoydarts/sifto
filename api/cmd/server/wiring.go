@@ -270,6 +270,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
 				r.Post("/minimax-key", settingsH.SetMiniMaxAPIKey)
 				r.Delete("/minimax-key", settingsH.DeleteMiniMaxAPIKey)
+				r.Post("/plamo-key", settingsH.SetPLaMoAPIKey)
+				r.Delete("/plamo-key", settingsH.DeletePLaMoAPIKey)
 				r.Post("/xiaomi-mimo-token-plan-key", settingsH.SetXiaomiMiMoTokenPlanAPIKey)
 				r.Delete("/xiaomi-mimo-token-plan-key", settingsH.DeleteXiaomiMiMoTokenPlanAPIKey)
 				r.Post("/deepinfra-key", settingsH.SetDeepInfraAPIKey)

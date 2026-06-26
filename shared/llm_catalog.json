@@ -178,6 +178,26 @@
       "settings_field_base": "MiniMax"
     },
     {
+      "id": "plamo",
+      "label": "PLaMo",
+      "api_key_header": "x-plamo-api-key",
+      "match_exact": [
+        "plamo-3.0-prime"
+      ],
+      "match_prefixes": [
+        "plamo-"
+      ],
+      "default_models": {
+        "facts": "plamo-3.0-prime",
+        "summary": "plamo-3.0-prime",
+        "digest_cluster_draft": "plamo-3.0-prime",
+        "digest": "plamo-3.0-prime",
+        "ask": "plamo-3.0-prime",
+        "source_suggestion": "plamo-3.0-prime"
+      },
+      "settings_field_base": "PLaMo"
+    },
+    {
       "id": "xiaomi_mimo_token_plan",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
@@ -2577,6 +2597,38 @@
         "output_per_mtok_usd": 2.4,
         "cache_write_per_mtok_usd": 0.375,
         "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "plamo-3.0-prime",
+      "provider": "plamo",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "Preferred Networks の PLaMo 3.0 Prime。262K context と Structured Outputs、Reasoning に対応する国産モデルとして、要約・Ask・ダイジェストの比較候補にする。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "plamo_manual_jpy_2026_06_usd150",
+        "input_per_mtok_usd": 0.4,
+        "output_per_mtok_usd": 1.6667
       }
     },
     {

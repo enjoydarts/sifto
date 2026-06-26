@@ -33,6 +33,7 @@ func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 		{name: "poe", model: workerTestStringPtr("poe::claude-sonnet-4"), want: poeKey},
 		{name: "siliconflow", model: workerTestStringPtr("siliconflow::Qwen/Qwen3-Next-80B-A3B-Instruct"), want: siliconFlowKey},
 		{name: "minimax", model: workerTestStringPtr("MiniMax-M2.5"), want: minimaxKey},
+		{name: "plamo", model: workerTestStringPtr("plamo-3.0-prime"), want: openAIKey},
 		{name: "xiaomi mimo token plan", model: workerTestStringPtr("mimo-v2-pro"), want: xiaomiKey},
 		{name: "featherless", model: workerTestStringPtr("featherless::Qwen/Qwen3.5-9B"), want: featherlessKey},
 		{name: "deepinfra", model: workerTestStringPtr("deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo"), want: deepinfraKey},
@@ -99,6 +100,32 @@ func TestWorkerHeadersUsesCerebrasHeaderForCerebrasModels(t *testing.T) {
 	}
 	if _, ok := headers["X-Openai-Api-Key"]; ok {
 		t.Fatalf("X-Openai-Api-Key should not be set for Cerebras models")
+	}
+}
+
+func TestWorkerHeadersUsesPLaMoHeaderForPLaMoModels(t *testing.T) {
+	headers := workerHeadersForModel(
+		workerTestStringPtr("plamo-3.0-prime"),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		workerTestStringPtr("plamo-key"),
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	if got := headers["X-Plamo-Api-Key"]; got != "plamo-key" {
+		t.Fatalf("X-Plamo-Api-Key = %q, want %q", got, "plamo-key")
+	}
+	if _, ok := headers["X-Openai-Api-Key"]; ok {
+		t.Fatalf("X-Openai-Api-Key should not be set for PLaMo models")
 	}
 }
 

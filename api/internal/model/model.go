@@ -31,6 +31,8 @@ type UserSettings struct {
 	HasCerebrasAPIKey                bool       `json:"has_cerebras_api_key"`
 	MiniMaxAPIKeyLast4               *string    `json:"minimax_api_key_last4,omitempty"`
 	HasMiniMaxAPIKey                 bool       `json:"has_minimax_api_key"`
+	PLaMoAPIKeyLast4                 *string    `json:"plamo_api_key_last4,omitempty"`
+	HasPLaMoAPIKey                   bool       `json:"has_plamo_api_key"`
 	XiaomiMiMoTokenPlanAPIKeyLast4   *string    `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
 	HasXiaomiMiMoTokenPlanAPIKey     bool       `json:"has_xiaomi_mimo_token_plan_api_key"`
 	DeepInfraAPIKeyLast4             *string    `json:"deepinfra_api_key_last4,omitempty"`

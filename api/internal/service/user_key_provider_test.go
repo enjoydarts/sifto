@@ -102,3 +102,25 @@ func TestUserKeyProviderGetAPIKeyLoadsCerebrasKey(t *testing.T) {
 		t.Fatalf("GetAPIKey(cerebras) = %#v, want %q", got, "cerebras-secret-value")
 	}
 }
+
+func TestUserKeyProviderGetAPIKeyLoadsPLaMoKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "user-key-provider-plamo-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "plamo", "plamo-secret-value"); err != nil {
+		t.Fatalf("SetAPIKey(plamo) error = %v", err)
+	}
+
+	provider := NewUserKeyProvider(svc.repo, svc.cipher)
+	got, err := provider.GetAPIKey(ctx, userID, "plamo")
+	if err != nil {
+		t.Fatalf("GetAPIKey(plamo) error = %v", err)
+	}
+	if got == nil || *got != "plamo-secret-value" {
+		t.Fatalf("GetAPIKey(plamo) = %#v, want %q", got, "plamo-secret-value")
+	}
+}

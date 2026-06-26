@@ -66,6 +66,8 @@ type SettingsGetPayload struct {
 	MoonshotAPIKeyLast4            *string `json:"moonshot_api_key_last4,omitempty"`
 	HasMiniMaxAPIKey               bool    `json:"has_minimax_api_key"`
 	MiniMaxAPIKeyLast4             *string `json:"minimax_api_key_last4,omitempty"`
+	HasPLaMoAPIKey                 bool    `json:"has_plamo_api_key"`
+	PLaMoAPIKeyLast4               *string `json:"plamo_api_key_last4,omitempty"`
 	HasXiaomiMiMoTokenPlanAPIKey   bool    `json:"has_xiaomi_mimo_token_plan_api_key"`
 	XiaomiMiMoTokenPlanAPIKeyLast4 *string `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
 	HasXAIAPIKey                   bool    `json:"has_xai_api_key"`
@@ -1334,6 +1336,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetCerebrasAPIKey(ctx, userID, enc, last4)
 	case "minimax":
 		return s.repo.SetMiniMaxAPIKey(ctx, userID, enc, last4)
+	case "plamo":
+		return s.repo.SetPLaMoAPIKey(ctx, userID, enc, last4)
 	case "xiaomi_mimo_token_plan":
 		return s.repo.SetXiaomiMiMoTokenPlanAPIKey(ctx, userID, enc, last4)
 	case "deepinfra":
@@ -1391,6 +1395,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearCerebrasAPIKey(ctx, userID)
 	case "minimax":
 		return s.repo.ClearMiniMaxAPIKey(ctx, userID)
+	case "plamo":
+		return s.repo.ClearPLaMoAPIKey(ctx, userID)
 	case "xiaomi_mimo_token_plan":
 		return s.repo.ClearXiaomiMiMoTokenPlanAPIKey(ctx, userID)
 	case "deepinfra":

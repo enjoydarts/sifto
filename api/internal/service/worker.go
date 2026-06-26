@@ -1500,6 +1500,9 @@ func setOpenAICompatibleAPIKeyHeader(headers map[string]string, model *string, o
 	case "minimax":
 		headers["X-Minimax-Api-Key"] = strings.TrimSpace(*openAIAPIKey)
 		return
+	case "plamo":
+		headers["X-Plamo-Api-Key"] = strings.TrimSpace(*openAIAPIKey)
+		return
 	case "cerebras":
 		headers["X-Cerebras-Api-Key"] = strings.TrimSpace(*openAIAPIKey)
 		return

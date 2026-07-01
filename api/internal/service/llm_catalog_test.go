@@ -73,6 +73,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("claude-opus-4-8"); got == nil {
 		t.Fatal("claude-opus-4-8 not found in catalog")
 	}
+	if got := findModelCatalog("claude-sonnet-5"); got == nil {
+		t.Fatal("claude-sonnet-5 not found in catalog")
+	}
 	if got := findModelCatalog("claude-fable-5"); got == nil {
 		t.Fatal("claude-fable-5 not found in catalog")
 	}
@@ -228,6 +231,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "claude-fable-5", provider: "anthropic"},
 		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "claude-opus-4-8", provider: "anthropic"},
+		{model: "claude-sonnet-5", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
@@ -313,6 +317,10 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		want     string
 	}{
 		{provider: "openai", purpose: "digest", want: "gpt-5.4"},
+		{provider: "anthropic", purpose: "summary", want: "claude-sonnet-5"},
+		{provider: "anthropic", purpose: "digest_cluster_draft", want: "claude-sonnet-5"},
+		{provider: "anthropic", purpose: "digest", want: "claude-sonnet-5"},
+		{provider: "anthropic", purpose: "ask", want: "claude-sonnet-5"},
 		{provider: "openai", purpose: "facts", want: "gpt-5.4-mini"},
 		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
@@ -395,6 +403,28 @@ func TestLLMCatalogPricingMatchesCacheCapabilities(t *testing.T) {
 		if item.Pricing.CacheWritePerMTokUSD > 0 && !item.Capabilities.SupportsCacheWritePricing {
 			t.Fatalf("chat model %q has cache_write_per_mtok_usd but does not support cache write pricing", item.ID)
 		}
+	}
+}
+
+func TestLLMCatalogClaudeSonnet5Pricing(t *testing.T) {
+	item := findModelCatalog("claude-sonnet-5")
+	if item == nil {
+		t.Fatal("claude-sonnet-5 not found in catalog")
+	}
+	if item.Pricing == nil {
+		t.Fatal("claude-sonnet-5 has nil pricing")
+	}
+	if got, want := item.Pricing.InputPerMTokUSD, 3.0; got != want {
+		t.Fatalf("claude-sonnet-5 input_per_mtok_usd = %v, want %v", got, want)
+	}
+	if got, want := item.Pricing.OutputPerMTokUSD, 15.0; got != want {
+		t.Fatalf("claude-sonnet-5 output_per_mtok_usd = %v, want %v", got, want)
+	}
+	if got, want := item.Pricing.CacheWritePerMTokUSD, 3.75; got != want {
+		t.Fatalf("claude-sonnet-5 cache_write_per_mtok_usd = %v, want %v", got, want)
+	}
+	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.3; got != want {
+		t.Fatalf("claude-sonnet-5 cache_read_per_mtok_usd = %v, want %v", got, want)
 	}
 }
 

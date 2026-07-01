@@ -11,10 +11,10 @@
       ],
       "default_models": {
         "facts": "claude-haiku-4-5",
-        "summary": "claude-sonnet-4-6",
-        "digest_cluster_draft": "claude-sonnet-4-6",
-        "digest": "claude-sonnet-4-6",
-        "ask": "claude-sonnet-4-6",
+        "summary": "claude-sonnet-5",
+        "digest_cluster_draft": "claude-sonnet-5",
+        "digest": "claude-sonnet-5",
+        "ask": "claude-sonnet-5",
         "source_suggestion": "claude-haiku-4-5"
       },
       "settings_field_base": "Anthropic"
@@ -1210,6 +1210,40 @@
         "output_per_mtok_usd": 25.0,
         "cache_write_per_mtok_usd": 6.25,
         "cache_read_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "claude-sonnet-5",
+      "provider": "anthropic",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": [
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "Anthropic の Sonnet 5。1M context を活かし、要約・Ask・ダイジェストの標準候補として使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_07",
+        "input_per_mtok_usd": 3.0,
+        "output_per_mtok_usd": 15.0,
+        "cache_write_per_mtok_usd": 3.75,
+        "cache_read_per_mtok_usd": 0.3
       }
     },
     {

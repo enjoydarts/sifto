@@ -141,6 +141,7 @@
       "alias_prefix": "cerebras::",
       "match_exact": [
         "gpt-oss-120b",
+        "gemma-4-31b",
         "llama3.1-8b",
         "qwen-3-235b-a22b-instruct-2507",
         "zai-glm-4.7"
@@ -557,6 +558,41 @@
         "pricing_source": "cerebras_manual_2026_04",
         "input_per_mtok_usd": 2.25,
         "output_per_mtok_usd": 2.75,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "gemma-4-31b",
+      "provider": "cerebras",
+      "source_provider": "Google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "experimental",
+      "highlights": [
+        "fast",
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "Cerebras Preview の Gemma 4 31B。text/image 入力、reasoning、Structured Outputs、tool calling に対応する高速な比較候補。Preview のため既定にはしない。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_docs_2026_07",
+        "input_per_mtok_usd": 0.99,
+        "output_per_mtok_usd": 1.49,
         "cache_read_per_mtok_usd": 0
       }
     },

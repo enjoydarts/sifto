@@ -14,6 +14,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("alibaba", "qwen3.7-max"),
     ("mistral", "mistral-small-2603"),
     ("cerebras", "gpt-oss-120b"),
+    ("cerebras", "gemma-4-31b"),
     ("minimax", "MiniMax-M3"),
     ("plamo", "plamo-3.0-prime"),
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
@@ -37,6 +38,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
 
 ALIASED_PROVIDER_MODELS = (
     ("cerebras", "cerebras::gpt-oss-120b"),
+    ("cerebras", "cerebras::gemma-4-31b"),
     ("minimax", "minimax::MiniMax-M2.7"),
     ("minimax", "minimax/MiniMax-M2.7"),
 )

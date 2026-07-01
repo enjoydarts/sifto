@@ -166,6 +166,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("plamo-3.0-prime"); got == nil {
 		t.Fatal("plamo-3.0-prime not found in catalog")
 	}
+	if got := findModelCatalog("gemma-4-31b"); got == nil {
+		t.Fatal("gemma-4-31b not found in catalog")
+	}
 	if got := findModelCatalog("mimo-v2-pro"); got == nil {
 		t.Fatal("mimo-v2-pro not found in catalog")
 	}
@@ -294,6 +297,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gpt-5.5-pro", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
+		{model: "gemma-4-31b", provider: "cerebras"},
+		{model: CerebrasAliasModelID("gemma-4-31b"), provider: "cerebras"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V4-Pro", provider: "siliconflow"},
 		{model: "siliconflow::MiniMaxAI/MiniMax-M3", provider: "siliconflow"},
@@ -425,6 +430,22 @@ func TestLLMCatalogClaudeSonnet5Pricing(t *testing.T) {
 	}
 	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.3; got != want {
 		t.Fatalf("claude-sonnet-5 cache_read_per_mtok_usd = %v, want %v", got, want)
+	}
+}
+
+func TestLLMCatalogCerebrasGemma431BPricing(t *testing.T) {
+	item := findModelCatalog("gemma-4-31b")
+	if item == nil {
+		t.Fatal("gemma-4-31b not found in catalog")
+	}
+	if item.Pricing == nil {
+		t.Fatal("gemma-4-31b has nil pricing")
+	}
+	if got, want := item.Pricing.InputPerMTokUSD, 0.99; got != want {
+		t.Fatalf("gemma-4-31b input_per_mtok_usd = %v, want %v", got, want)
+	}
+	if got, want := item.Pricing.OutputPerMTokUSD, 1.49; got != want {
+		t.Fatalf("gemma-4-31b output_per_mtok_usd = %v, want %v", got, want)
 	}
 }
 

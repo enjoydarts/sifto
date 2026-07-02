@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -250,18 +251,7 @@ func (r *AudioBriefingRepo) ListJobsByUser(ctx context.Context, userID string, l
 	if limit > 100 {
 		limit = 100
 	}
-	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models,
-               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
-               audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
-		       error_code, error_message, published_at, failed_at, created_at, updated_at
-		FROM audio_briefing_jobs
-		WHERE user_id = $1
-		ORDER BY slot_started_at_jst DESC, created_at DESC
-		LIMIT $2
-	`, userID, limit)
+	rows, err := r.db.Query(ctx, listJobsByUserQuery("", "$2"), userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +266,79 @@ func (r *AudioBriefingRepo) ListJobsByUser(ctx context.Context, userID string, l
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func (r *AudioBriefingRepo) ListJobsByUserForListTab(ctx context.Context, userID string, tab string, iaBucket string, limit int) ([]model.AudioBriefingJob, error) {
+	if limit <= 0 {
+		limit = 24
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	filter, filterArgs, empty := audioBriefingListTabWhereClause(tab, iaBucket, 2)
+	if empty {
+		return []model.AudioBriefingJob{}, nil
+	}
+	args := make([]any, 0, 2+len(filterArgs))
+	args = append(args, userID)
+	args = append(args, filterArgs...)
+	args = append(args, limit)
+	rows, err := r.db.Query(ctx, listJobsByUserQuery(filter, fmt.Sprintf("$%d", len(args))), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.AudioBriefingJob, 0, limit)
+	for rows.Next() {
+		row, err := scanAudioBriefingJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func listJobsByUserQuery(whereSuffix string, limitPlaceholder string) string {
+	return fmt.Sprintf(`
+		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
+		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
+		       error_code, error_message, published_at, failed_at, created_at, updated_at
+		FROM audio_briefing_jobs
+		WHERE user_id = $1%s
+		ORDER BY slot_started_at_jst DESC, created_at DESC
+		LIMIT %s
+	`, whereSuffix, limitPlaceholder)
+}
+
+func audioBriefingListTabWhereClause(tab string, iaBucket string, firstPlaceholder int) (string, []any, bool) {
+	iaBucket = strings.TrimSpace(iaBucket)
+	archiveActive := "COALESCE(NULLIF(archive_status, ''), 'active') = 'active'"
+	archiveArchived := "COALESCE(NULLIF(archive_status, ''), 'active') = 'archived'"
+	notStoredInIA := ""
+	args := []any{}
+	if iaBucket != "" {
+		notStoredInIA = fmt.Sprintf(" AND TRIM(COALESCE(r2_storage_bucket, '')) <> $%d", firstPlaceholder)
+		args = append(args, iaBucket)
+	}
+
+	switch strings.TrimSpace(tab) {
+	case "storage":
+		if iaBucket == "" {
+			return "", nil, true
+		}
+		return fmt.Sprintf(" AND TRIM(COALESCE(r2_storage_bucket, '')) = $%d", firstPlaceholder), []any{iaBucket}, false
+	case "archived":
+		return " AND " + archiveArchived + notStoredInIA, args, false
+	case "pending":
+		return " AND status <> 'published' AND " + archiveActive + notStoredInIA, args, false
+	default:
+		return " AND status = 'published' AND " + archiveActive + notStoredInIA, args, false
+	}
 }
 
 func (r *AudioBriefingRepo) ListRecentPersonasByUser(ctx context.Context, userID string, limit int) ([]string, error) {

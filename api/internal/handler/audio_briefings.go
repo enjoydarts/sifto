@@ -67,29 +67,12 @@ func (h *AudioBriefingsHandler) List(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
-	fetchLimit := limit * 4
-	if fetchLimit < 60 {
-		fetchLimit = 60
-	}
-	if fetchLimit > 200 {
-		fetchLimit = 200
-	}
-	rows, err := h.repo.ListJobsByUser(r.Context(), userID, fetchLimit)
+	rows, err := h.repo.ListJobsByUserForListTab(r.Context(), userID, tab, service.AudioBriefingIABucketFromEnv(), limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	filtered := make([]model.AudioBriefingJob, 0, limit)
-	for _, row := range rows {
-		if !service.AudioBriefingListTabMatches(&row, tab) {
-			continue
-		}
-		filtered = append(filtered, row)
-		if len(filtered) >= limit {
-			break
-		}
-	}
-	writeJSON(w, map[string]any{"items": filtered})
+	writeJSON(w, map[string]any{"items": rows})
 }
 
 func (h *AudioBriefingsHandler) Get(w http.ResponseWriter, r *http.Request) {

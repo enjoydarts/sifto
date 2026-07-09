@@ -20,6 +20,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
     ("moonshot", "kimi-k2.6"),
     ("xai", "grok-4"),
+    ("xai", "grok-4.5"),
     ("zai", "glm-5.2"),
     ("fireworks", "fireworks/deepseek-v3p1"),
     ("fireworks", "fireworks/glm-5p2"),

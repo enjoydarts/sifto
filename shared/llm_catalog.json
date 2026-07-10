@@ -4759,6 +4759,112 @@
       }
     },
     {
+      "id": "gpt-5.6-sol",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [
+        "latest",
+        "jsonStable",
+        "longContext"
+      ],
+      "comment": "OpenAI GPT-5.6 の flagship 枠。複雑な推論、coding、重めのダイジェスト生成の上位比較候補。公式 alias gpt-5.6 はこのモデルへルーティングされる。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_07",
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 30.0,
+        "cache_read_per_mtok_usd": 0.5,
+        "cache_write_per_mtok_usd": 6.25
+      }
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "jsonStable",
+        "longContext"
+      ],
+      "comment": "OpenAI GPT-5.6 のバランス枠。品質とコストの間を取りたい要約、Ask、ダイジェスト比較に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_07",
+        "input_per_mtok_usd": 2.5,
+        "output_per_mtok_usd": 15.0,
+        "cache_read_per_mtok_usd": 0.25,
+        "cache_write_per_mtok_usd": 3.125
+      }
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "jsonStable",
+        "longContext"
+      ],
+      "comment": "OpenAI GPT-5.6 の高ボリューム向け効率枠。事実抽出、要約、質問応答を新世代モデルで広く試す候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_07",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 6.0,
+        "cache_read_per_mtok_usd": 0.1,
+        "cache_write_per_mtok_usd": 1.25
+      }
+    },
+    {
       "id": "gpt-5.5-pro",
       "provider": "openai",
       "available_purposes": [

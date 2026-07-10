@@ -19,6 +19,15 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-5.5"); got == nil {
 		t.Fatal("gpt-5.5 not found in catalog")
 	}
+	if got := findModelCatalog("gpt-5.6-sol"); got == nil {
+		t.Fatal("gpt-5.6-sol not found in catalog")
+	}
+	if got := findModelCatalog("gpt-5.6-terra"); got == nil {
+		t.Fatal("gpt-5.6-terra not found in catalog")
+	}
+	if got := findModelCatalog("gpt-5.6-luna"); got == nil {
+		t.Fatal("gpt-5.6-luna not found in catalog")
+	}
 	if got := findModelCatalog("gpt-5.5-pro"); got == nil {
 		t.Fatal("gpt-5.5-pro not found in catalog")
 	}
@@ -294,6 +303,9 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("MiniMaxAI/MiniMax-M3"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
+		{model: "gpt-5.6-sol", provider: "openai"},
+		{model: "gpt-5.6-terra", provider: "openai"},
+		{model: "gpt-5.6-luna", provider: "openai"},
 		{model: "gpt-5.5-pro", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},

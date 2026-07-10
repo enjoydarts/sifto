@@ -34,7 +34,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("siliconflow", "siliconflow::Qwen/Qwen3.6-35B-A3B"),
     ("siliconflow", "siliconflow::Qwen/Qwen3.6-27B"),
     ("siliconflow", "siliconflow::zai-org/GLM-5.2"),
-    ("openai", "gpt-5-mini"),
+    ("openai", "gpt-5.6-luna"),
 )
 
 ALIASED_PROVIDER_MODELS = (

@@ -171,7 +171,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            response="$(curl --fail-with-body --silent --show-error https://api-oci-test.sifto.net/health || true)"
+            response="$(curl --fail-with-body --silent --show-error https://api.sifto.net/health || true)"
             actual_commit="$(jq -r '.commit // empty' <<<"$response" 2>/dev/null || true)"
             if [ "$actual_commit" = "$EXPECTED_COMMIT" ]; then
               echo "API is serving commit $actual_commit."

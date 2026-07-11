@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   migrate:
     name: Run DB migrations
@@ -35,190 +39,142 @@ jobs:
           MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
 
-  deploy-api:
-    name: Deploy API to Fly.io
+  deploy:
+    name: Deploy Worker and API to Coolify
     needs: migrate
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
+      COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Prune old API machines for bluegreen
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Validate Coolify configuration
         run: |
           set -euo pipefail
-          app="sifto-api"
-          image_key() {
-            jq -r '
-              if (.image_ref | type) == "string" then .image_ref
-              elif (.image_ref | type) == "object" then ((.image_ref.repository // "") + ":" + (.image_ref.tag // ""))
-              elif (.image | type) == "string" then .image
-              else ""
-              end
-            '
-          }
-          destroy_with_retry() {
-            local machine_id="$1"
-            local max_attempts=12
-            local attempt=1
-            while true; do
-              if flyctl machines destroy --force "$machine_id" --app "$app"; then
-                return 0
-              fi
-              if [ "$attempt" -ge "$max_attempts" ]; then
-                echo "Failed to destroy machine $machine_id after $attempt attempts"
-                return 1
-              fi
-              echo "Destroy retry ($attempt/$max_attempts) for $machine_id after lease conflict"
-              attempt=$((attempt + 1))
-              sleep 15
-            done
-          }
-          machines="$(flyctl machines list --app "$app" --json)"
-          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last' | image_key)"
-          if [ -z "$keep_image" ]; then
-            echo "No keep image found for $app; skipping prune."
-            exit 0
-          fi
-          echo "Keeping image: $keep_image"
-          delete_ids="$(
-            echo "$machines" | jq -r --arg keep "$keep_image" '
-              .[]
-              | . as $m
-              | (
-                  if ($m.image_ref | type) == "string" then $m.image_ref
-                  elif ($m.image_ref | type) == "object" then (($m.image_ref.repository // "") + ":" + ($m.image_ref.tag // ""))
-                  elif ($m.image | type) == "string" then $m.image
-                  else ""
-                  end
-                ) as $img
-              | select($img != $keep)
-              | .id
-            '
-          )"
-          if [ -z "$delete_ids" ]; then
-            echo "No old machines to prune for $app."
-            exit 0
-          fi
-          echo "Pruning old machine IDs:"
-          echo "$delete_ids"
-          while IFS= read -r id; do
-            [ -n "$id" ] || continue
-            destroy_with_retry "$id"
-          done <<< "$delete_ids"
-
-      - name: Deploy API
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          max_attempts=6
-          attempt=1
-          while true; do
-            if flyctl deploy . --config api/fly.toml --dockerfile api/Dockerfile --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}; then
-              break
-            fi
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "flyctl deploy failed after $attempt attempts"
-              exit 1
-            fi
-            echo "flyctl deploy retry ($attempt/$max_attempts) after transient lease conflict"
-            attempt=$((attempt + 1))
-            sleep 20
-          done
-
-  deploy-worker:
-    name: Deploy Worker to Fly.io
-    needs: migrate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Prune old Worker machines for bluegreen
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          app="sifto-worker"
-          image_key() {
-            jq -r '
-              if (.image_ref | type) == "string" then .image_ref
-              elif (.image_ref | type) == "object" then ((.image_ref.repository // "") + ":" + (.image_ref.tag // ""))
-              elif (.image | type) == "string" then .image
-              else ""
-              end
-            '
-          }
-          destroy_with_retry() {
-            local machine_id="$1"
-            local max_attempts=12
-            local attempt=1
-            while true; do
-              if flyctl machines destroy --force "$machine_id" --app "$app"; then
-                return 0
-              fi
-              if [ "$attempt" -ge "$max_attempts" ]; then
-                echo "Failed to destroy machine $machine_id after $attempt attempts"
-                return 1
-              fi
-              echo "Destroy retry ($attempt/$max_attempts) for $machine_id after lease conflict"
-              attempt=$((attempt + 1))
-              sleep 15
-            done
-          }
-          machines="$(flyctl machines list --app "$app" --json)"
-          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last' | image_key)"
-          if [ -z "$keep_image" ]; then
-            echo "No keep image found for $app; skipping prune."
-            exit 0
-          fi
-          echo "Keeping image: $keep_image"
-          delete_ids="$(
-            echo "$machines" | jq -r --arg keep "$keep_image" '
-              .[]
-              | . as $m
-              | (
-                  if ($m.image_ref | type) == "string" then $m.image_ref
-                  elif ($m.image_ref | type) == "object" then (($m.image_ref.repository // "") + ":" + ($m.image_ref.tag // ""))
-                  elif ($m.image | type) == "string" then $m.image
-                  else ""
-                  end
-                ) as $img
-              | select($img != $keep)
-              | .id
-            '
-          )"
-          if [ -z "$delete_ids" ]; then
-            echo "No old machines to prune for $app."
-            exit 0
-          fi
-          echo "Pruning old machine IDs:"
-          echo "$delete_ids"
-          while IFS= read -r id; do
-            [ -n "$id" ] || continue
-            destroy_with_retry "$id"
-          done <<< "$delete_ids"
+          test -n "$COOLIFY_URL"
+          test -n "$COOLIFY_WORKER_UUID"
+          test -n "$COOLIFY_API_UUID"
+          test -n "$COOLIFY_TOKEN"
 
       - name: Deploy Worker
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -euo pipefail
-          max_attempts=6
-          attempt=1
-          while true; do
-            if flyctl deploy . --config worker/fly.toml --dockerfile worker/Dockerfile --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}; then
-              break
-            fi
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "flyctl deploy failed after $attempt attempts"
-              exit 1
-            fi
-            echo "flyctl deploy retry ($attempt/$max_attempts) after transient lease conflict"
-            attempt=$((attempt + 1))
-            sleep 20
+          response="$(
+            curl --fail-with-body --retry 3 --get \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              --data-urlencode "uuid=$COOLIFY_WORKER_UUID" \
+              --data-urlencode "force=false" \
+              "$COOLIFY_URL/api/v1/deploy"
+          )"
+          deployment_uuid="$(
+            jq -r '
+              .deployment_uuid
+              // .deployments[0].deployment_uuid
+              // .[0].deployment_uuid
+              // empty
+            ' <<<"$response"
+          )"
+          if [ -z "$deployment_uuid" ]; then
+            echo "Coolify did not return a Worker deployment UUID."
+            jq -c . <<<"$response" || true
+            exit 1
+          fi
+          echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
+
+      - name: Wait for Worker deployment
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            response="$(
+              curl --fail-with-body --retry 3 \
+                -H "Authorization: Bearer $COOLIFY_TOKEN" \
+                "$COOLIFY_URL/api/v1/deployments/$deployment_uuid"
+            )"
+            status="$(jq -r '.status // empty' <<<"$response")"
+            echo "Worker deployment status: ${status:-unknown} ($attempt/120)"
+            case "$status" in
+              finished|success)
+                exit 0
+                ;;
+              failed|cancelled|cancelled_by_user)
+                jq -c . <<<"$response" || true
+                exit 1
+                ;;
+            esac
+            sleep 10
           done
+          echo "Timed out waiting for Worker deployment."
+          exit 1
+
+      - name: Verify Worker health
+        run: curl --fail-with-body --retry 6 --retry-all-errors https://worker.sifto.net/health
+
+      - name: Deploy API
+        run: |
+          set -euo pipefail
+          response="$(
+            curl --fail-with-body --retry 3 --get \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              --data-urlencode "uuid=$COOLIFY_API_UUID" \
+              --data-urlencode "force=false" \
+              "$COOLIFY_URL/api/v1/deploy"
+          )"
+          deployment_uuid="$(
+            jq -r '
+              .deployment_uuid
+              // .deployments[0].deployment_uuid
+              // .[0].deployment_uuid
+              // empty
+            ' <<<"$response"
+          )"
+          if [ -z "$deployment_uuid" ]; then
+            echo "Coolify did not return an API deployment UUID."
+            jq -c . <<<"$response" || true
+            exit 1
+          fi
+          echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
+
+      - name: Wait for API deployment
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            response="$(
+              curl --fail-with-body --retry 3 \
+                -H "Authorization: Bearer $COOLIFY_TOKEN" \
+                "$COOLIFY_URL/api/v1/deployments/$deployment_uuid"
+            )"
+            status="$(jq -r '.status // empty' <<<"$response")"
+            echo "API deployment status: ${status:-unknown} ($attempt/120)"
+            case "$status" in
+              finished|success)
+                exit 0
+                ;;
+              failed|cancelled|cancelled_by_user)
+                jq -c . <<<"$response" || true
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          echo "Timed out waiting for API deployment."
+          exit 1
+
+      - name: Verify API commit
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            response="$(curl --fail-with-body --silent --show-error https://api-oci-test.sifto.net/health || true)"
+            actual_commit="$(jq -r '.commit // empty' <<<"$response" 2>/dev/null || true)"
+            if [ "$actual_commit" = "$EXPECTED_COMMIT" ]; then
+              echo "API is serving commit $actual_commit."
+              exit 0
+            fi
+            echo "Waiting for API commit $EXPECTED_COMMIT; current=${actual_commit:-unavailable} ($attempt/30)"
+            sleep 10
+          done
+          echo "API did not serve the expected commit."
+          exit 1

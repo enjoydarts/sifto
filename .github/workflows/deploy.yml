@@ -53,10 +53,14 @@ jobs:
       - name: Validate Coolify configuration
         run: |
           set -euo pipefail
-          test -n "$COOLIFY_URL"
-          test -n "$COOLIFY_WORKER_UUID"
-          test -n "$COOLIFY_API_UUID"
-          test -n "$COOLIFY_TOKEN"
+          missing=0
+          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured."
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Deploy Worker
         run: |

@@ -11,7 +11,7 @@ function resolveAPIBaseURL(): string {
     return explicit.trim().replace(/\/+$/, "");
   }
   if (process.env.VERCEL === "1" || process.env.NODE_ENV === "production") {
-    return "https://sifto-api.fly.dev";
+    return "https://api.sifto.net";
   }
   return "http://api:8080";
 }

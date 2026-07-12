@@ -1,0 +1,3 @@
+ALTER TABLE sources
+  ADD COLUMN IF NOT EXISTS feed_etag TEXT,
+  ADD COLUMN IF NOT EXISTS feed_last_modified TEXT;

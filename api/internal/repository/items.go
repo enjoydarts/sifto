@@ -676,6 +676,29 @@ func (r *ItemRepo) UpsertFromFeed(ctx context.Context, sourceID, url string, tit
 	return id, true, nil
 }
 
+func (r *ItemRepo) ExistingFeedURLs(ctx context.Context, sourceID string, urls []string) (map[string]struct{}, error) {
+	existing := make(map[string]struct{})
+	if len(urls) == 0 {
+		return existing, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT url
+		FROM items
+		WHERE source_id = $1 AND url = ANY($2::text[])`, sourceID, urls)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return nil, err
+		}
+		existing[url] = struct{}{}
+	}
+	return existing, rows.Err()
+}
+
 func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {
 	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
 		return err

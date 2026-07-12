@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -396,7 +397,7 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 	return inngestgo.CreateFunction(
 		client,
 		inngestgo.FunctionOpts{ID: "generate-briefing-snapshots", Name: "Generate Briefing Snapshots"},
-		inngestgo.CronTrigger("*/30 * * * *"),
+		inngestgo.CronTrigger("0 21 * * *"),
 		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
 			users, err := userRepo.ListAll(ctx)
 			if err != nil {
@@ -898,6 +899,7 @@ func diffOpenRouterModelAvailability(previous, current []repository.OpenRouterMo
 func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
 
 	return inngestgo.CreateFunction(
 		client,
@@ -909,11 +911,11 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 				return nil, fmt.Errorf("list sources: %w", err)
 			}
 
-			fp := gofeed.NewParser()
 			newCount := 0
 
 			for _, src := range sources {
-				feed, err := fp.ParseURLWithContext(src.URL, ctx)
+				sourceNewCount := 0
+				feed, notModified, etag, lastModified, err := fetchRSSFeed(ctx, httpClient, src)
 				if err != nil {
 					log.Printf("fetch rss %s: %v", src.URL, err)
 					_ = sourceRepo.UpdateLastFetchedAt(ctx, src.ID, timeutil.NowJST())
@@ -921,36 +923,124 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 					_ = sourceRepo.RefreshHealthSnapshot(ctx, src.ID, &reason)
 					continue
 				}
+				fetchedAt := timeutil.NowJST()
+				if err := sourceRepo.UpdateFeedFetchMetadata(ctx, src.ID, fetchedAt, etag, lastModified); err != nil {
+					log.Printf("update rss metadata %s: %v", src.URL, err)
+				}
+				if notModified {
+					continue
+				}
+
+				urls := feedItemURLs(feed)
+				existingURLs, err := itemRepo.ExistingFeedURLs(ctx, src.ID, urls)
+				if err != nil {
+					log.Printf("load existing rss items %s: %v", src.URL, err)
+					continue
+				}
 
 				for _, entry := range feed.Items {
-					if entry.Link == "" {
+					if entry == nil {
+						continue
+					}
+					entryURL := strings.TrimSpace(entry.Link)
+					if entryURL == "" {
+						continue
+					}
+					if _, exists := existingURLs[entryURL]; exists {
 						continue
 					}
 					var title *string
 					if entry.Title != "" {
 						title = &entry.Title
 					}
-					itemID, created, err := itemRepo.UpsertFromFeed(ctx, src.ID, entry.Link, title)
+					itemID, created, err := itemRepo.UpsertFromFeed(ctx, src.ID, entryURL, title)
 					if err != nil {
-						log.Printf("upsert item %s: %v", entry.Link, err)
+						log.Printf("upsert item %s: %v", entryURL, err)
 						continue
 					}
 					if !created {
+						existingURLs[entryURL] = struct{}{}
 						continue
 					}
 					newCount++
+					sourceNewCount++
+					existingURLs[entryURL] = struct{}{}
 					reason := "fetch_rss"
 					titleVal := title
-					if _, err := client.Send(ctx, service.NewItemCreatedEvent(itemID, src.ID, entry.Link, titleVal, reason)); err != nil {
+					if _, err := client.Send(ctx, service.NewItemCreatedEvent(itemID, src.ID, entryURL, titleVal, reason)); err != nil {
 						log.Printf("send item/created: %v", err)
 					}
 				}
-				_ = sourceRepo.UpdateLastFetchedAt(ctx, src.ID, timeutil.NowJST())
-				_ = sourceRepo.RefreshHealthSnapshot(ctx, src.ID, nil)
+				if sourceNewCount > 0 {
+					_ = sourceRepo.RefreshHealthSnapshot(ctx, src.ID, nil)
+				}
 			}
 			return map[string]int{"new_items": newCount}, nil
 		},
 	)
+}
+
+func fetchRSSFeed(ctx context.Context, httpClient *http.Client, source model.Source) (*gofeed.Feed, bool, *string, *string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.URL, nil)
+	if err != nil {
+		return nil, false, source.FeedETag, source.FeedLastModified, err
+	}
+	req.Header.Set("User-Agent", "Sifto RSS Fetcher/1.0")
+	if source.FeedETag != nil && strings.TrimSpace(*source.FeedETag) != "" {
+		req.Header.Set("If-None-Match", strings.TrimSpace(*source.FeedETag))
+	}
+	if source.FeedLastModified != nil && strings.TrimSpace(*source.FeedLastModified) != "" {
+		req.Header.Set("If-Modified-Since", strings.TrimSpace(*source.FeedLastModified))
+	}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, false, source.FeedETag, source.FeedLastModified, err
+	}
+	defer res.Body.Close()
+	etag := headerValueOrPrevious(res.Header.Get("ETag"), source.FeedETag)
+	lastModified := headerValueOrPrevious(res.Header.Get("Last-Modified"), source.FeedLastModified)
+	if res.StatusCode == http.StatusNotModified {
+		return nil, true, etag, lastModified, nil
+	}
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return nil, false, etag, lastModified, fmt.Errorf("unexpected RSS response status: %s", res.Status)
+	}
+	feed, err := gofeed.NewParser().Parse(res.Body)
+	if err != nil {
+		return nil, false, etag, lastModified, err
+	}
+	return feed, false, etag, lastModified, nil
+}
+
+func headerValueOrPrevious(value string, previous *string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return previous
+	}
+	return &value
+}
+
+func feedItemURLs(feed *gofeed.Feed) []string {
+	if feed == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(feed.Items))
+	urls := make([]string, 0, len(feed.Items))
+	for _, entry := range feed.Items {
+		if entry == nil {
+			continue
+		}
+		url := strings.TrimSpace(entry.Link)
+		if url == "" {
+			continue
+		}
+		if _, exists := seen[url]; exists {
+			continue
+		}
+		seen[url] = struct{}{}
+		urls = append(urls, url)
+	}
+	return urls
 }
 
 func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.JSONCache) (inngestgo.ServableFunction, error) {

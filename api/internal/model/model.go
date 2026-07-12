@@ -332,15 +332,17 @@ type ItemExportRecord struct {
 }
 
 type Source struct {
-	ID            string     `json:"id"`
-	UserID        string     `json:"user_id"`
-	URL           string     `json:"url"`
-	Type          string     `json:"type"` // rss | manual
-	Title         *string    `json:"title"`
-	Enabled       bool       `json:"enabled"`
-	LastFetchedAt *time.Time `json:"last_fetched_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	URL              string     `json:"url"`
+	Type             string     `json:"type"` // rss | manual
+	Title            *string    `json:"title"`
+	Enabled          bool       `json:"enabled"`
+	LastFetchedAt    *time.Time `json:"last_fetched_at,omitempty"`
+	FeedETag         *string    `json:"-"`
+	FeedLastModified *string    `json:"-"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 type ReadingGoal struct {

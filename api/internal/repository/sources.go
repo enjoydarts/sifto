@@ -25,7 +25,7 @@ func (r *SourceRepo) CountByUser(ctx context.Context, userID string) (int, error
 
 func (r *SourceRepo) List(ctx context.Context, userID string) ([]model.Source, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at
+		SELECT id, user_id, url, type, title, enabled, last_fetched_at, feed_etag, feed_last_modified, created_at, updated_at
 		FROM sources WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (r *SourceRepo) List(ctx context.Context, userID string) ([]model.Source, e
 	for rows.Next() {
 		var s model.Source
 		if err := rows.Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
-			&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.Enabled, &s.LastFetchedAt, &s.FeedETag, &s.FeedLastModified, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)
@@ -49,10 +49,10 @@ func (r *SourceRepo) Create(ctx context.Context, userID, url, srcType string, ti
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO sources (user_id, url, type, title)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at`,
+		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, feed_etag, feed_last_modified, created_at, updated_at`,
 		userID, url, srcType, title,
 	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
-		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
+		&s.Enabled, &s.LastFetchedAt, &s.FeedETag, &s.FeedLastModified, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -67,10 +67,10 @@ func (r *SourceRepo) Update(ctx context.Context, id, userID string, enabled *boo
 		    title = CASE WHEN $2 THEN $3 ELSE title END,
 		    updated_at = NOW()
 		WHERE id = $4 AND user_id = $5
-		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at`,
+		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, feed_etag, feed_last_modified, created_at, updated_at`,
 		enabled, updateTitle, title, id, userID,
 	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
-		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
+		&s.Enabled, &s.LastFetchedAt, &s.FeedETag, &s.FeedLastModified, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -91,7 +91,7 @@ func (r *SourceRepo) Delete(ctx context.Context, id, userID string) error {
 
 func (r *SourceRepo) ListEnabled(ctx context.Context) ([]model.Source, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at
+		SELECT id, user_id, url, type, title, enabled, last_fetched_at, feed_etag, feed_last_modified, created_at, updated_at
 		FROM sources WHERE enabled = true AND type = 'rss'`)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (r *SourceRepo) ListEnabled(ctx context.Context) ([]model.Source, error) {
 	for rows.Next() {
 		var s model.Source
 		if err := rows.Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
-			&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.Enabled, &s.LastFetchedAt, &s.FeedETag, &s.FeedLastModified, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)
@@ -116,6 +116,18 @@ func (r *SourceRepo) UpdateLastFetchedAt(ctx context.Context, id string, fetched
 		SET last_fetched_at = $1, updated_at = NOW()
 		WHERE id = $2`,
 		fetchedAt, id)
+	return err
+}
+
+func (r *SourceRepo) UpdateFeedFetchMetadata(ctx context.Context, id string, fetchedAt time.Time, etag, lastModified *string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE sources
+		SET last_fetched_at = $1,
+		    feed_etag = $2,
+		    feed_last_modified = $3,
+		    updated_at = NOW()
+		WHERE id = $4`,
+		fetchedAt, etag, lastModified, id)
 	return err
 }
 

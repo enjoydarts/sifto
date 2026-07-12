@@ -13,8 +13,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Validate deployment configuration
+    runs-on: ubuntu-latest
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
+      COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
+    steps:
+      - name: Check required settings
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN INNGEST_API_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
   migrate:
     name: Run DB migrations
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -39,31 +62,17 @@ jobs:
           MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
 
-  deploy:
-    name: Deploy Worker and API to Coolify
+  deploy-worker:
+    name: Deploy Worker
     needs: migrate
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
       COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
-      COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
     steps:
-      - name: Validate deployment configuration
-        run: |
-          set -euo pipefail
-          missing=0
-          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN INNGEST_API_KEY; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is not configured."
-              missing=1
-            fi
-          done
-          exit "$missing"
-
-      - name: Deploy Worker
+      - name: Start Worker deployment
         run: |
           set -euo pipefail
           response="$(
@@ -116,7 +125,17 @@ jobs:
       - name: Verify Worker health
         run: curl --fail-with-body --retry 6 --retry-all-errors https://worker.sifto.net/health
 
-      - name: Deploy API
+  deploy-api:
+    name: Deploy API
+    needs: deploy-worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    steps:
+      - name: Start API deployment
         run: |
           set -euo pipefail
           response="$(
@@ -184,6 +203,13 @@ jobs:
           echo "API did not serve the expected commit."
           exit 1
 
+  sync-inngest:
+    name: Sync Inngest
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    env:
+      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
+    steps:
       - name: Sync Inngest app
         run: |
           set -euo pipefail

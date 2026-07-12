@@ -49,12 +49,13 @@ jobs:
       COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
       COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
     steps:
-      - name: Validate Coolify configuration
+      - name: Validate deployment configuration
         run: |
           set -euo pipefail
           missing=0
-          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN; do
+          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN INNGEST_API_KEY; do
             if [ -z "${!name:-}" ]; then
               echo "::error::$name is not configured."
               missing=1
@@ -182,3 +183,13 @@ jobs:
           done
           echo "API did not serve the expected commit."
           exit 1
+
+      - name: Sync Inngest app
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --retry 3 \
+            -X POST \
+            -H "Authorization: Bearer $INNGEST_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data '{"url":"https://api.sifto.net/api/inngest"}' \
+            "https://api.inngest.com/v2/apps/sifto-api/syncs"

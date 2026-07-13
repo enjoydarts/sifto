@@ -3,6 +3,7 @@ import re
 from urllib.parse import urlparse, unquote
 
 import httpx
+from app.services.url_security import ensure_response_size, validate_public_http_url
 
 
 def _normalize_pdf_text(text: str) -> str:
@@ -30,6 +31,7 @@ def extract_pdf_body_from_bytes(pdf_bytes: bytes, url: str) -> dict | None:
 
     if not pdf_bytes:
         return None
+    ensure_response_size(pdf_bytes, 25 * 1024 * 1024)
 
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
         pages = []
@@ -53,8 +55,11 @@ def extract_pdf_body_from_bytes(pdf_bytes: bytes, url: str) -> dict | None:
 
 def extract_pdf_body(url: str) -> dict | None:
     try:
+        url = validate_public_http_url(url)
         resp = httpx.get(url, timeout=30.0, follow_redirects=True)
         resp.raise_for_status()
+        validate_public_http_url(str(resp.url))
+        ensure_response_size(resp.content, 25 * 1024 * 1024)
         return extract_pdf_body_from_bytes(resp.content, str(resp.url))
     except Exception:
         if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":

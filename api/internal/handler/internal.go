@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,8 +71,20 @@ func NewInternalHandler(
 }
 
 func checkInternalSecret(r *http.Request) bool {
-	secret := service.InternalAPISecretFromEnv()
-	return r.Header.Get("X-Internal-Secret") == secret
+	secret := strings.TrimSpace(service.InternalAPISecretFromEnv())
+	provided := strings.TrimSpace(r.Header.Get("X-Internal-Secret"))
+	if secret == "" || provided == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) == 1
+}
+
+func checkInternalAdmin(r *http.Request) bool {
+	if !checkInternalSecret(r) {
+		return false
+	}
+	email := strings.TrimSpace(r.Header.Get("X-Internal-User-Email"))
+	return service.NewPromptAdminAuthServiceFromEnv().CanManagePrompts(email)
 }
 
 // UpsertUser はメールアドレスでユーザーを取得または作成して UUID を返す内部エンドポイント。
@@ -239,7 +252,7 @@ func (h *InternalHandler) UpsertObsidianGitHubInstallation(w http.ResponseWriter
 }
 
 func (h *InternalHandler) DebugGenerateDigest(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -362,7 +375,7 @@ func (h *InternalHandler) DebugGenerateDigest(w http.ResponseWriter, r *http.Req
 }
 
 func (h *InternalHandler) DebugSendDigest(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -419,7 +432,7 @@ func (h *InternalHandler) DebugSendDigest(w http.ResponseWriter, r *http.Request
 }
 
 func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -493,7 +506,7 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 }
 
 func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -558,7 +571,7 @@ func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -638,7 +651,7 @@ func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http
 }
 
 func (h *InternalHandler) DebugGetItemSearchBackfillRuns(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -662,7 +675,7 @@ func (h *InternalHandler) DebugGetItemSearchBackfillRuns(w http.ResponseWriter, 
 }
 
 func (h *InternalHandler) DebugDeleteFinishedItemSearchBackfillRuns(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -690,7 +703,7 @@ func parseBoolQuery(value string) bool {
 }
 
 func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -1179,7 +1192,7 @@ func (h *InternalHandler) loadCerebrasAPIKey(ctx context.Context, userID string)
 }
 
 func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

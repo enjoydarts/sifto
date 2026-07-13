@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 import httpx
 import trafilatura
 from app.services.pdf_service import extract_pdf_body, extract_pdf_body_from_bytes
+from app.services.url_security import ensure_response_size, validate_public_http_url
 from trafilatura.settings import use_config
 
 _log = logging.getLogger(__name__)
@@ -146,8 +147,11 @@ def _decode_html_response(resp: httpx.Response) -> str:
 
 
 def _refetch_html(url: str) -> tuple[str | None, httpx.Response | None]:
+    validate_public_http_url(url)
     resp = httpx.get(url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
+    validate_public_http_url(str(resp.url))
+    ensure_response_size(resp.content, 10 * 1024 * 1024)
     if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
         return None, resp
     return _decode_html_response(resp), resp
@@ -224,6 +228,7 @@ def is_pdf_response(url: str, content_type: str | None, content: bytes | None) -
 
 def extract_body(url: str) -> dict | None:
     try:
+        url = validate_public_http_url(url)
         if url.strip().lower().split("?", 1)[0].endswith(".pdf"):
             return extract_pdf_body(url)
         config = use_config()

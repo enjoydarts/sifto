@@ -1,9 +1,11 @@
 package inngest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -899,7 +901,7 @@ func diffOpenRouterModelAvailability(previous, current []repository.OpenRouterMo
 func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := service.NewPublicHTTPClient(30 * time.Second)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -1005,7 +1007,18 @@ func fetchRSSFeed(ctx context.Context, httpClient *http.Client, source model.Sou
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return nil, false, etag, lastModified, fmt.Errorf("unexpected RSS response status: %s", res.Status)
 	}
-	feed, err := gofeed.NewParser().Parse(res.Body)
+	const maxRSSBytes = 10 << 20
+	if res.ContentLength > maxRSSBytes {
+		return nil, false, etag, lastModified, fmt.Errorf("RSS response exceeds %d bytes", maxRSSBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxRSSBytes+1))
+	if err != nil {
+		return nil, false, etag, lastModified, err
+	}
+	if len(body) > maxRSSBytes {
+		return nil, false, etag, lastModified, fmt.Errorf("RSS response exceeds %d bytes", maxRSSBytes)
+	}
+	feed, err := gofeed.NewParser().Parse(bytes.NewReader(body))
 	if err != nil {
 		return nil, false, etag, lastModified, err
 	}

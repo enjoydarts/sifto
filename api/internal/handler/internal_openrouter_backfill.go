@@ -88,7 +88,7 @@ func parseOptionalBackfillTime(raw *string, inclusiveEnd bool) (*time.Time, erro
 }
 
 func (h *InternalHandler) DebugBackfillOpenRouterCosts(w http.ResponseWriter, r *http.Request) {
-	if !checkInternalSecret(r) {
+	if !checkInternalAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

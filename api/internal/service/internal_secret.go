@@ -1,7 +1,10 @@
 package service
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 func InternalAPISecretFromEnv() string {
-	return os.Getenv("INTERNAL_API_SECRET")
+	return strings.TrimSpace(os.Getenv("INTERNAL_API_SECRET"))
 }

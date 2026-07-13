@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+from app.services.url_security import ensure_response_size, validate_public_http_url
 
 _log = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def is_youtube_url(url: str) -> bool:
 
 
 def extract_body(url: str) -> dict | None:
+    url = validate_public_http_url(url)
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     cookies_present = bool((os.getenv("YTDLP_COOKIES_B64") or "").strip())
     pot_provider_present = bool((os.getenv("YTDLP_POT_PROVIDER_BASE_URL") or "").strip())
@@ -329,9 +331,12 @@ def _download_transcript(entries: list[dict]) -> str:
         if not transcript_url:
             continue
         ext = str((entry or {}).get("ext") or "").strip().lower()
+        transcript_url = validate_public_http_url(transcript_url)
         resp = httpx.get(transcript_url, timeout=30.0, follow_redirects=True)
         resp.raise_for_status()
+        validate_public_http_url(str(resp.url))
         body = resp.text or ""
+        ensure_response_size(body.encode("utf-8", errors="replace"), 5 * 1024 * 1024)
         text = _parse_transcript_text(ext, body)
         if text:
             return text

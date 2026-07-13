@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -55,6 +56,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 _INTERNAL_WORKER_SECRET = os.getenv("INTERNAL_WORKER_SECRET", "").strip()
 
 
+def _worker_auth_error_status(path: str, provided: str, configured: str) -> int | None:
+    if path == "/health":
+        return None
+    if not configured:
+        return 503
+    if not provided or not secrets.compare_digest(provided, configured):
+        return 401
+    return None
+
+
 def _normalize_string_for_trace(value: str | None, limit: int | None = None) -> str:
     if value is None:
         return ""
@@ -68,11 +79,14 @@ def _normalize_string_for_trace(value: str | None, limit: int | None = None) -> 
 
 @app.middleware("http")
 async def require_internal_worker_secret(request: Request, call_next):
-    if request.url.path == "/health" or not _INTERNAL_WORKER_SECRET:
-        return await call_next(request)
-    provided = request.headers.get("x-internal-worker-secret", "")
-    if provided != _INTERNAL_WORKER_SECRET:
+    provided = str(request.headers.get("x-internal-worker-secret") or "").strip()
+    auth_error = _worker_auth_error_status(request.url.path, provided, _INTERNAL_WORKER_SECRET)
+    if auth_error == 503:
+        return JSONResponse(status_code=503, content={"detail": "worker authentication is not configured"})
+    if auth_error == 401:
         return JSONResponse(status_code=401, content={"detail": "unauthorized"})
+    if auth_error is not None:
+        return JSONResponse(status_code=auth_error, content={"detail": "unauthorized"})
     return await call_next(request)
 
 

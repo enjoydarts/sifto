@@ -7,6 +7,16 @@ from app.services.youtube_extract_service import YouTubeTranscriptUnavailableErr
 
 
 class YoutubeExtractServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.url_validator = patch(
+            "app.services.youtube_extract_service.validate_public_http_url",
+            side_effect=lambda url: url,
+        )
+        self.url_validator.start()
+
+    def tearDown(self):
+        self.url_validator.stop()
+
     def test_is_youtube_url(self):
         self.assertTrue(is_youtube_url("https://www.youtube.com/watch?v=abc123"))
         self.assertTrue(is_youtube_url("https://youtu.be/abc123"))

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getInternalAPISecret, getInternalAPISecretError } from "@/lib/internal-secret";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
-import { getServerAuthUser } from "@/lib/server-auth";
+import { authorizeDebugAdmin, internalAdminEmailHeader } from "@/lib/debug-admin";
 
 export async function GET(req: NextRequest) {
-  const user = await getServerAuthUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const authorization = await authorizeDebugAdmin();
+  if (!authorization.authorized) {
+    return NextResponse.json({ error: authorization.error }, { status: authorization.status });
   }
+  const { user } = authorization;
 
   const apiUrl = resolveServerAPIURL();
   const secret = getInternalAPISecret();
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     method: "GET",
     headers: {
       "X-Internal-Secret": secret,
+      ...internalAdminEmailHeader(user),
     },
     cache: "no-store",
   });

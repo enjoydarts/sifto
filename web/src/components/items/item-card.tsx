@@ -43,6 +43,35 @@ function searchSnippetLabel(field: string, t: (key: string) => string) {
   }
 }
 
+function parseHighlightedSnippet(html: string): Array<{ text: string; highlighted: boolean }> {
+  const parts = String(html ?? "").split(/(<\/?mark>)/gi);
+  let highlighted = false;
+  const segments: Array<{ text: string; highlighted: boolean }> = [];
+  for (const part of parts) {
+    if (/^<mark>$/i.test(part)) {
+      highlighted = true;
+      continue;
+    }
+    if (/^<\/mark>$/i.test(part)) {
+      highlighted = false;
+      continue;
+    }
+    if (part) segments.push({ text: part, highlighted });
+  }
+  return segments;
+}
+
+function HighlightedSnippet({ html }: { html: string }) {
+  const segments = parseHighlightedSnippet(html);
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.highlighted ? <mark key={index}>{segment.text}</mark> : <span key={index}>{segment.text}</span>
+      )}
+    </>
+  );
+}
+
 export function ItemCard({
   item,
   featured = false,
@@ -218,10 +247,9 @@ export function ItemCard({
                     <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                       {searchSnippetLabel(snippet.field, t)}
                     </div>
-                    <div
-                      className="mt-1 text-[13px] leading-6 text-[var(--color-editorial-ink-soft)] [&_mark]:rounded-[4px] [&_mark]:bg-[rgba(246,199,94,0.42)] [&_mark]:px-1 [&_mark]:py-0.5"
-                      dangerouslySetInnerHTML={{ __html: snippet.snippet_html }}
-                    />
+                    <div className="mt-1 text-[13px] leading-6 text-[var(--color-editorial-ink-soft)] [&_mark]:rounded-[4px] [&_mark]:bg-[rgba(246,199,94,0.42)] [&_mark]:px-1 [&_mark]:py-0.5">
+                      <HighlightedSnippet html={snippet.snippet_html} />
+                    </div>
                   </div>
                 ))}
               </div>

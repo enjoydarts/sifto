@@ -52,6 +52,11 @@ def _is_kimi_k2x_model(model: str) -> bool:
     }
 
 
+def _is_kimi_k3_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized in {"moonshotai/kimi-k3", "kimi-k3"}
+
+
 def _is_glm_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
     return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
@@ -92,6 +97,16 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         if normalized_model == "zai-glm-4.7":
             body["reasoning_effort"] = "none"
             return
+    if provider_name == "moonshot" and _is_kimi_k3_model(normalized_model):
+        # K3 always reasons and accepts reasoning_effort=max rather than the
+        # K2.x thinking switch. Its sampling values are fixed server-side.
+        max_tokens = body.pop("max_tokens", None)
+        if max_tokens is not None:
+            body["max_completion_tokens"] = max_tokens
+        body.pop("temperature", None)
+        body.pop("top_p", None)
+        body["reasoning_effort"] = "max"
+        return
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
         # exhaust output tokens into reasoning_content and leave message.content empty.

@@ -52,6 +52,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("kimi-k2.5"); got == nil {
 		t.Fatal("kimi-k2.5 not found in catalog")
 	}
+	if got := findModelCatalog("kimi-k3"); got == nil {
+		t.Fatal("kimi-k3 not found in catalog")
+	}
 	if got := findModelCatalog("kimi-k2.6"); got == nil {
 		t.Fatal("kimi-k2.6 not found in catalog")
 	}
@@ -280,6 +283,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/glm-5p2", provider: "fireworks"},
 		{model: "qwen3p7-plus", provider: "fireworks"},
 		{model: "fireworks/deepseek-v4-pro", provider: "fireworks"},
+		{model: "kimi-k3", provider: "moonshot"},
 		{model: "kimi-k2.6", provider: "moonshot"},
 		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "kimi-k2-0905-preview", provider: "moonshot"},
@@ -362,7 +366,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},
-		{provider: "moonshot", purpose: "ask", want: "kimi-k2.6"},
+		{provider: "moonshot", purpose: "ask", want: "kimi-k3"},
 		{provider: "together", purpose: "facts", want: TogetherAliasModelID("openai/gpt-oss-20b")},
 		{provider: "together", purpose: "summary", want: TogetherAliasModelID("moonshotai/Kimi-K2.5")},
 		{provider: "together", purpose: "source_suggestion", want: TogetherAliasModelID("LiquidAI/LFM2-24B-A2B")},

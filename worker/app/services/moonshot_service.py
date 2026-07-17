@@ -15,7 +15,7 @@ class _MoonshotProvider(OpenAICompatProvider):
 _config = ProviderConfig(
     provider_name="moonshot",
     env_prefix="MOONSHOT",
-    pricing_source_version="moonshot_static_2026_03",
+    pricing_source_version="moonshot_static_2026_07",
     api_base_url="https://api.moonshot.ai/v1/chat/completions",
     api_base_url_env="MOONSHOT_API_BASE_URL",
     use_billed_cost=True,

@@ -6,6 +6,7 @@ from app.services.moonshot_service import _llm_meta, _normalize_temperature, _no
 
 class MoonshotServiceTests(unittest.TestCase):
     def test_provider_for_model_detects_moonshot(self):
+        self.assertEqual(provider_for_model("kimi-k3"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2.6"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2.5"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2-0905-preview"), "moonshot")
@@ -41,7 +42,23 @@ class MoonshotServiceTests(unittest.TestCase):
         self.assertEqual(llm.get("pricing_model_family"), "kimi-k2-0905-preview")
         self.assertEqual(llm.get("estimated_cost_usd"), 3.1)
 
+    def test_kimi_k3_uses_cache_aware_static_catalog_pricing(self):
+        llm = _llm_meta(
+            "kimi-k3",
+            "summary",
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+                "cache_read_input_tokens": 250_000,
+            },
+        )
+
+        self.assertEqual(llm.get("pricing_source"), "moonshot_static_2026_07")
+        self.assertEqual(llm.get("pricing_model_family"), "kimi-k3")
+        self.assertEqual(llm.get("estimated_cost_usd"), 17.325)
+
     def test_temperature_is_forced_to_one(self):
+        self.assertEqual(_normalize_temperature("kimi-k3", None), 1.0)
         self.assertEqual(_normalize_temperature("kimi-k2-thinking", None), 1.0)
         self.assertEqual(_normalize_temperature("kimi-k2-thinking", 0.2), 1.0)
         self.assertEqual(_normalize_temperature("kimi-k2-thinking", 1.0), 1.0)
@@ -55,6 +72,7 @@ class MoonshotServiceTests(unittest.TestCase):
         self.assertEqual(_normalize_temperature("kimi-k2.6", 1.0), 0.6)
 
     def test_top_p_is_forced_to_point_ninety_five(self):
+        self.assertEqual(_normalize_top_p("kimi-k3", None), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.6", None), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.6", 0.8), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.6", 0.95), 0.95)

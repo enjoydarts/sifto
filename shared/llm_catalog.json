@@ -222,6 +222,7 @@
       "id": "moonshot",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
+        "kimi-k3",
         "kimi-k2.6",
         "kimi-k2.5",
         "kimi-k2-0905-preview",
@@ -234,12 +235,12 @@
         "kimi-k2-"
       ],
       "default_models": {
-        "facts": "kimi-k2.6",
-        "summary": "kimi-k2.6",
-        "digest_cluster_draft": "kimi-k2.6",
-        "digest": "kimi-k2.6",
-        "ask": "kimi-k2.6",
-        "source_suggestion": "kimi-k2-turbo-preview"
+        "facts": "kimi-k3",
+        "summary": "kimi-k3",
+        "digest_cluster_draft": "kimi-k3",
+        "digest": "kimi-k3",
+        "ask": "kimi-k3",
+        "source_suggestion": "kimi-k2.6"
       },
       "settings_field_base": "Moonshot"
     },
@@ -2828,6 +2829,40 @@
         "pricing_source": "xiaomi_mimo_token_plan_subscription_2026_04",
         "input_per_mtok_usd": 0,
         "output_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "kimi-k3",
+      "provider": "moonshot",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "reasoning",
+      "highlights": [
+        "jsonStable",
+        "reasoning",
+        "longContext"
+      ],
+      "comment": "Moonshot AI の最新フラッグシップ。1M context、常時 thinking、strict JSON Schema に対応し、長文の要約・知識作業・複雑な Ask に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_07",
+        "input_per_mtok_usd": 3.0,
+        "output_per_mtok_usd": 15.0,
+        "cache_read_per_mtok_usd": 0.3
       }
     },
     {

@@ -346,6 +346,34 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_kimi_k3_requests_use_max_reasoning_and_omit_fixed_sampling(self):
+        run_chat_json(
+            "Return JSON",
+            "kimi-k3",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: True,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="moonshot",
+            logger=None,
+            response_schema={"type": "object"},
+            temperature=1.0,
+            top_p=0.95,
+        )
+
+        self.assertIsNotNone(_FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("reasoning_effort"), "max")
+        self.assertNotIn("thinking", _FakeClient.last_json)
+        self.assertNotIn("temperature", _FakeClient.last_json)
+        self.assertNotIn("top_p", _FakeClient.last_json)
+        self.assertNotIn("max_tokens", _FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("max_completion_tokens"), 1200)
+        self.assertEqual(_FakeClient.last_json.get("response_format", {}).get("type"), "json_schema")
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_deepseek_v4_pro_requests_disable_thinking(self):
         run_chat_json(
             "Return JSON",

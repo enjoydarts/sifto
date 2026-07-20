@@ -9,4 +9,9 @@ Sentry.init({
   replaysOnErrorSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "0"),
 });
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export const onRouterTransitionStart = (
+  ...args: Parameters<typeof Sentry.captureRouterTransitionStart>
+) => {
+  performance.mark("sifto:route-transition-start");
+  return Sentry.captureRouterTransitionStart(...args);
+};

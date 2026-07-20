@@ -9,6 +9,7 @@ import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, Rea
 import { providerLabel } from "@/lib/model-display";
 import { queryKeys } from "@/lib/query-keys";
 import { settingsQueryOptions } from "@/lib/settings-query";
+import { usePrimaryContentTiming } from "@/lib/use-primary-content-timing";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
@@ -60,6 +61,8 @@ export default function BriefingPage() {
     refetchIntervalInBackground: false,
     placeholderData: (prev) => prev,
   });
+  const primaryContentReady = Boolean(briefingQuery.data);
+  usePrimaryContentTiming({ route: "home", ready: primaryContentReady });
   const navigatorPreview = searchParams.get("navigator_preview") === "1";
   const settingsQuery = useQuery({
     ...settingsQueryOptions(),
@@ -68,7 +71,7 @@ export default function BriefingPage() {
   const navigatorQuery = useQuery({
     queryKey: queryKeys.briefing.navigator(navigatorPreview, settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor"),
     queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
-    enabled: settingsQuery.isSuccess,
+    enabled: primaryContentReady && settingsQuery.isSuccess,
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
@@ -85,30 +88,35 @@ export default function BriefingPage() {
     queryKey: queryKeys.providerModelUpdates(7),
     queryFn: () => api.getProviderModelUpdates({ days: 7, limit: 6 }),
     staleTime: 60_000,
+    enabled: primaryContentReady,
     placeholderData: (prev) => prev,
   });
   const readingGoalsQuery = useQuery({
     queryKey: ["reading-goals"] as const,
     queryFn: () => api.getReadingGoals(),
     staleTime: 60_000,
+    enabled: primaryContentReady,
     placeholderData: (prev) => prev,
   });
   const todayQueueQuery = useQuery({
     queryKey: ["today-queue", 6] as const,
     queryFn: () => api.getTodayQueue({ size: 6 }),
     staleTime: 30_000,
+    enabled: primaryContentReady,
     placeholderData: (prev) => prev,
   });
   const reviewQueueQuery = useQuery({
     queryKey: ["review-queue", 5] as const,
     queryFn: () => api.getReviewQueue({ size: 5 }),
     staleTime: 30_000,
+    enabled: primaryContentReady,
     placeholderData: (prev) => prev,
   });
   const weeklyReviewQuery = useQuery({
     queryKey: ["weekly-review-latest"] as const,
     queryFn: () => api.getWeeklyReviewLatest(),
     staleTime: 120_000,
+    enabled: primaryContentReady,
     placeholderData: (prev) => prev,
   });
 
@@ -573,7 +581,11 @@ export default function BriefingPage() {
               <p className="mt-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
                 {t("briefing.todayQueue.subtitle")}
               </p>
-              {todayQueue.length === 0 ? (
+              {todayQueueQuery.isLoading ? (
+                <div className="mt-4">
+                  <SkeletonCard />
+                </div>
+              ) : todayQueue.length === 0 ? (
                 <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("briefing.emptyHighlights", "次に読む記事はありません。")}</p>
               ) : (
                 <div className="mt-4 grid gap-3">

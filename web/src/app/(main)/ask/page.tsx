@@ -11,6 +11,7 @@ import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
 import { api, AskNavigator, AskResponse, ReadingGoal } from "@/lib/api";
 import { formatModelDisplayName } from "@/lib/model-display";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { useToast } from "@/components/toast-provider";
 
 const EMPTY: AskResponse | null = null;
@@ -78,9 +79,7 @@ export default function AskPage() {
     placeholderData: (prev) => prev,
   });
   const settingsQuery = useQuery({
-    queryKey: ["settings"] as const,
-    queryFn: () => api.getSettings(),
-    staleTime: 60_000,
+    ...settingsQueryOptions(),
     placeholderData: (prev) => prev,
   });
 

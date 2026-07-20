@@ -8,8 +8,7 @@ import { ChevronDown, LoaderCircle, Play, Volume2 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
-import { api } from "@/lib/api";
-import { queryKeys } from "@/lib/query-keys";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import type { SummaryAudioQueueKind } from "@/components/shared-audio-player/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -37,8 +36,7 @@ export default function SummaryAudioPlayerPage() {
   const queueStartInFlightRef = useRef<string | null>(null);
   const [showPreprocessedText, setShowPreprocessedText] = useState(false);
   const settingsQuery = useQuery({
-    queryKey: queryKeys.settings.summaryAudioReadiness(),
-    queryFn: () => api.getSettings(),
+    ...settingsQueryOptions(),
   });
   const summaryAudioReadiness = getSummaryAudioReadiness(settingsQuery.data ?? null);
   const summaryAudioSettingsLoaded = settingsQuery.isSuccess;

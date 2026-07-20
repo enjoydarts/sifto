@@ -11,6 +11,7 @@ import { useToast } from "@/components/toast-provider";
 import { Tag } from "@/components/ui/tag";
 import { api } from "@/lib/api";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
+import { settingsQueryOptions } from "@/lib/settings-query";
 
 function formatDateTime(value: string | null | undefined, locale: string) {
   if (!value) return "—";
@@ -58,8 +59,7 @@ export default function AINavigatorBriefDetailPage() {
   });
   const brief = detailQuery.data?.brief ?? null;
   const settingsQuery = useQuery({
-    queryKey: ["settings", "summary-audio-readiness"],
-    queryFn: () => api.getSettings(),
+    ...settingsQueryOptions(),
   });
   const summaryAudioReadiness = getSummaryAudioReadiness(settingsQuery.data ?? null);
 

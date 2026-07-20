@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   api,
   LLMExecutionCurrentMonthSummary,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { normalizeProvider } from "@/lib/model-display";
+import { settingsQueryOptions } from "@/lib/settings-query";
 
 type SummaryRow = LLMUsageDailySummary & {
   key: string;
@@ -70,6 +72,7 @@ export function fmtUSDShort(v: number) {
 
 export function useLLMUsageData() {
   const { t, locale } = useI18n();
+  const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<LLMUsageSectionID>("overview");
   const [providerSortKey, setProviderSortKey] = useState<string>("estimated_cost_usd");
   const [providerSortDir, setProviderSortDir] = useState<"asc" | "desc">("desc");
@@ -162,7 +165,7 @@ export function useLLMUsageData() {
         api.getLLMUsageCurrentMonthByPurpose({ month: monthParam }),
         api.getLLMExecutionCurrentMonthSummary({ month: monthParam }),
         api.getLLMUsage(monthMode ? { limit: limitParam, month: monthParam } : { limit: limitParam }),
-        api.getSettings(),
+        queryClient.fetchQuery(settingsQueryOptions()),
       ]);
       if (seq !== seqRef.current) return;
       setSummaryRows(summary ?? []);
@@ -181,7 +184,7 @@ export function useLLMUsageData() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     setLogPage(1);

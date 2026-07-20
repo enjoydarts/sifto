@@ -17,8 +17,6 @@ export const queryKeys = {
   },
   settings: {
     all: () => ["settings"] as const,
-    summaryAudioReadiness: () =>
-      ["settings", "summary-audio-readiness"] as const,
   },
   dashboard: {
     all: () => ["dashboard"] as const,
@@ -49,7 +47,6 @@ export const queryKeys = {
   topicsPulse: (days: number, limit: number) =>
     ["topics-pulse", days, limit] as const,
   audio: {
-    sharedSettings: () => ["shared-audio-player-settings"] as const,
     sharedQueue: (kind: string, query: string) =>
       ["shared-summary-audio-queue", kind, query] as const,
     sharedQueuePrefix: ["shared-summary-audio-queue"] as const,

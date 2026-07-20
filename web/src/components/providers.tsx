@@ -11,7 +11,7 @@ import { ConfirmProvider } from "@/components/confirm-provider";
 import AuthTokenBridge from "@/components/auth-token-bridge";
 import PWARegister from "@/components/pwa-register";
 import OneSignalInit from "@/components/onesignal-init";
-import { api } from "@/lib/api";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { applyUIFontSelectionToDocument } from "@/lib/ui-fonts";
 
 type ProvidersProps = {
@@ -82,10 +82,8 @@ function UIFontSettingsSync() {
   const isPublicRoute = pathname === "/login";
 
   const settingsQuery = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => api.getSettings(),
+    ...settingsQueryOptions(),
     enabled: !isPublicRoute,
-    staleTime: 60_000,
   });
 
   useEffect(() => {

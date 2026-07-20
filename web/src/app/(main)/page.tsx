@@ -8,6 +8,7 @@ import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
 import { providerLabel } from "@/lib/model-display";
 import { queryKeys } from "@/lib/query-keys";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
@@ -61,9 +62,7 @@ export default function BriefingPage() {
   });
   const navigatorPreview = searchParams.get("navigator_preview") === "1";
   const settingsQuery = useQuery({
-    queryKey: queryKeys.settings.all(),
-    queryFn: () => api.getSettings(),
-    staleTime: 60_000,
+    ...settingsQueryOptions(),
     placeholderData: (prev) => prev,
   });
   const navigatorQuery = useQuery({

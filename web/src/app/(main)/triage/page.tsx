@@ -11,6 +11,7 @@ import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
+import { settingsQueryOptions } from "@/lib/settings-query";
 
 type ActionType = "read" | "favorite" | "later";
 type TriageMode = "quick" | "all";
@@ -103,8 +104,7 @@ export default function TriagePage() {
   }, []);
 
   const settingsQuery = useQuery({
-    queryKey: ["settings"],
-    queryFn: api.getSettings,
+    ...settingsQueryOptions(),
   });
   const readingPlanPrefs = settingsQuery.data?.reading_plan;
   const focusWindow = readingPlanPrefs?.window ?? "24h";

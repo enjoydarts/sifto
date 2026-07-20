@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type Item, type ItemDetail, type PlaybackSession } from "@/lib/api";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { hasSummaryAudioPlaybackAccess, isNaturalEndingPause, resolvedAudioDuration, waitForLoadedMetadata } from "./use-audio-playback";
 import { useAudioPlayback } from "./use-audio-playback";
 import { createEmptySummaryQueue, useAudioQueue } from "./use-audio-queue";
@@ -40,8 +41,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   modeRef.current = mode;
 
   const settingsQuery = useQuery({
-    queryKey: ["shared-audio-player-settings"],
-    queryFn: () => api.getSettings(),
+    ...settingsQueryOptions(),
     staleTime: 5 * 60 * 1000,
   });
   const summaryAudioSettingsLoaded = settingsQuery.isSuccess;

@@ -16,6 +16,7 @@ import { patchItemsInFeedCaches, removeItemFromFeedCaches } from "@/lib/query-ca
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
+import { settingsQueryOptions } from "@/lib/settings-query";
 
 export type RelatedCluster = {
   id: string;
@@ -122,9 +123,7 @@ export function useItemDetailData() {
   const autoMarkedRef = useRef<Record<string, true>>({});
   const readStateOverrideRef = useRef<Record<string, boolean>>({});
   const settingsQuery = useQuery({
-    queryKey: ["settings"] as const,
-    queryFn: () => api.getSettings(),
-    staleTime: 60_000,
+    ...settingsQueryOptions(),
     placeholderData: (prev) => prev,
   });
   const genreSuggestionsQuery = useQuery({

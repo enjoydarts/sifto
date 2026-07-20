@@ -8,6 +8,8 @@ import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
+import { queryKeys } from "@/lib/query-keys";
+import { settingsQueryOptions } from "@/lib/settings-query";
 import { normalizeAudioBriefingPresetVoices } from "@/components/settings/audio-briefing-preset-modal-helpers";
 import { type SettingsSectionID } from "@/components/settings/settings-page-shell";
 import {
@@ -508,19 +510,20 @@ export function useSettingsPageData() {
     setLoading(true);
     setError(null);
     try {
-      let data: UserSettings | null = null;
-      try { data = await api.getSettings(); } catch { /* partial failure */ }
-      let nextCatalog: LLMCatalog | null = null;
-      try { nextCatalog = await api.getLLMCatalog(); } catch { /* partial failure */ }
-      let navigatorPersonas: Record<string, NavigatorPersonaDefinition> | null = null;
-      try { navigatorPersonas = await api.getNavigatorPersonas(); } catch { /* partial failure */ }
-      let preferenceProfileResult: { profile: PreferenceProfile | null; error: string | null } = { profile: null, error: null };
-      try {
-        const profile = await api.getPreferenceProfile();
-        preferenceProfileResult = { profile, error: null };
-      } catch (profileError) {
-        preferenceProfileResult = { profile: null, error: localizePreferenceProfileErrorMessage(profileError, t) };
-      }
+      const [settingsResult, catalogResult, personasResult, profileResult] = await Promise.allSettled([
+        queryClient.fetchQuery(settingsQueryOptions()),
+        api.getLLMCatalog(),
+        api.getNavigatorPersonas(),
+        api.getPreferenceProfile(),
+      ]);
+      const data: UserSettings | null = settingsResult.status === "fulfilled" ? settingsResult.value : null;
+      const nextCatalog: LLMCatalog | null = catalogResult.status === "fulfilled" ? catalogResult.value : null;
+      const navigatorPersonas: Record<string, NavigatorPersonaDefinition> | null =
+        personasResult.status === "fulfilled" ? personasResult.value : null;
+      const preferenceProfileResult: { profile: PreferenceProfile | null; error: string | null } =
+        profileResult.status === "fulfilled"
+          ? { profile: profileResult.value, error: null }
+          : { profile: null, error: localizePreferenceProfileErrorMessage(profileResult.reason, t) };
       if (seq !== loadSeqRef.current) return;
       if (!data) {
         setError(t("settings.loadFailed"));
@@ -592,6 +595,7 @@ export function useSettingsPageData() {
     syncPodcastForm,
     syncSummaryAudioForm,
     syncUIFontForm,
+    queryClient,
     t,
   ]);
 
@@ -763,7 +767,7 @@ export function useSettingsPageData() {
               }
             : prev
         );
-        void queryClient.invalidateQueries({ queryKey: ["settings"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.all() });
       },
     });
   }
@@ -1075,12 +1079,10 @@ export function useSettingsPageData() {
         const nextSettings = mergeSummaryAudioIntoSettings(settings, resp.summary_audio ?? null);
         setSettings(nextSettings);
         if (nextSettings) {
-          queryClient.setQueryData(["shared-audio-player-settings"], nextSettings);
-          queryClient.setQueryData(["settings", "summary-audio-readiness"], nextSettings);
+          queryClient.setQueryData(queryKeys.settings.all(), nextSettings);
         }
         syncSummaryAudioForm(resp.summary_audio ?? null);
-        void queryClient.invalidateQueries({ queryKey: ["shared-audio-player-settings"] });
-        void queryClient.invalidateQueries({ queryKey: ["settings", "summary-audio-readiness"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.all() });
       },
     });
   }

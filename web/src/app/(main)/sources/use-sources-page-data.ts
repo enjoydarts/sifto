@@ -6,7 +6,7 @@ import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOpt
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
-import { queryKeys } from "@/lib/query-keys";
+import { settingsQueryOptions } from "@/lib/settings-query";
 
 function navigatorThemeTokens(persona: string, avatarStyle?: string) {
   const key = avatarStyle || persona;
@@ -131,9 +131,7 @@ export function useSourcesPageData() {
   const loadSequenceRef = useRef(0);
   const dailyStatsSequenceRef = useRef(0);
   const settingsQuery = useQuery({
-    queryKey: queryKeys.settings.all(),
-    queryFn: () => api.getSettings(),
-    staleTime: 60_000,
+    ...settingsQueryOptions(),
     placeholderData: (prev) => prev,
   });
   const pageSize = 10;

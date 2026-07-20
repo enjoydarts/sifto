@@ -20,7 +20,7 @@ func cacheVersionKeyUserItems(userID string) string {
 }
 
 func cacheVersionKeyItemDetail(itemID string) string {
-	return fmt.Sprintf("cache_version:item_detail:v3:%s", itemID)
+	return service.ItemDetailCacheVersionKey(itemID)
 }
 
 func cacheVersionKeyUserSettings(userID string) string {

@@ -49,6 +49,10 @@ func UserLLMUsageCacheVersionKey(userID string) string {
 	return fmt.Sprintf("cache_version:user_llm_usage:%s", strings.TrimSpace(userID))
 }
 
+func ItemDetailCacheVersionKey(itemID string) string {
+	return fmt.Sprintf("cache_version:item_detail:v3:%s", strings.TrimSpace(itemID))
+}
+
 func BumpUserLLMUsageCacheVersion(ctx context.Context, cache JSONCache, userID string) error {
 	if cache == nil || strings.TrimSpace(userID) == "" {
 		return nil

@@ -310,7 +310,7 @@ func ptrStringValue(v *string) string {
 }
 
 func itemDetailCacheVersionKey(itemID string) string {
-	return fmt.Sprintf("cache_version:item_detail:v2:%s", itemID)
+	return service.ItemDetailCacheVersionKey(itemID)
 }
 
 func userItemsCacheVersionKey(userID string) string {

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +26,43 @@ type ingressHeaderRoundTripper struct {
 	accessID     string
 	accessSecret string
 	baseURL      *url.URL
+}
+
+type inngestRegistrationResponseRoundTripper struct {
+	base    http.RoundTripper
+	baseURL *url.URL
+}
+
+func (rt *inngestRegistrationResponseRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := rt.base.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil || !rt.shouldBuffer(req.URL) {
+		return resp, err
+	}
+
+	body, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read inngest registration response: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close inngest registration response: %w", closeErr)
+	}
+
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	return resp, nil
+}
+
+func (rt *inngestRegistrationResponseRoundTripper) shouldBuffer(target *url.URL) bool {
+	if rt.baseURL == nil || target == nil {
+		return false
+	}
+	if !strings.EqualFold(rt.baseURL.Scheme, target.Scheme) || !strings.EqualFold(rt.baseURL.Host, target.Host) {
+		return false
+	}
+	basePath := strings.TrimRight(rt.baseURL.EscapedPath(), "/")
+	targetPath := strings.TrimRight(target.EscapedPath(), "/")
+	return targetPath == basePath+"/fn/register"
 }
 
 func (rt *ingressHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -107,6 +147,10 @@ func newInngestInstrumentedTransport(base http.RoundTripper) http.RoundTripper {
 			accessSecret: accessSecret,
 			baseURL:      baseURL,
 		}
+	}
+	transport = &inngestRegistrationResponseRoundTripper{
+		base:    transport,
+		baseURL: baseURL,
 	}
 	return transport
 }

@@ -10,9 +10,11 @@ type ItemDetailLoadOptions<TDetail, TRelated> = {
 export function startItemDetailLoads<TDetail, TRelated>(
   options: ItemDetailLoadOptions<TDetail, TRelated>,
 ) {
-  const detail = options.loadDetail().then(options.onDetail, options.onDetailError);
-  const related = options
-    .loadRelated()
+  const detail = Promise.resolve()
+    .then(options.loadDetail)
+    .then(options.onDetail, options.onDetailError);
+  const related = Promise.resolve()
+    .then(options.loadRelated)
     .then(options.onRelated, options.onRelatedError);
 
   return { detail, related };

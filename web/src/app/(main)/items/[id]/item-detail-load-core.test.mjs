@@ -69,3 +69,43 @@ test("detail failure remains primary error", async () => {
 
   assert.deepEqual(events, ["detail-error", "related"]);
 });
+
+test("synchronous detail failure is isolated and related still completes", async () => {
+  const detailErrors = [];
+  const relatedValues = [];
+  const loads = startItemDetailLoads({
+    loadDetail: () => {
+      throw new Error("detail unavailable synchronously");
+    },
+    loadRelated: async () => ({ items: [] }),
+    onDetail: () => assert.fail("detail should not succeed"),
+    onDetailError: (error) => detailErrors.push(error.message),
+    onRelated: (related) => relatedValues.push(related),
+    onRelatedError: () => assert.fail("related should not fail"),
+  });
+
+  await Promise.all([loads.detail, loads.related]);
+
+  assert.deepEqual(detailErrors, ["detail unavailable synchronously"]);
+  assert.deepEqual(relatedValues, [{ items: [] }]);
+});
+
+test("synchronous related failure is isolated and detail still completes", async () => {
+  const detailValues = [];
+  const relatedErrors = [];
+  const loads = startItemDetailLoads({
+    loadDetail: async () => ({ id: "item-1" }),
+    loadRelated: () => {
+      throw new Error("related unavailable synchronously");
+    },
+    onDetail: (detail) => detailValues.push(detail),
+    onDetailError: () => assert.fail("detail should not fail"),
+    onRelated: () => assert.fail("related should not succeed"),
+    onRelatedError: (error) => relatedErrors.push(error.message),
+  });
+
+  await Promise.all([loads.detail, loads.related]);
+
+  assert.deepEqual(detailValues, [{ id: "item-1" }]);
+  assert.deepEqual(relatedErrors, ["related unavailable synchronously"]);
+});

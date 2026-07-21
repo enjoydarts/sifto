@@ -11,6 +11,7 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { buildItemsSearchParams, useItemsViewState } from "@/components/items/use-items-view-state";
+import { ITEMS_FEED_STALE_TIME_MS, ITEM_DETAIL_STALE_TIME_MS } from "./items-performance-policy";
 
 export type ItemsFeedQueryData = {
   items: Item[];
@@ -78,6 +79,8 @@ export function useItemsPageData() {
 
   const listQuery = useQuery<ItemsFeedQueryData>({
     queryKey: listQueryKey,
+    staleTime: ITEMS_FEED_STALE_TIME_MS,
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const data = await api.getItems({
         status: deletedMode ? "deleted" : filter || (pendingMode ? "pending" : "summarized"),
@@ -552,12 +555,7 @@ export function useItemsPageData() {
     void queryClient.prefetchQuery({
       queryKey: queryKeys.items.detail(itemId),
       queryFn: () => api.getItem(itemId),
-      staleTime: 60_000,
-    });
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.items.related(itemId, 6),
-      queryFn: () => api.getRelatedItems(itemId, { limit: 6 }),
-      staleTime: 60_000,
+      staleTime: ITEM_DETAIL_STALE_TIME_MS,
     });
   }, [queryClient]);
 

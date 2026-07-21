@@ -23,6 +23,8 @@ import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
 import { SkeletonList } from "@/components/ui/skeleton-list";
 import { queryKeys } from "@/lib/query-keys";
+import { usePrimaryContentTiming } from "@/lib/use-primary-content-timing";
+import { itemsPrimaryContentRoute } from "./items-performance-policy";
 import { useItemsPageData, type ItemsFeedQueryData } from "./use-items-page-data";
 
 function ItemsPageContent() {
@@ -85,6 +87,8 @@ function ItemsPageContent() {
     queryClient,
     router,
   } = useItemsPageData();
+
+  usePrimaryContentTiming({ route: itemsPrimaryContentRoute, ready: !loading && !visibleError });
 
   const renderItem = useCallback((item: Parameters<typeof ItemCard>[0]["item"], opts?: { featured?: boolean; rank?: number; animIdx?: number }) => {
     const featured = Boolean(opts?.featured);

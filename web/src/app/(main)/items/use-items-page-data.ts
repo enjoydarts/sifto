@@ -15,6 +15,7 @@ import {
   ITEMS_FEED_STALE_TIME_MS,
   ITEM_DETAIL_STALE_TIME_MS,
   canReuseItemsFeedPlaceholder,
+  isItemsFeedPrimaryLoading,
 } from "./items-performance-policy";
 
 export type ItemsFeedQueryData = {
@@ -116,7 +117,12 @@ export function useItemsPageData() {
   const itemsTotal = listQuery.data?.total ?? 0;
   const genreCounts = useMemo(() => listQuery.data?.genreCounts ?? [], [listQuery.data?.genreCounts]);
   const searchUnavailable = listQuery.data?.searchUnavailable ?? false;
-  const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
+  const loading = isItemsFeedPrimaryLoading({
+    hasData: Boolean(listQuery.data),
+    isLoading: listQuery.isLoading,
+    isFetching: listQuery.isFetching,
+    isPlaceholderData: listQuery.isPlaceholderData,
+  });
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
 

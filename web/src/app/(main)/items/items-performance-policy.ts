@@ -27,6 +27,20 @@ export function isItemDetailPrimaryContentReady({
   return displayedItemId === requestedItemId && !loading && !hasError;
 }
 
+export function isItemsFeedPrimaryLoading({
+  hasData,
+  isLoading,
+  isFetching,
+  isPlaceholderData,
+}: {
+  hasData: boolean;
+  isLoading: boolean;
+  isFetching: boolean;
+  isPlaceholderData: boolean;
+}): boolean {
+  return isPlaceholderData || (!hasData && (isLoading || isFetching));
+}
+
 export function canReuseItemsFeedPlaceholder(
   previousKey: readonly unknown[] | undefined,
   currentKey: readonly unknown[]

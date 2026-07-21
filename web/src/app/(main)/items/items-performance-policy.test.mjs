@@ -7,6 +7,7 @@ import {
   ITEMS_FEED_STALE_TIME_MS,
   canReuseItemsFeedPlaceholder,
   isItemDetailPrimaryContentReady,
+  isItemsFeedPrimaryLoading,
   isItemScopedStateCurrent,
   itemDetailPrimaryContentRoute,
   itemsPrimaryContentRoute,
@@ -59,6 +60,54 @@ test("does not reuse item feed placeholder when a filter or search changes", () 
 
 test("does not reuse item feed placeholder without a previous key", () => {
   assert.equal(canReuseItemsFeedPlaceholder(undefined, itemsFeedKey()), false);
+});
+
+test("item feed primary content is loading while placeholder data is displayed", () => {
+  assert.equal(
+    isItemsFeedPrimaryLoading({
+      hasData: true,
+      isLoading: false,
+      isFetching: true,
+      isPlaceholderData: true,
+    }),
+    true
+  );
+});
+
+test("item feed primary content is loading during the initial request", () => {
+  assert.equal(
+    isItemsFeedPrimaryLoading({
+      hasData: false,
+      isLoading: true,
+      isFetching: true,
+      isPlaceholderData: false,
+    }),
+    true
+  );
+});
+
+test("item feed primary content is not loading during background fetching with current data", () => {
+  assert.equal(
+    isItemsFeedPrimaryLoading({
+      hasData: true,
+      isLoading: false,
+      isFetching: true,
+      isPlaceholderData: false,
+    }),
+    false
+  );
+});
+
+test("item feed primary content is not loading with settled current data", () => {
+  assert.equal(
+    isItemsFeedPrimaryLoading({
+      hasData: true,
+      isLoading: false,
+      isFetching: false,
+      isPlaceholderData: false,
+    }),
+    false
+  );
 });
 
 test("item detail primary content is not ready for a previously displayed item", () => {

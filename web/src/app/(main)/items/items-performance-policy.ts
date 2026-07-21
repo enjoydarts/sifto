@@ -6,6 +6,20 @@ export const itemDetailPrimaryContentRoute = "item-detail";
 
 const ITEMS_FEED_PAGE_KEY_INDEX = 8;
 
+export function isItemDetailPrimaryContentReady({
+  requestedItemId,
+  displayedItemId,
+  loading,
+  hasError,
+}: {
+  requestedItemId: string;
+  displayedItemId: string | null | undefined;
+  loading: boolean;
+  hasError: boolean;
+}): boolean {
+  return displayedItemId === requestedItemId && !loading && !hasError;
+}
+
 export function canReuseItemsFeedPlaceholder(
   previousKey: readonly unknown[] | undefined,
   currentKey: readonly unknown[]

@@ -13,7 +13,10 @@ import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { PersonalScoreExplainer } from "@/components/items/personal-score-explainer";
 import { usePrimaryContentTiming } from "@/lib/use-primary-content-timing";
 import { useItemDetailData } from "./use-item-detail-data";
-import { itemDetailPrimaryContentRoute } from "../items-performance-policy";
+import {
+  isItemDetailPrimaryContentReady,
+  itemDetailPrimaryContentRoute,
+} from "../items-performance-policy";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)]",
@@ -202,6 +205,7 @@ export default function ItemDetailPage() {
   const {
     t,
     locale,
+    requestedItemId,
     item,
     loading,
     loadError,
@@ -214,6 +218,8 @@ export default function ItemDetailPage() {
     retryFromFactsUpdating,
     genreUpdating,
     related,
+    relatedClusters,
+    relatedLoading,
     expandedRelatedClusterIds,
     setExpandedRelatedClusterIds,
     relatedSortMode,
@@ -256,7 +262,13 @@ export default function ItemDetailPage() {
 
   usePrimaryContentTiming({
     route: itemDetailPrimaryContentRoute,
-    ready: Boolean(item) && !loading && !loadError,
+    transitionKey: requestedItemId,
+    ready: isItemDetailPrimaryContentReady({
+      requestedItemId,
+      displayedItemId: item?.id,
+      loading,
+      hasError: Boolean(loadError),
+    }),
   });
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
@@ -747,7 +759,9 @@ export default function ItemDetailPage() {
                 </button>
                 </div>
               </div>
-              {related.length === 0 ? (
+              {relatedLoading && related.length === 0 && relatedClusters.length === 0 ? (
+                <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>
+              ) : related.length === 0 ? (
                 <p className="text-sm text-[var(--color-editorial-ink-soft)]">
                   {relatedError
                     ? t("itemDetail.relatedError")

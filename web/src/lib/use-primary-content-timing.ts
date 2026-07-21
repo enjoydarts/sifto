@@ -6,11 +6,25 @@ import { useEffect, useRef } from "react";
 const routeTransitionMark = "sifto:route-transition-start";
 const recentRouteTransitionWindowMs = 5_000;
 
-export function usePrimaryContentTiming({ route, ready }: { route: string; ready: boolean }) {
+export function usePrimaryContentTiming({
+  route,
+  ready,
+  transitionKey = route,
+}: {
+  route: string;
+  ready: boolean;
+  transitionKey?: string;
+}) {
   const mountStartedAtRef = useRef<number | null>(null);
   const recordedRef = useRef(false);
+  const previousTransitionKeyRef = useRef(transitionKey);
 
   useEffect(() => {
+    if (previousTransitionKeyRef.current !== transitionKey) {
+      previousTransitionKeyRef.current = transitionKey;
+      recordedRef.current = false;
+      mountStartedAtRef.current = performance.now();
+    }
     if (mountStartedAtRef.current === null) {
       mountStartedAtRef.current = performance.now();
     }
@@ -47,5 +61,5 @@ export function usePrimaryContentTiming({ route, ready }: { route: string; ready
     });
 
     return () => cancelAnimationFrame(frameID);
-  }, [ready, route]);
+  }, [ready, route, transitionKey]);
 }

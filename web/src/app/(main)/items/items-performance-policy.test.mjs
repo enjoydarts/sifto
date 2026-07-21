@@ -6,6 +6,7 @@ import {
   ITEM_RELATED_STALE_TIME_MS,
   ITEMS_FEED_STALE_TIME_MS,
   canReuseItemsFeedPlaceholder,
+  isItemDetailPrimaryContentReady,
   itemDetailPrimaryContentRoute,
   itemsPrimaryContentRoute,
 } from "./items-performance-policy.ts";
@@ -57,4 +58,52 @@ test("does not reuse item feed placeholder when a filter or search changes", () 
 
 test("does not reuse item feed placeholder without a previous key", () => {
   assert.equal(canReuseItemsFeedPlaceholder(undefined, itemsFeedKey()), false);
+});
+
+test("item detail primary content is not ready for a previously displayed item", () => {
+  assert.equal(
+    isItemDetailPrimaryContentReady({
+      requestedItemId: "next-item",
+      displayedItemId: "previous-item",
+      loading: false,
+      hasError: false,
+    }),
+    false
+  );
+});
+
+test("item detail primary content is ready for the settled requested item", () => {
+  assert.equal(
+    isItemDetailPrimaryContentReady({
+      requestedItemId: "next-item",
+      displayedItemId: "next-item",
+      loading: false,
+      hasError: false,
+    }),
+    true
+  );
+});
+
+test("item detail primary content is not ready while loading", () => {
+  assert.equal(
+    isItemDetailPrimaryContentReady({
+      requestedItemId: "next-item",
+      displayedItemId: "next-item",
+      loading: true,
+      hasError: false,
+    }),
+    false
+  );
+});
+
+test("item detail primary content is not ready after a load error", () => {
+  assert.equal(
+    isItemDetailPrimaryContentReady({
+      requestedItemId: "next-item",
+      displayedItemId: "next-item",
+      loading: false,
+      hasError: true,
+    }),
+    false
+  );
 });

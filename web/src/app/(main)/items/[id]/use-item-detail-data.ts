@@ -113,6 +113,7 @@ export function useItemDetailData() {
   const [genreUpdating, setGenreUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(true);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes" | "genre">("summary");
@@ -221,6 +222,13 @@ export function useItemDetailData() {
       setRelatedClusters(cachedRelated.clusters ?? []);
       setExpandedRelatedClusterIds({});
       setRelatedError(null);
+      setRelatedLoading(false);
+    } else {
+      setRelated([]);
+      setRelatedClusters([]);
+      setExpandedRelatedClusterIds({});
+      setRelatedError(null);
+      setRelatedLoading(true);
     }
     let cancelled = false;
     const loads = startItemDetailLoads({
@@ -245,9 +253,12 @@ export function useItemDetailData() {
         setRelatedClusters(nextRelated.clusters ?? []);
         setExpandedRelatedClusterIds({});
         setRelatedError(null);
+        setRelatedLoading(false);
       },
       onRelatedError: (error) => {
-        if (cancelled || cachedRelated) return;
+        if (cancelled) return;
+        setRelatedLoading(false);
+        if (cachedRelated) return;
         setRelated([]);
         setRelatedClusters([]);
         setExpandedRelatedClusterIds({});
@@ -732,6 +743,7 @@ export function useItemDetailData() {
   return {
     t,
     locale,
+    requestedItemId: id,
     item,
     loading,
     loadError,
@@ -745,6 +757,7 @@ export function useItemDetailData() {
     genreUpdating,
     related,
     relatedClusters,
+    relatedLoading,
     expandedRelatedClusterIds,
     setExpandedRelatedClusterIds,
     relatedSortMode,

@@ -11,7 +11,9 @@ import { ItemGenreEditor } from "@/components/items/item-genre-editor";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { PersonalScoreExplainer } from "@/components/items/personal-score-explainer";
+import { usePrimaryContentTiming } from "@/lib/use-primary-content-timing";
 import { useItemDetailData } from "./use-item-detail-data";
+import { itemDetailPrimaryContentRoute } from "../items-performance-policy";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)]",
@@ -251,6 +253,11 @@ export default function ItemDetailPage() {
     createHighlight,
     deleteHighlight,
   } = useItemDetailData();
+
+  usePrimaryContentTiming({
+    route: itemDetailPrimaryContentRoute,
+    ready: Boolean(item) && !loading && !loadError,
+  });
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (loadError) return <p className="text-sm text-red-500">{loadError}</p>;

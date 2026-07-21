@@ -17,6 +17,9 @@ import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { settingsQueryOptions } from "@/lib/settings-query";
+import { queryKeys } from "@/lib/query-keys";
+import { startItemDetailLoads } from "./item-detail-load-core";
+import { ITEM_DETAIL_STALE_TIME_MS } from "../items-performance-policy";
 
 export type RelatedCluster = {
   id: string;
@@ -201,12 +204,10 @@ export function useItemDetailData() {
   }, [id]);
 
   useEffect(() => {
-    const cachedItem = queryClient.getQueryData<ItemDetail>(["item-detail", id]);
-    const cachedRelated = queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>([
-      "item-related",
-      id,
-      6,
-    ]);
+    const cachedItem = queryClient.getQueryData<ItemDetail>(queryKeys.items.detail(id));
+    const cachedRelated = queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>(
+      queryKeys.items.related(id, 6)
+    );
     if (cachedItem) {
       setItem(applyReadOverride(cachedItem));
       setLoadError(null);
@@ -222,39 +223,45 @@ export function useItemDetailData() {
       setRelatedError(null);
     }
     let cancelled = false;
-    Promise.allSettled([api.getItem(id), api.getRelatedItems(id, { limit: 6 })])
-      .then((results) => {
+    const loads = startItemDetailLoads({
+      loadDetail: () => api.getItem(id),
+      loadRelated: () => api.getRelatedItems(id, { limit: 6 }),
+      onDetail: (detail) => {
         if (cancelled) return;
-        const [detailRes, relatedRes] = results;
-        if (detailRes.status === "rejected") {
-          if (!cachedItem) throw detailRes.reason;
-        } else {
-          const nextItem = applyReadOverride(detailRes.value);
-          queryClient.setQueryData(["item-detail", id], nextItem);
-          setItem(nextItem);
-          setLoadError(null);
-          setActionError(null);
-        }
-
-        if (relatedRes.status === "fulfilled") {
-          queryClient.setQueryData(["item-related", id, 6], relatedRes.value);
-          setRelated(relatedRes.value.items ?? []);
-          setRelatedClusters(relatedRes.value.clusters ?? []);
-          setExpandedRelatedClusterIds({});
-          setRelatedError(null);
-        } else if (!cachedRelated) {
-          setRelated([]);
-          setRelatedClusters([]);
-          setExpandedRelatedClusterIds({});
-          setRelatedError(String(relatedRes.reason));
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setLoadError(String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        const nextItem = applyReadOverride(detail);
+        queryClient.setQueryData(queryKeys.items.detail(id), nextItem);
+        setItem(nextItem);
+        setLoadError(null);
+        setActionError(null);
+      },
+      onDetailError: (error) => {
+        if (cancelled) return;
+        if (!cachedItem) setLoadError(String(error));
+      },
+      onRelated: (nextRelated) => {
+        if (cancelled) return;
+        queryClient.setQueryData(queryKeys.items.related(id, 6), nextRelated);
+        setRelated(nextRelated.items ?? []);
+        setRelatedClusters(nextRelated.clusters ?? []);
+        setExpandedRelatedClusterIds({});
+        setRelatedError(null);
+      },
+      onRelatedError: (error) => {
+        if (cancelled || cachedRelated) return;
+        setRelated([]);
+        setRelatedClusters([]);
+        setExpandedRelatedClusterIds({});
+        setRelatedError(String(error));
+      },
+    });
+    void loads.detail.finally(() => {
+      if (!cancelled) setLoading(false);
+    }).catch(() => {
+      // Load failures are handled by the callbacks above.
+    });
+    void loads.related.catch(() => {
+      // Load failures are handled by the callbacks above.
+    });
     return () => {
       cancelled = true;
     };
@@ -335,14 +342,9 @@ export function useItemDetailData() {
     const nextId = nextItemHref.match(/\/items\/([^?]+)/)?.[1];
     if (!nextId) return;
     void queryClient.prefetchQuery({
-      queryKey: ["item-detail", nextId],
+      queryKey: queryKeys.items.detail(nextId),
       queryFn: () => api.getItem(nextId),
-      staleTime: 60_000,
-    });
-    void queryClient.prefetchQuery({
-      queryKey: ["item-related", nextId, 6],
-      queryFn: () => api.getRelatedItems(nextId, { limit: 6 }),
-      staleTime: 60_000,
+      staleTime: ITEM_DETAIL_STALE_TIME_MS,
     });
   }, [nextItemHref, queryClient, router]);
   const clusteredRelated = useMemo(() => {

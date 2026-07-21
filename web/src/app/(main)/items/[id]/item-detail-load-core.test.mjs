@@ -34,6 +34,33 @@ test("detail completion does not wait for related", async () => {
   assert.deepEqual(events, ["detail", "item-1", "related"]);
 });
 
+test("related loading starts only after detail settles", async () => {
+  const detail = deferred();
+  const related = deferred();
+  let relatedStarted = false;
+  const loads = startItemDetailLoads({
+    loadDetail: () => detail.promise,
+    loadRelated: () => {
+      relatedStarted = true;
+      return related.promise;
+    },
+    onDetail: () => {},
+    onDetailError: () => assert.fail("detail should not fail"),
+    onRelated: () => {},
+    onRelatedError: () => assert.fail("related should not fail"),
+  });
+
+  await Promise.resolve();
+  assert.equal(relatedStarted, false);
+
+  detail.resolve({ id: "item-1" });
+  await loads.detail;
+  assert.equal(relatedStarted, true);
+
+  related.resolve({ items: [] });
+  await loads.related;
+});
+
 test("related failure is isolated from successful detail", async () => {
   const events = [];
   const loads = startItemDetailLoads({

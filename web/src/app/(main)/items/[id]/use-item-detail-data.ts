@@ -33,6 +33,9 @@ export type RelatedCluster = {
   items: RelatedItem[];
 };
 
+const EMPTY_RELATED_ITEMS: RelatedItem[] = [];
+const EMPTY_RELATED_CLUSTERS: RelatedCluster[] = [];
+
 function resolveEffectiveOtherGenreLabel({
   effectiveGenre,
   effectiveOtherGenreLabel,
@@ -367,8 +370,8 @@ export function useItemDetailData() {
     });
   }, [nextItemHref, queryClient, router]);
   const isRelatedStateCurrent = isItemScopedStateCurrent(id, relatedStateItemId);
-  const currentRelated = isRelatedStateCurrent ? related : [];
-  const currentRelatedClusters = isRelatedStateCurrent ? relatedClusters : [];
+  const currentRelated = isRelatedStateCurrent ? related : EMPTY_RELATED_ITEMS;
+  const currentRelatedClusters = isRelatedStateCurrent ? relatedClusters : EMPTY_RELATED_CLUSTERS;
   const currentRelatedLoading = isRelatedStateCurrent ? relatedLoading : true;
   const currentRelatedError = isRelatedStateCurrent ? relatedError : null;
   const clusteredRelated = useMemo(() => {

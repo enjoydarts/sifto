@@ -20,10 +20,15 @@ export function usePrimaryContentTiming({
   const previousTransitionKeyRef = useRef(transitionKey);
 
   useEffect(() => {
+    const hasPerformanceNow = typeof performance !== "undefined" && typeof performance.now === "function";
     if (previousTransitionKeyRef.current !== transitionKey) {
       previousTransitionKeyRef.current = transitionKey;
       recordedRef.current = false;
-      mountStartedAtRef.current = performance.now();
+      mountStartedAtRef.current = hasPerformanceNow ? performance.now() : null;
+    }
+    if (!hasPerformanceNow || typeof requestAnimationFrame !== "function") {
+      recordedRef.current = true;
+      return;
     }
     if (mountStartedAtRef.current === null) {
       mountStartedAtRef.current = performance.now();
@@ -33,33 +38,48 @@ export function usePrimaryContentTiming({
     const frameID = requestAnimationFrame(() => {
       if (recordedRef.current) return;
 
-      const endedAt = performance.now();
-      const mountStartedAt = mountStartedAtRef.current ?? endedAt;
-      const routeMark = performance.getEntriesByName(routeTransitionMark, "mark").at(-1);
-      const routeStartedAt = routeMark?.startTime;
-      const startedAt =
-        routeStartedAt !== undefined &&
-        routeStartedAt <= endedAt &&
-        routeStartedAt >= mountStartedAt - recentRouteTransitionWindowMs
-          ? routeStartedAt
-          : mountStartedAt;
-      const durationMs = Math.max(0, endedAt - startedAt);
-
       try {
-        performance.measure(`sifto:${route}:primary-content`, {
-          start: startedAt,
-          end: endedAt,
-          detail: { route },
-        });
-        Sentry.getActiveSpan()?.setAttributes({
-          "ui.route": route,
-          "ui.primary_content_ms": durationMs,
-        });
+        const endedAt = performance.now();
+        const mountStartedAt = mountStartedAtRef.current ?? endedAt;
+        const routeMark =
+          typeof performance.getEntriesByName === "function"
+            ? performance.getEntriesByName(routeTransitionMark, "mark").at(-1)
+            : undefined;
+        const routeStartedAt = routeMark?.startTime;
+        const startedAt =
+          routeStartedAt !== undefined &&
+          routeStartedAt <= endedAt &&
+          routeStartedAt >= mountStartedAt - recentRouteTransitionWindowMs
+            ? routeStartedAt
+            : mountStartedAt;
+        const durationMs = Math.max(0, endedAt - startedAt);
+
+        try {
+          if (typeof performance.measure === "function") {
+            performance.measure(`sifto:${route}:primary-content`, {
+              start: startedAt,
+              end: endedAt,
+              detail: { route },
+            });
+          }
+        } catch {
+          // Measurement support differs across runtimes and must not affect rendering.
+        }
+        try {
+          Sentry.getActiveSpan()?.setAttributes({
+            "ui.route": route,
+            "ui.primary_content_ms": durationMs,
+          });
+        } catch {
+          // Telemetry is best-effort.
+        }
       } finally {
         recordedRef.current = true;
       }
     });
 
-    return () => cancelAnimationFrame(frameID);
+    return () => {
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(frameID);
+    };
   }, [ready, route, transitionKey]);
 }

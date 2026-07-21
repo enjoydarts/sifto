@@ -13,7 +13,7 @@ export function startItemDetailLoads<TDetail, TRelated>(
   const detail = Promise.resolve()
     .then(options.loadDetail)
     .then(options.onDetail, options.onDetailError);
-  const related = Promise.resolve()
+  const related = detail
     .then(options.loadRelated)
     .then(options.onRelated, options.onRelatedError);
 

@@ -11,7 +11,11 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { buildItemsSearchParams, useItemsViewState } from "@/components/items/use-items-view-state";
-import { ITEMS_FEED_STALE_TIME_MS, ITEM_DETAIL_STALE_TIME_MS } from "./items-performance-policy";
+import {
+  ITEMS_FEED_STALE_TIME_MS,
+  ITEM_DETAIL_STALE_TIME_MS,
+  canReuseItemsFeedPlaceholder,
+} from "./items-performance-policy";
 
 export type ItemsFeedQueryData = {
   items: Item[];
@@ -80,7 +84,8 @@ export function useItemsPageData() {
   const listQuery = useQuery<ItemsFeedQueryData>({
     queryKey: listQueryKey,
     staleTime: ITEMS_FEED_STALE_TIME_MS,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData, previousQuery) =>
+      canReuseItemsFeedPlaceholder(previousQuery?.queryKey, listQueryKey) ? previousData : undefined,
     queryFn: async () => {
       const data = await api.getItems({
         status: deletedMode ? "deleted" : filter || (pendingMode ? "pending" : "summarized"),

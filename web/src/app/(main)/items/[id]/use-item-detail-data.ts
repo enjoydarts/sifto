@@ -19,7 +19,10 @@ import { useConfirm } from "@/components/confirm-provider";
 import { settingsQueryOptions } from "@/lib/settings-query";
 import { queryKeys } from "@/lib/query-keys";
 import { startItemDetailLoads } from "./item-detail-load-core";
-import { ITEM_DETAIL_STALE_TIME_MS } from "../items-performance-policy";
+import {
+  isItemScopedStateCurrent,
+  ITEM_DETAIL_STALE_TIME_MS,
+} from "../items-performance-policy";
 
 export type RelatedCluster = {
   id: string;
@@ -114,6 +117,7 @@ export function useItemDetailData() {
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
+  const [relatedStateItemId, setRelatedStateItemId] = useState<string | null>(null);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes" | "genre">("summary");
@@ -218,12 +222,14 @@ export function useItemDetailData() {
       setLoading(true);
     }
     if (cachedRelated) {
+      setRelatedStateItemId(id);
       setRelated(cachedRelated.items ?? []);
       setRelatedClusters(cachedRelated.clusters ?? []);
       setExpandedRelatedClusterIds({});
       setRelatedError(null);
       setRelatedLoading(false);
     } else {
+      setRelatedStateItemId(id);
       setRelated([]);
       setRelatedClusters([]);
       setExpandedRelatedClusterIds({});
@@ -248,6 +254,7 @@ export function useItemDetailData() {
       },
       onRelated: (nextRelated) => {
         if (cancelled) return;
+        setRelatedStateItemId(id);
         queryClient.setQueryData(queryKeys.items.related(id, 6), nextRelated);
         setRelated(nextRelated.items ?? []);
         setRelatedClusters(nextRelated.clusters ?? []);
@@ -257,6 +264,7 @@ export function useItemDetailData() {
       },
       onRelatedError: (error) => {
         if (cancelled) return;
+        setRelatedStateItemId(id);
         setRelatedLoading(false);
         if (cachedRelated) return;
         setRelated([]);
@@ -358,8 +366,13 @@ export function useItemDetailData() {
       staleTime: ITEM_DETAIL_STALE_TIME_MS,
     });
   }, [nextItemHref, queryClient, router]);
+  const isRelatedStateCurrent = isItemScopedStateCurrent(id, relatedStateItemId);
+  const currentRelated = isRelatedStateCurrent ? related : [];
+  const currentRelatedClusters = isRelatedStateCurrent ? relatedClusters : [];
+  const currentRelatedLoading = isRelatedStateCurrent ? relatedLoading : true;
+  const currentRelatedError = isRelatedStateCurrent ? relatedError : null;
   const clusteredRelated = useMemo(() => {
-    const clusters = relatedClusters.filter((c) => c.size >= 2).map((c) => ({
+    const clusters = currentRelatedClusters.filter((c) => c.size >= 2).map((c) => ({
       ...c,
       items: [...c.items].sort((a, b) => {
         if (relatedSortMode === "recent") {
@@ -380,19 +393,19 @@ export function useItemDetailData() {
       return b.size - a.size;
     });
     return clusters;
-  }, [relatedClusters, relatedSortMode]);
+  }, [currentRelatedClusters, relatedSortMode]);
   const singleRelated = useMemo(
     () =>
-      relatedClusters.length > 0
-        ? [...relatedClusters.filter((c) => c.size < 2).flatMap((c) => c.items)].sort((a, b) => {
+      currentRelatedClusters.length > 0
+        ? [...currentRelatedClusters.filter((c) => c.size < 2).flatMap((c) => c.items)].sort((a, b) => {
             if (relatedSortMode === "recent") {
               return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
             }
             if (b.similarity !== a.similarity) return b.similarity - a.similarity;
             return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
           })
-        : related,
-    [related, relatedClusters, relatedSortMode]
+        : currentRelated,
+    [currentRelated, currentRelatedClusters, relatedSortMode]
   );
   const openInlineRelatedItem = useCallback((relatedItemId: string) => {
     setInlineItemId(relatedItemId);
@@ -755,16 +768,16 @@ export function useItemDetailData() {
     retryUpdating,
     retryFromFactsUpdating,
     genreUpdating,
-    related,
-    relatedClusters,
-    relatedLoading,
+    related: currentRelated,
+    relatedClusters: currentRelatedClusters,
+    relatedLoading: currentRelatedLoading,
     expandedRelatedClusterIds,
     setExpandedRelatedClusterIds,
     relatedSortMode,
     setRelatedSortMode,
     detailTab,
     setDetailTab,
-    relatedError,
+    relatedError: currentRelatedError,
     nextItemHref,
     inlineItemId,
     setInlineItemId,

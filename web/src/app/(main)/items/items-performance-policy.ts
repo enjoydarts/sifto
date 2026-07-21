@@ -6,6 +6,13 @@ export const itemDetailPrimaryContentRoute = "item-detail";
 
 const ITEMS_FEED_PAGE_KEY_INDEX = 8;
 
+export function isItemScopedStateCurrent(
+  requestedItemId: string,
+  stateItemId: string | null
+): boolean {
+  return stateItemId === requestedItemId;
+}
+
 export function isItemDetailPrimaryContentReady({
   requestedItemId,
   displayedItemId,

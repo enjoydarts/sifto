@@ -7,6 +7,7 @@ import {
   ITEMS_FEED_STALE_TIME_MS,
   canReuseItemsFeedPlaceholder,
   isItemDetailPrimaryContentReady,
+  isItemScopedStateCurrent,
   itemDetailPrimaryContentRoute,
   itemsPrimaryContentRoute,
 } from "./items-performance-policy.ts";
@@ -106,4 +107,16 @@ test("item detail primary content is not ready after a load error", () => {
     }),
     false
   );
+});
+
+test("item-scoped state is not current when it belongs to the previous item", () => {
+  assert.equal(isItemScopedStateCurrent("next-item", "previous-item"), false);
+});
+
+test("item-scoped state is current when its owner matches the requested item", () => {
+  assert.equal(isItemScopedStateCurrent("next-item", "next-item"), true);
+});
+
+test("item-scoped state without an owner is not current", () => {
+  assert.equal(isItemScopedStateCurrent("next-item", null), false);
 });

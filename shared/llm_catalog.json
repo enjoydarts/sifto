@@ -1318,6 +1318,71 @@
       }
     },
     {
+      "id": "gemini-3.6-flash",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [
+        "fast"
+      ],
+      "comment": "Gemini 3.6 Flash の安定版。高速性と推論力を両立し、要約、ダイジェスト、Askを幅広く処理する上位Flash枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_07",
+        "input_per_mtok_usd": 1.5,
+        "output_per_mtok_usd": 7.5,
+        "cache_read_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": [
+        "lowestCost",
+        "fast"
+      ],
+      "comment": "Gemini 3.5 Flash-Lite の安定版。低遅延・低コストの抽出、分類、軽い要約向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_07",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
       "id": "gemini-3.5-flash",
       "provider": "google",
       "available_purposes": [

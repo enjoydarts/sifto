@@ -15,6 +15,10 @@ except Exception:  # pragma: no cover
 _GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
 _GEMINI_CONTEXT_CACHE_SKIP: dict[str, float] = {}
 _REDIS_CLIENT = None
+_MODELS_WITHOUT_SAMPLING_PARAMETERS = (
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+)
 
 
 def env_timeout_seconds(name: str, default: float) -> float:
@@ -37,6 +41,33 @@ def env_int(name: str, default: int) -> int:
         return v if v > 0 else default
     except Exception:
         return default
+
+
+def omit_sampling_parameters(model: str) -> bool:
+    model_name = (model or "").strip().removeprefix("models/")
+    return any(
+        model_name == base or model_name.startswith(f"{base}-")
+        for base in _MODELS_WITHOUT_SAMPLING_PARAMETERS
+    )
+
+
+def build_generation_config(
+    model: str,
+    *,
+    max_output_tokens: int,
+    response_mime_type: str,
+    temperature: float | None,
+    top_p: float | None,
+) -> dict:
+    config = {
+        "maxOutputTokens": max_output_tokens,
+        "responseMimeType": response_mime_type,
+    }
+    if not omit_sampling_parameters(model):
+        config["temperature"] = temperature if temperature is not None else 0.2
+        if top_p is not None:
+            config["topP"] = top_p
+    return config
 
 
 def parse_rfc3339_utc(s: str) -> float | None:
@@ -210,13 +241,13 @@ def generate_content(
         raise RuntimeError("google api key is required")
     model_name = normalize_model_name(model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-    generation_config: dict = {
-        "temperature": temperature if temperature is not None else 0.2,
-        "maxOutputTokens": max_output_tokens,
-        "responseMimeType": response_mime_type,
-    }
-    if top_p is not None:
-        generation_config["topP"] = top_p
+    generation_config = build_generation_config(
+        model_name,
+        max_output_tokens=max_output_tokens,
+        response_mime_type=response_mime_type,
+        temperature=temperature,
+        top_p=top_p,
+    )
     if response_schema:
         generation_config["responseSchema"] = normalize_response_schema(response_schema)
 
@@ -366,13 +397,13 @@ async def generate_content_async(
         raise RuntimeError("google api key is required")
     model_name = normalize_model_name(model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-    generation_config: dict = {
-        "temperature": temperature if temperature is not None else 0.2,
-        "maxOutputTokens": max_output_tokens,
-        "responseMimeType": response_mime_type,
-    }
-    if top_p is not None:
-        generation_config["topP"] = top_p
+    generation_config = build_generation_config(
+        model_name,
+        max_output_tokens=max_output_tokens,
+        response_mime_type=response_mime_type,
+        temperature=temperature,
+        top_p=top_p,
+    )
     if response_schema:
         generation_config["responseSchema"] = normalize_response_schema(response_schema)
 

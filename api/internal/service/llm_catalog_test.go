@@ -40,6 +40,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gemini-3.5-flash"); got == nil {
 		t.Fatal("gemini-3.5-flash not found in catalog")
 	}
+	if got := findModelCatalog("gemini-3.6-flash"); got == nil {
+		t.Fatal("gemini-3.6-flash not found in catalog")
+	}
+	if got := findModelCatalog("gemini-3.5-flash-lite"); got == nil {
+		t.Fatal("gemini-3.5-flash-lite not found in catalog")
+	}
 	if got := findModelCatalog("deepseek-chat"); got == nil {
 		t.Fatal("deepseek-chat not found in catalog")
 	}

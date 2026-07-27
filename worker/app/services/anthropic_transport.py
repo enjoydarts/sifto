@@ -4,6 +4,14 @@ import time
 import anthropic
 
 
+def supports_sampling_parameters(model: str) -> bool:
+    return str(model or "").strip() not in {
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-opus-5",
+    }
+
+
 def message_text(message) -> str:
     if message is None:
         return ""
@@ -106,9 +114,9 @@ def messages_create(
         "max_tokens": max_tokens,
         "timeout": req_timeout,
     }
-    if temperature is not None:
+    if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
-    if top_p is not None:
+    if top_p is not None and supports_sampling_parameters(model):
         kwargs["top_p"] = top_p
     if system_prompt is not None:
         system_block: dict = {"type": "text", "text": system_prompt}
@@ -278,9 +286,9 @@ async def messages_create_async(
         "max_tokens": max_tokens,
         "timeout": req_timeout,
     }
-    if temperature is not None:
+    if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
-    if top_p is not None:
+    if top_p is not None and supports_sampling_parameters(model):
         kwargs["top_p"] = top_p
     if system_prompt is not None:
         system_block: dict = {"type": "text", "text": system_prompt}

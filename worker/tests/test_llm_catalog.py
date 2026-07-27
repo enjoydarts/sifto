@@ -7,6 +7,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("anthropic", "claude-haiku-4-5"),
     ("anthropic", "claude-sonnet-5"),
     ("anthropic", "claude-fable-5"),
+    ("anthropic", "claude-opus-5"),
     ("anthropic", "claude-opus-4-8"),
     ("google", "gemini-3.1-flash-lite"),
     ("groq", "openai/gpt-oss-20b"),

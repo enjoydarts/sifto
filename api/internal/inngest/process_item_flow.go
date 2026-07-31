@@ -393,15 +393,21 @@ func extractAndPersistFacts(
 		factsPrimaryModel = ptrStringOrNil(userModelSettings.FactsModel)
 		factsSecondaryModel = ptrStringOrNil(userModelSettings.FactsSecondaryModel)
 		factsSecondaryRatePercent = userModelSettings.FactsSecondaryRatePercent
-		primaryModelOverride = service.ChooseSplitPrimaryModelWithUsage(
-			ctx,
-			deps.cache,
-			ptrStringValue(userIDPtr),
-			"facts",
-			factsPrimaryModel,
-			factsSecondaryModel,
-			factsSecondaryRatePercent,
-		)
+		selectedModel, err := step.Run(ctx, "select-facts-model", func(ctx context.Context) (*string, error) {
+			return service.ChooseSplitPrimaryModelWithUsage(
+				ctx,
+				deps.cache,
+				ptrStringValue(userIDPtr),
+				"facts",
+				factsPrimaryModel,
+				factsSecondaryModel,
+				factsSecondaryRatePercent,
+			), nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("select facts model: %w", err)
+		}
+		primaryModelOverride = selectedModel
 		fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
 	}
 	currentModelOverride := primaryModelOverride
@@ -630,15 +636,25 @@ func summarizeAndPersistItem(
 			summaryPrimaryModel = ptrStringOrNil(userModelSettings.SummaryModel)
 			summarySecondaryModel = ptrStringOrNil(userModelSettings.SummarySecondaryModel)
 			summarySecondaryRatePercent = userModelSettings.SummarySecondaryRatePercent
-			primaryModelOverride = service.ChooseSplitPrimaryModelWithUsage(
-				ctx,
-				deps.cache,
-				ptrStringValue(userIDPtr),
-				"summary",
-				summaryPrimaryModel,
-				summarySecondaryModel,
-				summarySecondaryRatePercent,
-			)
+			selectionStepLabel := "select-summary-model"
+			if attempt > 0 {
+				selectionStepLabel = fmt.Sprintf("select-summary-model-%d", attempt+1)
+			}
+			selectedModel, err := step.Run(ctx, selectionStepLabel, func(ctx context.Context) (*string, error) {
+				return service.ChooseSplitPrimaryModelWithUsage(
+					ctx,
+					deps.cache,
+					ptrStringValue(userIDPtr),
+					"summary",
+					summaryPrimaryModel,
+					summarySecondaryModel,
+					summarySecondaryRatePercent,
+				), nil
+			})
+			if err != nil {
+				return nil, fmt.Errorf("select summary model: %w", err)
+			}
+			primaryModelOverride = selectedModel
 			fallbackModelOverride = ptrStringOrNil(userModelSettings.SummaryFallbackModel)
 		}
 		var primaryRuntime *llmRuntime

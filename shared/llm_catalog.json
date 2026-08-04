@@ -85,6 +85,7 @@
       "id": "alibaba",
       "api_key_header": "x-alibaba-api-key",
       "match_exact": [
+        "qwen3.8-max",
         "qwen3.7-max",
         "qwen3.7-plus",
         "qwen3-max",
@@ -101,8 +102,8 @@
       "default_models": {
         "facts": "qwen3.5-flash",
         "summary": "qwen3.5-plus",
-        "digest_cluster_draft": "qwen3-max",
-        "digest": "qwen3-max",
+        "digest_cluster_draft": "qwen3.8-max",
+        "digest": "qwen3.8-max",
         "ask": "qwen3.5-plus",
         "source_suggestion": "qwen3.5-flash"
       },
@@ -1956,6 +1957,37 @@
         "input_per_mtok_usd": 1.0,
         "output_per_mtok_usd": 3.0,
         "cache_read_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "qwen3.8-max",
+      "provider": "alibaba",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [
+        "latest"
+      ],
+      "comment": "Alibaba Model Studio Global / Virginia の qwen3.8-max。難しい整理、長文要約、ダイジェスト向けの最新上位 Qwen 枠として扱う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_modelstudio_qwen3_8_2026_08",
+        "input_per_mtok_usd": 1.65,
+        "output_per_mtok_usd": 4.951
       }
     },
     {

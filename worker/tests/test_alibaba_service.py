@@ -4,6 +4,22 @@ from app.services.llm_catalog import model_pricing, model_supports, provider_for
 
 
 class AlibabaCatalogTests(unittest.TestCase):
+    def test_qwen38_max_is_available(self):
+        pricing = model_pricing("qwen3.8-max")
+
+        self.assertEqual(provider_for_model("qwen3.8-max"), "alibaba")
+        self.assertIsNotNone(pricing)
+        self.assertEqual(pricing["input_per_mtok_usd"], 1.65)
+        self.assertEqual(pricing["output_per_mtok_usd"], 4.951)
+        self.assertNotIn("cache_write_per_mtok_usd", pricing)
+        self.assertNotIn("cache_read_per_mtok_usd", pricing)
+        self.assertTrue(model_supports("qwen3.8-max", "supports_structured_output"))
+        self.assertTrue(model_supports("qwen3.8-max", "supports_reasoning"))
+        self.assertTrue(model_supports("qwen3.8-max", "supports_tool_calling"))
+        self.assertFalse(model_supports("qwen3.8-max", "supports_strict_json_schema"))
+        self.assertFalse(model_supports("qwen3.8-max", "supports_cache_write_pricing"))
+        self.assertFalse(model_supports("qwen3.8-max", "supports_cache_read_pricing"))
+
     def test_qwen37_max_is_available(self):
         pricing = model_pricing("qwen3.7-max")
 

@@ -326,6 +326,27 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_zai_glm_5_3_requests_use_required_thinking_with_low_effort(self):
+        run_chat_json(
+            "Return JSON",
+            "glm-5.3",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="zai",
+            logger=None,
+            response_schema={"type": "object"},
+        )
+
+        self.assertIsNotNone(_FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "enabled"})
+        self.assertEqual(_FakeClient.last_json.get("reasoning_effort"), "low")
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_moonshot_requests_disable_thinking(self):
         run_chat_json(
             "Return JSON",

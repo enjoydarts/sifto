@@ -107,6 +107,13 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         body.pop("top_p", None)
         body["reasoning_effort"] = "max"
         return
+    if provider_name == "zai" and normalized_model.strip().lower() == "glm-5.3":
+        # GLM-5.3 rejects requests that disable thinking. Use the lowest
+        # supported effort for Sifto's structured tasks so reasoning does not
+        # consume more of the response budget than necessary.
+        body["thinking"] = {"type": "enabled"}
+        body["reasoning_effort"] = "low"
+        return
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
         # exhaust output tokens into reasoning_content and leave message.content empty.

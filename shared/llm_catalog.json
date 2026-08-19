@@ -274,6 +274,7 @@
       "id": "zai",
       "api_key_header": "x-zai-api-key",
       "match_exact": [
+        "glm-5.3",
         "glm-5.2",
         "glm-5.1",
         "glm-5-turbo",
@@ -3539,9 +3540,7 @@
       ],
       "recommendation": "strong",
       "best_for": "balanced",
-      "highlights": [
-        "latest"
-      ],
+      "highlights": [],
       "comment": "Z.ai の GLM-5.2。GLM-5.1 後継として、要約・Ask・ダイジェストの上位比較候補に使う。",
       "capabilities": {
         "supports_structured_output": true,
@@ -3556,6 +3555,39 @@
         "input_per_mtok_usd": 1.4,
         "output_per_mtok_usd": 4.4,
         "cache_write_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
+      "id": "glm-5.3",
+      "provider": "zai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "long-context"
+      ],
+      "comment": "Z.ai の最新フラッグシップ GLM-5.3。1M context と強化された coding・reasoning 能力を活かし、長文要約、複雑な Ask、ダイジェストの上位比較候補に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_docs_2026_08",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
         "cache_read_per_mtok_usd": 0.26
       }
     },

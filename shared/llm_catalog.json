@@ -4471,10 +4471,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_04_24",
-        "input_per_mtok_usd": 0.14,
-        "output_per_mtok_usd": 0.28,
-        "cache_read_per_mtok_usd": 0.028
+        "pricing_source": "deepseek_pricing_2026_08_24_peak",
+        "input_per_mtok_usd": 0.44,
+        "output_per_mtok_usd": 1.32,
+        "cache_read_per_mtok_usd": 0.014
       }
     },
     {
@@ -4504,10 +4504,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_05_26",
-        "input_per_mtok_usd": 0.435,
-        "output_per_mtok_usd": 0.87,
-        "cache_read_per_mtok_usd": 0.003625
+        "pricing_source": "deepseek_pricing_2026_08_24_peak",
+        "input_per_mtok_usd": 1.32,
+        "output_per_mtok_usd": 3.96,
+        "cache_read_per_mtok_usd": 0.044
       }
     },
     {
@@ -4536,10 +4536,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_04_24",
-        "input_per_mtok_usd": 0.14,
-        "output_per_mtok_usd": 0.28,
-        "cache_read_per_mtok_usd": 0.028
+        "pricing_source": "deepseek_pricing_2026_08_24_peak",
+        "input_per_mtok_usd": 0.44,
+        "output_per_mtok_usd": 1.32,
+        "cache_read_per_mtok_usd": 0.014
       }
     },
     {
@@ -4566,10 +4566,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_04_24",
-        "input_per_mtok_usd": 0.14,
-        "output_per_mtok_usd": 0.28,
-        "cache_read_per_mtok_usd": 0.028
+        "pricing_source": "deepseek_pricing_2026_08_24_peak",
+        "input_per_mtok_usd": 0.44,
+        "output_per_mtok_usd": 1.32,
+        "cache_read_per_mtok_usd": 0.014
       }
     },
     {

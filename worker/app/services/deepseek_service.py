@@ -3,7 +3,7 @@ from .provider_base import ProviderConfig, OpenAICompatProvider
 _config = ProviderConfig(
     provider_name="deepseek",
     env_prefix="DEEPSEEK",
-    pricing_source_version="deepseek_pricing_2026_04_24",
+    pricing_source_version="deepseek_pricing_2026_08_24_peak",
     api_base_url="https://api.deepseek.com/chat/completions",
     api_base_url_env="DEEPSEEK_API_BASE_URL",
     default_model="openai/gpt-oss-120b",

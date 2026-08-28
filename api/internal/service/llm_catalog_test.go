@@ -130,6 +130,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("qwen3.8-max"); got == nil {
 		t.Fatal("qwen3.8-max not found in catalog")
 	}
+	if got := findModelCatalog("qwen3.8-flash"); got == nil {
+		t.Fatal("qwen3.8-flash not found in catalog")
+	}
 	if got := findModelCatalog("qwen3.7-plus"); got == nil {
 		t.Fatal("qwen3.7-plus not found in catalog")
 	}
@@ -285,6 +288,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.6-35b-a3b", provider: "alibaba"},
 		{model: "qwen3.7-max", provider: "alibaba"},
 		{model: "qwen3.8-max", provider: "alibaba"},
+		{model: "qwen3.8-flash", provider: "alibaba"},
 		{model: "qwen3.7-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "mistral-small-2603", provider: "mistral"},
@@ -376,7 +380,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
 		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
-		{provider: "alibaba", purpose: "source_suggestion", want: "qwen3.5-flash"},
+		{provider: "alibaba", purpose: "facts", want: "qwen3.8-flash"},
+		{provider: "alibaba", purpose: "source_suggestion", want: "qwen3.8-flash"},
 		{provider: "alibaba", purpose: "digest_cluster_draft", want: "qwen3.8-max"},
 		{provider: "alibaba", purpose: "digest", want: "qwen3.8-max"},
 		{provider: "mistral", purpose: "facts", want: "mistral-small-2603"},

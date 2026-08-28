@@ -85,6 +85,7 @@
       "id": "alibaba",
       "api_key_header": "x-alibaba-api-key",
       "match_exact": [
+        "qwen3.8-flash",
         "qwen3.8-max",
         "qwen3.7-max",
         "qwen3.7-plus",
@@ -100,12 +101,12 @@
       ],
       "match_prefixes": [],
       "default_models": {
-        "facts": "qwen3.5-flash",
+        "facts": "qwen3.8-flash",
         "summary": "qwen3.5-plus",
         "digest_cluster_draft": "qwen3.8-max",
         "digest": "qwen3.8-max",
         "ask": "qwen3.5-plus",
-        "source_suggestion": "qwen3.5-flash"
+        "source_suggestion": "qwen3.8-flash"
       },
       "settings_field_base": "Alibaba"
     },
@@ -2060,6 +2061,40 @@
         "pricing_source": "alibaba_modelstudio_qwen3_8_2026_08",
         "input_per_mtok_usd": 1.65,
         "output_per_mtok_usd": 4.951
+      }
+    },
+    {
+      "id": "qwen3.8-flash",
+      "provider": "alibaba",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context",
+        "jsonStable"
+      ],
+      "comment": "Alibaba Model Studio Global / Virginia の qwen3.8-flash。1M context と低価格を活かし、事実抽出、候補生成、要約を高スループットで回す最新の軽量 Qwen 枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "user_provided_alibaba_virginia_qwen3_8_flash_2026_08",
+        "input_per_mtok_usd": 0.113,
+        "output_per_mtok_usd": 0.382
       }
     },
     {

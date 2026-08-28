@@ -13,6 +13,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("groq", "openai/gpt-oss-20b"),
     ("groq", "qwen/qwen3.8-27b"),
     ("deepseek", "deepseek-chat"),
+    ("alibaba", "qwen3.8-flash"),
     ("alibaba", "qwen3.7-max"),
     ("mistral", "mistral-small-2603"),
     ("cerebras", "gpt-oss-120b"),

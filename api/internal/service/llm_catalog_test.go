@@ -160,6 +160,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("glm-5.3"); got == nil {
 		t.Fatal("glm-5.3 not found in catalog")
 	}
+	if got := findModelCatalog("glm-5.3-flash"); got == nil {
+		t.Fatal("glm-5.3-flash not found in catalog")
+	}
+	if got := findModelCatalog("qwen/qwen3.8-27b"); got == nil {
+		t.Fatal("qwen/qwen3.8-27b not found in catalog")
+	}
 	if got := findModelCatalog("mistral-small-2603"); got == nil {
 		t.Fatal("mistral-small-2603 not found in catalog")
 	}
@@ -229,6 +235,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.2")); got == nil {
 		t.Fatal("together::zai-org/GLM-5.2 not found in catalog")
 	}
+	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.3-Flash")); got == nil {
+		t.Fatal("together::zai-org/GLM-5.3-Flash not found in catalog")
+	}
+	if got := findModelCatalog(SiliconFlowAliasModelID("zai-org/GLM-5.3-Flash")); got == nil {
+		t.Fatal("siliconflow::zai-org/GLM-5.3-Flash not found in catalog")
+	}
 	if got := findModelCatalog(TogetherAliasModelID("openai/gpt-oss-120b")); got == nil {
 		t.Fatal("together::openai/gpt-oss-120b not found in catalog")
 	}
@@ -263,6 +275,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
+		{model: "qwen/qwen3.8-27b", provider: "groq"},
 		{model: "deepseek-v4-flash", provider: "deepseek"},
 		{model: "deepseek-v4-pro", provider: "deepseek"},
 		{model: "deepseek-chat", provider: "deepseek"},
@@ -288,6 +301,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
 		{model: "grok-4.3", provider: "xai"},
 		{model: "glm-5.3", provider: "zai"},
+		{model: "glm-5.3-flash", provider: "zai"},
 		{model: "gemma-4-31b-it", provider: "google"},
 		{model: "gemma-4-26b-a4b-it", provider: "google"},
 		{model: "glm-4.7-flash", provider: "zai"},
@@ -315,6 +329,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("deepseek-ai/DeepSeek-V4-Pro"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.2"), provider: "together"},
+		{model: TogetherAliasModelID("zai-org/GLM-5.3-Flash"), provider: "together"},
+		{model: SiliconFlowAliasModelID("zai-org/GLM-5.3-Flash"), provider: "siliconflow"},
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8"), provider: "together"},
 		{model: TogetherAliasModelID("Qwen/Qwen3.6-Plus"), provider: "together"},

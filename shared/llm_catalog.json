@@ -274,6 +274,7 @@
       "id": "zai",
       "api_key_header": "x-zai-api-key",
       "match_exact": [
+        "glm-5.3-flash",
         "glm-5.3",
         "glm-5.2",
         "glm-5.1",
@@ -324,6 +325,7 @@
         "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.5",
         "moonshotai/Kimi-K2-Instruct",
+        "zai-org/GLM-5.3-Flash",
         "zai-org/GLM-5.2",
         "zai-org/GLM-5.1",
         "zai-org/GLM-5",
@@ -1025,6 +1027,42 @@
         "input_per_mtok_usd": 1.4,
         "output_per_mtok_usd": 4.4,
         "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
+      "id": "siliconflow::zai-org/GLM-5.3-Flash",
+      "provider": "siliconflow",
+      "source_provider": "zai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context",
+        "jsonStable"
+      ],
+      "comment": "SiliconFlow 経由の GLM-5.3-Flash。1M context と低価格を活かし、事実抽出、要約、Ask を広く回す最新の高速比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_glm_5p3_flash_2026_08",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.5,
+        "cache_read_per_mtok_usd": 0.03
       }
     },
     {
@@ -1926,6 +1964,39 @@
         "input_per_mtok_usd": 0.29,
         "output_per_mtok_usd": 0.59,
         "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "qwen/qwen3.8-27b",
+      "provider": "groq",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "jsonStable"
+      ],
+      "comment": "Groq 上の Qwen3.8 27B。高速な reasoning、長文 context、strict JSON schema を活かし、要約、Ask、構造化抽出の最新比較候補に使う。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "groq_docs_2026_08",
+        "input_per_mtok_usd": 0.8,
+        "output_per_mtok_usd": 4.0
       }
     },
     {
@@ -3592,6 +3663,40 @@
       }
     },
     {
+      "id": "glm-5.3-flash",
+      "provider": "zai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context"
+      ],
+      "comment": "Z.ai の GLM-5.3-Flash。1M context と低価格な高速推論を活かし、事実抽出、要約、Ask を広く回す最新の実用候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_docs_2026_08",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.5,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
       "id": "glm-5-turbo",
       "provider": "zai",
       "available_purposes": [
@@ -5255,6 +5360,42 @@
         "input_per_mtok_usd": 1.4,
         "output_per_mtok_usd": 4.4,
         "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
+      "id": "together::zai-org/GLM-5.3-Flash",
+      "provider": "together",
+      "source_provider": "zai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context",
+        "jsonStable"
+      ],
+      "comment": "Together AI 経由の GLM-5.3-Flash。1M context と低価格を活かし、事実抽出、要約、Ask を広く回す最新の高速比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_glm_5p3_flash_2026_08",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.5,
+        "cache_read_per_mtok_usd": 0.03
       }
     },
     {

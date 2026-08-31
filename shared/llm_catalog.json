@@ -302,6 +302,7 @@
       "api_key_header": "x-fireworks-api-key",
       "match_exact": [
         "glm-5p2",
+        "glm-5p3-flash",
         "qwen3p7-plus"
       ],
       "match_prefixes": [
@@ -4201,6 +4202,42 @@
         "input_per_mtok_usd": 1.4,
         "output_per_mtok_usd": 4.4,
         "cache_read_per_mtok_usd": 0.26
+      }
+    },
+    {
+      "id": "fireworks/glm-5p3-flash",
+      "provider": "fireworks",
+      "source_provider": "zai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context",
+        "jsonStable"
+      ],
+      "comment": "Fireworks 経由の GLM-5.3-Flash。1M context と低価格を活かし、事実抽出、要約、Ask を広く回す最新の高速比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_model_page_2026_08",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.5,
+        "cache_read_per_mtok_usd": 0.029
       }
     },
     {

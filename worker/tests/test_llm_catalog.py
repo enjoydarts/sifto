@@ -28,6 +28,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("zai", "glm-5.3-flash"),
     ("fireworks", "fireworks/deepseek-v3p1"),
     ("fireworks", "fireworks/glm-5p2"),
+    ("fireworks", "fireworks/glm-5p3-flash"),
     ("fireworks", "qwen3p7-plus"),
     ("together", "together::moonshotai/Kimi-K2.6"),
     ("together", "together::MiniMaxAI/MiniMax-M3"),

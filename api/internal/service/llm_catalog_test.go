@@ -142,6 +142,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("fireworks/glm-5p2"); got == nil {
 		t.Fatal("fireworks/glm-5p2 not found in catalog")
 	}
+	if got := findModelCatalog("fireworks/glm-5p3-flash"); got == nil {
+		t.Fatal("fireworks/glm-5p3-flash not found in catalog")
+	}
 	if got := findModelCatalog("qwen3p7-plus"); got == nil {
 		t.Fatal("qwen3p7-plus not found in catalog")
 	}
@@ -313,6 +316,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/kimi-k2p6", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
 		{model: "fireworks/glm-5p2", provider: "fireworks"},
+		{model: "fireworks/glm-5p3-flash", provider: "fireworks"},
+		{model: "glm-5p3-flash", provider: "fireworks"},
 		{model: "qwen3p7-plus", provider: "fireworks"},
 		{model: "fireworks/deepseek-v4-pro", provider: "fireworks"},
 		{model: "kimi-k3", provider: "moonshot"},

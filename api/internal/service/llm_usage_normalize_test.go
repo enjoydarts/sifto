@@ -203,6 +203,47 @@ func TestNormalizeCatalogPricedUsageNormalizesDatedAnthropicResolvedModel(t *tes
 	}
 }
 
+func TestNormalizeCatalogPricedUsageUsesDeepInfraDynamicPricing(t *testing.T) {
+	original := cloneDynamicChatModelsForTest()
+	modelID := DeepInfraAliasModelID("meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo")
+	SetDynamicChatModelsForProvider("deepinfra", []LLMModelCatalog{
+		{
+			ID:       modelID,
+			Provider: "deepinfra",
+			Pricing: &LLMModelPricing{
+				PricingSource:    "deepinfra_snapshot",
+				InputPerMTokUSD:  0.23,
+				OutputPerMTokUSD: 0.40,
+			},
+		},
+	})
+	defer restoreDynamicChatModelsForTest(original)
+
+	usage := &LLMUsage{
+		Provider:       "deepinfra",
+		Model:          modelID,
+		RequestedModel: modelID,
+		ResolvedModel:  "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+		PricingSource:  "deepinfra_snapshot",
+		InputTokens:    1_000_000,
+		OutputTokens:   500_000,
+	}
+
+	got := NormalizeCatalogPricedUsage("audio_briefing_script", usage)
+	if got == nil {
+		t.Fatal("NormalizeCatalogPricedUsage returned nil")
+	}
+	if got.PricingModelFamily != modelID {
+		t.Fatalf("pricing_model_family = %q, want %q", got.PricingModelFamily, modelID)
+	}
+	if got.PricingSource != "deepinfra_snapshot" {
+		t.Fatalf("pricing_source = %q, want deepinfra_snapshot", got.PricingSource)
+	}
+	if got.EstimatedCostUSD != 0.43 {
+		t.Fatalf("estimated_cost_usd = %.4f, want 0.4300", got.EstimatedCostUSD)
+	}
+}
+
 func cloneDynamicChatModelsForTest() map[string][]LLMModelCatalog {
 	out := make(map[string][]LLMModelCatalog, len(dynamicChatModels))
 	for provider, models := range dynamicChatModels {

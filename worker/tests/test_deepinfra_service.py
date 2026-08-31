@@ -24,6 +24,28 @@ class DeepInfraServiceTests(unittest.TestCase):
             "https://api.deepinfra.com/v1/openai/chat/completions",
         )
 
+    def test_llm_metadata_preserves_aliased_requested_model_for_dynamic_pricing(self):
+        from app.services.deepinfra_service import _p
+
+        model = "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo"
+        llm = _p._llm_meta(
+            model,
+            "audio_briefing_script",
+            {
+                "requested_model": model,
+                "resolved_model": "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+                "input_tokens": 1_000,
+                "output_tokens": 500,
+            },
+        )
+
+        self.assertEqual(llm.get("model"), model)
+        self.assertEqual(llm.get("requested_model"), model)
+        self.assertEqual(
+            llm.get("resolved_model"),
+            "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

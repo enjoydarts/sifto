@@ -28,6 +28,7 @@ _config = ProviderConfig(
     api_base_url="https://api.deepinfra.com/v1/openai/chat/completions",
     api_base_url_env="DEEPINFRA_API_BASE_URL",
     use_resolve_model_id=True,
+    include_resolved_model_in_meta=True,
 )
 _p = _DeepInfraProvider(_config)
 

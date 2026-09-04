@@ -6,6 +6,25 @@ from app.services.claude_service import _llm_meta, summarize, summarize_async
 
 
 class ClaudeServiceTests(unittest.TestCase):
+    def test_llm_meta_prices_fable_5_1_family(self):
+        class _Message:
+            model = "claude-fable-5-1"
+            usage = type(
+                "Usage",
+                (),
+                {
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 500_000,
+                    "cache_creation_input_tokens": 100_000,
+                    "cache_read_input_tokens": 200_000,
+                },
+            )()
+
+        llm = _llm_meta(_Message(), "summary", "claude-fable-5-1")
+        self.assertEqual(llm["pricing_model_family"], "claude-fable-5-1")
+        self.assertEqual(llm["pricing_source"], "anthropic_static_2026_09")
+        self.assertEqual(llm["estimated_cost_usd"], 36.3)
+
     def test_llm_meta_prices_opus_5_family(self):
         class _Message:
             model = "claude-opus-5"

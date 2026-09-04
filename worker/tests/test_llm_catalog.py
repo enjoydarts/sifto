@@ -7,9 +7,11 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("anthropic", "claude-haiku-4-5"),
     ("anthropic", "claude-sonnet-5"),
     ("anthropic", "claude-fable-5"),
+    ("anthropic", "claude-fable-5-1"),
     ("anthropic", "claude-opus-5"),
     ("anthropic", "claude-opus-4-8"),
     ("google", "gemini-3.1-flash-lite"),
+    ("google", "gemini-3.8-flash"),
     ("groq", "openai/gpt-oss-20b"),
     ("groq", "qwen/qwen3.8-27b"),
     ("deepseek", "deepseek-chat"),
@@ -18,6 +20,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("mistral", "mistral-small-2603"),
     ("cerebras", "gpt-oss-120b"),
     ("cerebras", "gemma-4-31b"),
+    ("cerebras", "qwen-3.8-27b"),
     ("minimax", "MiniMax-M3"),
     ("plamo", "plamo-3.0-prime"),
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
@@ -47,6 +50,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
 ALIASED_PROVIDER_MODELS = (
     ("cerebras", "cerebras::gpt-oss-120b"),
     ("cerebras", "cerebras::gemma-4-31b"),
+    ("cerebras", "cerebras::qwen-3.8-27b"),
     ("minimax", "minimax::MiniMax-M2.7"),
     ("minimax", "minimax/MiniMax-M2.7"),
 )

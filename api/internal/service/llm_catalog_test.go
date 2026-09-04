@@ -43,6 +43,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gemini-3.6-flash"); got == nil {
 		t.Fatal("gemini-3.6-flash not found in catalog")
 	}
+	if got := findModelCatalog("gemini-3.8-flash"); got == nil {
+		t.Fatal("gemini-3.8-flash not found in catalog")
+	}
 	if got := findModelCatalog("gemini-3.5-flash-lite"); got == nil {
 		t.Fatal("gemini-3.5-flash-lite not found in catalog")
 	}
@@ -99,6 +102,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	}
 	if got := findModelCatalog("claude-fable-5"); got == nil {
 		t.Fatal("claude-fable-5 not found in catalog")
+	}
+	if got := findModelCatalog("claude-fable-5-1"); got == nil {
+		t.Fatal("claude-fable-5-1 not found in catalog")
+	}
+	if got := findModelCatalog("qwen-3.8-27b"); got == nil {
+		t.Fatal("qwen-3.8-27b not found in catalog")
 	}
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
@@ -274,11 +283,13 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 	}{
 		{model: "claude-sonnet-4-6", provider: "anthropic"},
 		{model: "claude-fable-5", provider: "anthropic"},
+		{model: "claude-fable-5-1", provider: "anthropic"},
 		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "claude-opus-4-8", provider: "anthropic"},
 		{model: "claude-opus-5", provider: "anthropic"},
 		{model: "claude-sonnet-5", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
+		{model: "gemini-3.8-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "qwen/qwen3.8-27b", provider: "groq"},
@@ -354,6 +365,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 		{model: "gemma-4-31b", provider: "cerebras"},
 		{model: CerebrasAliasModelID("gemma-4-31b"), provider: "cerebras"},
+		{model: "qwen-3.8-27b", provider: "cerebras"},
+		{model: CerebrasAliasModelID("qwen-3.8-27b"), provider: "cerebras"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V4-Pro", provider: "siliconflow"},
 		{model: "siliconflow::MiniMaxAI/MiniMax-M3", provider: "siliconflow"},

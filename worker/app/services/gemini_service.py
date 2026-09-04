@@ -83,6 +83,7 @@ _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_05"
 
 _LEGACY_MODEL_PRICING = {
+    "gemini-3.8-flash": {"input_per_mtok_usd": 0.75, "output_per_mtok_usd": 3.75, "cache_read_per_mtok_usd": 0.075},
     "gemini-3.5-flash": {"input_per_mtok_usd": 1.5, "output_per_mtok_usd": 9.0, "cache_read_per_mtok_usd": 0.15},
     "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0, "cache_read_per_mtok_usd": 0.05},
     "gemini-3.1-flash-lite-preview": {"input_per_mtok_usd": 0.25, "output_per_mtok_usd": 1.5, "cache_read_per_mtok_usd": 0.025},

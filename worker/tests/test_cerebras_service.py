@@ -43,6 +43,13 @@ class CerebrasServiceTests(unittest.TestCase):
 
         self.assertEqual(body["reasoning_effort"], "none")
 
+    def test_qwen_3_8_uses_low_reasoning_effort_for_structured_tasks(self):
+        body = {"model": "qwen-3.8-27b", "response_format": {"type": "json_object"}}
+
+        _apply_openai_compat_request_overrides("cerebras", "qwen-3.8-27b", body)
+
+        self.assertEqual(body["reasoning_effort"], "low")
+
 
 if __name__ == "__main__":
     unittest.main()

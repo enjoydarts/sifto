@@ -97,6 +97,11 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         if normalized_model == "zai-glm-4.7":
             body["reasoning_effort"] = "none"
             return
+        if normalized_model == "qwen-3.8-27b":
+            # Qwen 3.8 defaults to high reasoning on Cerebras. Keep enough
+            # reasoning for structured tasks without exhausting output budgets.
+            body["reasoning_effort"] = "low"
+            return
     if provider_name == "moonshot" and _is_kimi_k3_model(normalized_model):
         # K3 always reasons and accepts reasoning_effort=max rather than the
         # K2.x thinking switch. Its sampling values are fixed server-side.

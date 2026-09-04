@@ -145,6 +145,7 @@
         "gpt-oss-120b",
         "gemma-4-31b",
         "llama3.1-8b",
+        "qwen-3.8-27b",
         "qwen-3-235b-a22b-instruct-2507",
         "zai-glm-4.7"
       ],
@@ -466,6 +467,41 @@
         "pricing_source": "cerebras_manual_2026_04",
         "input_per_mtok_usd": 0.35,
         "output_per_mtok_usd": 0.75,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "qwen-3.8-27b",
+      "provider": "cerebras",
+      "source_provider": "Qwen",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "fast",
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "Cerebras の Qwen 3.8 27B。高速な agentic coding、tool use、調査、長時間 workflow 向け。text/image 入力、reasoning、strict Structured Outputs、tool calling に対応する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "cerebras_docs_2026_09",
+        "input_per_mtok_usd": 0.99,
+        "output_per_mtok_usd": 1.49,
         "cache_read_per_mtok_usd": 0
       }
     },
@@ -1360,6 +1396,40 @@
       }
     },
     {
+      "id": "claude-fable-5-1",
+      "provider": "anthropic",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [
+        "latest",
+        "long-context"
+      ],
+      "comment": "Anthropic の最新 Fable 5.1。1M context、128K max output、常時 adaptive thinking を備え、長時間の agentic coding、複数段階の調査、重い知識作業向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_09",
+        "input_per_mtok_usd": 10.0,
+        "output_per_mtok_usd": 50.0,
+        "cache_write_per_mtok_usd": 12.5,
+        "cache_read_per_mtok_usd": 0.25
+      }
+    },
+    {
       "id": "claude-fable-5",
       "provider": "anthropic",
       "available_purposes": [
@@ -1390,6 +1460,40 @@
         "output_per_mtok_usd": 50.0,
         "cache_write_per_mtok_usd": 12.5,
         "cache_read_per_mtok_usd": 1.0
+      }
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context"
+      ],
+      "comment": "Google の最新 Gemini 3.8 Flash。1M context、64K max output と調整可能な thinking level を備え、長時間の software engineering、agentic workflow、複雑な要約・調査向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_intro_2026_09",
+        "input_per_mtok_usd": 0.75,
+        "output_per_mtok_usd": 3.75,
+        "cache_read_per_mtok_usd": 0.075
       }
     },
     {

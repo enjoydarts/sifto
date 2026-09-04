@@ -27,6 +27,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("moonshot", "kimi-k3"),
     ("xai", "grok-4"),
     ("xai", "grok-4.5"),
+    ("xai", "grok-4.6"),
     ("zai", "glm-5.3"),
     ("zai", "glm-5.3-flash"),
     ("fireworks", "fireworks/deepseek-v3p1"),

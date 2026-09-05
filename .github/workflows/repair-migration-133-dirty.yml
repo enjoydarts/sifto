@@ -28,6 +28,48 @@ jobs:
       - name: Check Tailscale connectivity
         run: tailscale status
 
+      - name: Wait for database connectivity
+        env:
+          MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          read -r db_host db_port < <(
+            python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          parsed = urlparse(os.environ["MIGRATE_DATABASE_URL"])
+          if not parsed.hostname:
+              raise SystemExit("MIGRATE_DATABASE_URL does not contain a hostname")
+          print(parsed.hostname, parsed.port or 5432)
+          PY
+          )
+
+          echo "Checking Tailscale path to ${db_host}..."
+          if ! tailscale ping --c 3 --timeout=10s "$db_host"; then
+            echo "::warning::Tailscale ping to ${db_host} failed; continuing with the TCP check."
+          fi
+
+          connected=false
+          for attempt in $(seq 1 6); do
+            echo "Checking PostgreSQL TCP connectivity to ${db_host}:${db_port} (${attempt}/6)..."
+            # $1 and $2 are expanded by the child Bash process.
+            # shellcheck disable=SC2016
+            if timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$db_host" "$db_port"; then
+              connected=true
+              break
+            fi
+            if [ "$attempt" -lt 6 ]; then
+              sleep 5
+            fi
+          done
+
+          if [ "$connected" != true ]; then
+            echo "::error::PostgreSQL is unreachable at ${db_host}:${db_port} after 6 attempts."
+            exit 1
+          fi
+          echo "PostgreSQL is reachable at ${db_host}:${db_port}."
+
       - name: Repair dirty migration state and rerun 133
         env:
           MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}

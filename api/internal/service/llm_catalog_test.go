@@ -16,6 +16,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-5.4-pro"); got == nil {
 		t.Fatal("gpt-5.4-pro not found in catalog")
 	}
+	if got := findModelCatalog("gpt-6-astra"); got == nil {
+		t.Fatal("gpt-6-astra not found in catalog")
+	}
 	if got := findModelCatalog("gpt-5.5"); got == nil {
 		t.Fatal("gpt-5.5 not found in catalog")
 	}
@@ -360,6 +363,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("Qwen/Qwen3.6-Plus"), provider: "together"},
 		{model: TogetherAliasModelID("MiniMaxAI/MiniMax-M3"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
+		{model: "gpt-6-astra", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
 		{model: "gpt-5.6-sol", provider: "openai"},
 		{model: "gpt-5.6-terra", provider: "openai"},

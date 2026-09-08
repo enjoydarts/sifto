@@ -16,13 +16,17 @@ from .task_transport_common import wrap_usage_transport
 
 class _OpenAIProvider(OpenAICompatProvider):
     def _should_use_responses_api(self, model: str) -> bool:
-        return self._normalize_model_family(model).startswith("gpt-5")
+        family = self._normalize_model_family(model)
+        return family == "gpt-6-astra" or family.startswith("gpt-5")
 
     def _supports_custom_temperature(self, model: str) -> bool:
-        return not self._normalize_model_family(model).startswith("gpt-5")
+        family = self._normalize_model_family(model)
+        return family != "gpt-6-astra" and not family.startswith("gpt-5")
 
     def _responses_reasoning(self, model: str) -> dict | None:
         family = self._normalize_model_family(model)
+        if family == "gpt-6-astra":
+            return {"effort": "low"}
         if not family.startswith("gpt-5"):
             return None
         if family.endswith("-pro"):
@@ -32,6 +36,9 @@ class _OpenAIProvider(OpenAICompatProvider):
         return {"effort": "minimal"}
 
     def _responses_json(self, prompt, model, api_key, **kwargs):
+        if not self._supports_custom_temperature(model):
+            kwargs.pop("temperature", None)
+            kwargs.pop("top_p", None)
         return run_responses_json(
             prompt,
             model,
@@ -53,6 +60,9 @@ class _OpenAIProvider(OpenAICompatProvider):
         return await super()._chat_json_async(prompt, model, api_key, **kwargs)
 
     async def _responses_json_async(self, prompt, model, api_key, **kwargs):
+        if not self._supports_custom_temperature(model):
+            kwargs.pop("temperature", None)
+            kwargs.pop("top_p", None)
         return await run_responses_json_async(
             prompt,
             model,
@@ -133,6 +143,7 @@ _config = ProviderConfig(
     default_model="gpt-5",
     default_translate_model="gpt-5-mini",
     model_families=[
+        "gpt-6-astra",
         "gpt-5.5-pro", "gpt-5.5", "gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2",
         "gpt-5.1", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5",
     ],

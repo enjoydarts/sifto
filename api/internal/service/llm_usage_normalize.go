@@ -1,6 +1,9 @@
 package service
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 	if usage == nil {
@@ -48,6 +51,6 @@ func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 	estimated += float64(normalized.OutputTokens) / 1_000_000 * entry.Pricing.OutputPerMTokUSD
 	estimated += float64(normalized.CacheReadInputTokens) / 1_000_000 * entry.Pricing.CacheReadPerMTokUSD
 	estimated += float64(normalized.CacheCreationInputTokens) / 1_000_000 * entry.Pricing.CacheWritePerMTokUSD
-	normalized.EstimatedCostUSD = estimated
+	normalized.EstimatedCostUSD = math.Round(estimated*1e8) / 1e8
 	return &normalized
 }

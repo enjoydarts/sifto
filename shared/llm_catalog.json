@@ -422,7 +422,9 @@
     {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
-      "match_exact": [],
+      "match_exact": [
+        "gpt-6-astra"
+      ],
       "match_prefixes": [
         "gpt-5"
       ],
@@ -5371,6 +5373,41 @@
         "output_per_mtok_usd": 6.0,
         "cache_read_per_mtok_usd": 0.1,
         "cache_write_per_mtok_usd": 1.25
+      }
+    },
+    {
+      "id": "gpt-6-astra",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [
+        "latest",
+        "jsonStable",
+        "longContext"
+      ],
+      "comment": "OpenAI の最上位モデル。複雑な推論、調査、coding、難度の高いダイジェスト生成の品質比較に向く。単価が高いため常用前に実測したい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_09",
+        "input_per_mtok_usd": 10.0,
+        "output_per_mtok_usd": 50.0,
+        "cache_read_per_mtok_usd": 1.0,
+        "cache_write_per_mtok_usd": 12.5
       }
     },
     {

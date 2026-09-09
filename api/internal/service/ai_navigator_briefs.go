@@ -222,6 +222,10 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	if brief.Status != model.AINavigatorBriefStatusQueued {
 		return brief, nil
 	}
+	settings, err := s.settings.EnsureDefaults(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	now := s.now().In(timeutil.JST)
 	windowStart := brief.SourceWindowStart
@@ -267,34 +271,11 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	deepinfraKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetDeepInfraAPIKeyEncrypted, s.cipher, userID, "")
 	cerebrasKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetCerebrasAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
-	executionModel := resolveAINavigatorBriefExecutionModel(brief.Model)
-	if executionModel == "" {
+	modelNames := resolveAINavigatorBriefRunModels(brief.Model, settings)
+	if len(modelNames) == 0 {
 		return nil, fmt.Errorf("ai navigator brief model not configured")
 	}
-	modelName := &executionModel
-	switch LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "minimax":
-		openAIKey = minimaxKey
-	case "xiaomi_mimo_token_plan":
-		xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
-		openAIKey = xiaomiKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	case "featherless":
-		openAIKey = featherlessKey
-	case "deepinfra":
-		openAIKey = deepinfraKey
-	case "cerebras":
-		openAIKey = cerebrasKey
-	}
+	xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
 	for _, candidate := range candidates {
@@ -316,25 +297,27 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 		})
 	}
 	workerCtx := WithWorkerTraceMetadata(ctx, "ai_navigator_brief", &userID, nil, nil, nil)
-	resp, err := s.worker.ComposeAINavigatorBriefWithModel(
-		workerCtx,
-		brief.Persona,
-		workerCandidates,
-		buildAINavigatorBriefIntroContext(windowEnd.In(timeutil.JST), brief.Slot),
-		anthropicKey,
-		googleKey,
-		groqKey,
-		deepseekKey,
-		alibabaKey,
-		mistralKey,
-		xaiKey,
-		zaiKey,
-		fireworksKey,
-		openAIKey,
-		modelName,
-	)
+	resp, usedModel, err := composeAINavigatorBriefWithFallback(workerCtx, userID, modelNames, func(modelName *string) (*AINavigatorBriefResponse, error) {
+		effectiveOpenAIKey := selectOpenAICompatibleKey(modelName, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, featherlessKey, deepinfraKey, cerebrasKey, openAIKey)
+		return s.worker.ComposeAINavigatorBriefWithModel(
+			workerCtx,
+			brief.Persona,
+			workerCandidates,
+			buildAINavigatorBriefIntroContext(windowEnd.In(timeutil.JST), brief.Slot),
+			anthropicKey,
+			googleKey,
+			groqKey,
+			deepseekKey,
+			alibabaKey,
+			mistralKey,
+			xaiKey,
+			zaiKey,
+			fireworksKey,
+			effectiveOpenAIKey,
+			modelName,
+		)
+	})
 	if err != nil {
-		recordAINavigatorBriefLLMExecutionFailure(ctx, "ai_navigator_brief", strings.TrimSpace(*modelName), userID, err)
 		if markErr := s.briefs.MarkBriefFailedAt(ctx, brief.ID, err.Error(), now); markErr != nil {
 			return nil, markErr
 		}
@@ -348,6 +331,7 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	brief.Intro = strings.TrimSpace(resp.Intro)
 	brief.Summary = strings.TrimSpace(resp.Summary)
 	brief.Ending = strings.TrimSpace(resp.Ending)
+	brief.Model = formatAINavigatorBriefModelLabel(usedModel, resp.LLM)
 	brief.GeneratedAt = &now
 	brief.ErrorMessage = ""
 	brief.SourceWindowStart = windowStart
@@ -409,10 +393,11 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	if settings == nil || !settings.AINavigatorBriefEnabled || !settings.NavigatorEnabled {
 		return nil, fmt.Errorf("ai navigator brief disabled")
 	}
-	modelName := resolveAINavigatorBriefModel(settings)
-	if modelName == nil {
+	modelNames := resolveAINavigatorBriefModels(settings)
+	if len(modelNames) == 0 {
 		return nil, fmt.Errorf("navigator model not configured")
 	}
+	modelName := &modelNames[0]
 	recentPersonas, err := s.briefs.ListRecentPersonasByUser(ctx, userID, 3)
 	if err != nil {
 		return nil, err
@@ -464,29 +449,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	deepinfraKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetDeepInfraAPIKeyEncrypted, s.cipher, userID, "")
 	cerebrasKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetCerebrasAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
-	switch LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "minimax":
-		openAIKey = minimaxKey
-	case "xiaomi_mimo_token_plan":
-		xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
-		openAIKey = xiaomiKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	case "featherless":
-		openAIKey = featherlessKey
-	case "deepinfra":
-		openAIKey = deepinfraKey
-	case "cerebras":
-		openAIKey = cerebrasKey
-	}
+	xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
 	for _, candidate := range candidates {
@@ -508,25 +471,27 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		})
 	}
 	workerCtx := WithWorkerTraceMetadata(ctx, "ai_navigator_brief", &userID, nil, nil, nil)
-	resp, err := s.worker.ComposeAINavigatorBriefWithModel(
-		workerCtx,
-		persona,
-		workerCandidates,
-		buildAINavigatorBriefIntroContext(now, slot),
-		anthropicKey,
-		googleKey,
-		groqKey,
-		deepseekKey,
-		alibabaKey,
-		mistralKey,
-		xaiKey,
-		zaiKey,
-		fireworksKey,
-		openAIKey,
-		modelName,
-	)
+	resp, usedModel, err := composeAINavigatorBriefWithFallback(workerCtx, userID, modelNames, func(attemptModel *string) (*AINavigatorBriefResponse, error) {
+		effectiveOpenAIKey := selectOpenAICompatibleKey(attemptModel, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, featherlessKey, deepinfraKey, cerebrasKey, openAIKey)
+		return s.worker.ComposeAINavigatorBriefWithModel(
+			workerCtx,
+			persona,
+			workerCandidates,
+			buildAINavigatorBriefIntroContext(now, slot),
+			anthropicKey,
+			googleKey,
+			groqKey,
+			deepseekKey,
+			alibabaKey,
+			mistralKey,
+			xaiKey,
+			zaiKey,
+			fireworksKey,
+			effectiveOpenAIKey,
+			attemptModel,
+		)
+	})
 	if err != nil {
-		recordAINavigatorBriefLLMExecutionFailure(ctx, "ai_navigator_brief", strings.TrimSpace(*modelName), userID, err)
 		failed := &model.AINavigatorBrief{
 			UserID:            userID,
 			Slot:              slot,
@@ -552,7 +517,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		Summary:           strings.TrimSpace(resp.Summary),
 		Ending:            strings.TrimSpace(resp.Ending),
 		Persona:           persona,
-		Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), resp.LLM),
+		Model:             formatAINavigatorBriefModelLabel(usedModel, resp.LLM),
 		SourceWindowStart: &windowStart,
 		SourceWindowEnd:   &windowEnd,
 		GeneratedAt:       &now,
@@ -844,14 +809,38 @@ func shortenAINavigatorBriefNotificationBody(brief *model.AINavigatorBrief) stri
 }
 
 func resolveAINavigatorBriefModel(settings *model.UserSettings) *string {
+	models := resolveAINavigatorBriefModels(settings)
+	if len(models) > 0 {
+		return &models[0]
+	}
+	return nil
+}
+
+func resolveAINavigatorBriefModels(settings *model.UserSettings) []string {
+	out := make([]string, 0, 2)
+	appendUnique := func(modelName string) {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			return
+		}
+		for _, existing := range out {
+			if existing == modelName {
+				return
+			}
+		}
+		out = append(out, modelName)
+	}
 	if settings == nil {
-		return nil
+		return out
 	}
 	if modelName := chooseAINavigatorBriefModelOverride(settings.AINavigatorBriefModel, settings); modelName != nil {
-		return modelName
+		appendUnique(*modelName)
 	}
 	if modelName := chooseAINavigatorBriefModelOverride(settings.AINavigatorBriefFallbackModel, settings); modelName != nil {
-		return modelName
+		appendUnique(*modelName)
+	}
+	if len(out) > 0 {
+		return out
 	}
 	for _, provider := range CostEfficientLLMProviders("") {
 		if !hasAINavigatorBriefProviderKey(settings, provider) {
@@ -861,9 +850,59 @@ func resolveAINavigatorBriefModel(settings *model.UserSettings) *string {
 		if v == "" {
 			continue
 		}
-		return &v
+		appendUnique(v)
+		break
 	}
-	return nil
+	return out
+}
+
+func resolveAINavigatorBriefRunModels(savedModel string, settings *model.UserSettings) []string {
+	out := make([]string, 0, 2)
+	appendUnique := func(modelName string) {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			return
+		}
+		for _, existing := range out {
+			if existing == modelName {
+				return
+			}
+		}
+		out = append(out, modelName)
+	}
+	appendUnique(resolveAINavigatorBriefExecutionModel(savedModel))
+	for _, modelName := range resolveAINavigatorBriefModels(settings) {
+		appendUnique(modelName)
+	}
+	return out
+}
+
+func composeAINavigatorBriefWithFallback(
+	ctx context.Context,
+	userID string,
+	modelNames []string,
+	call func(modelName *string) (*AINavigatorBriefResponse, error),
+) (*AINavigatorBriefResponse, string, error) {
+	errs := make([]string, 0, len(modelNames))
+	for idx, modelName := range modelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		resp, err := call(&modelName)
+		if err == nil {
+			return resp, modelName, nil
+		}
+		recordAINavigatorBriefLLMExecutionFailure(ctx, "ai_navigator_brief", modelName, userID, err)
+		errs = append(errs, fmt.Sprintf("%s: %v", modelName, err))
+		if idx < len(modelNames)-1 {
+			log.Printf("ai navigator brief fallback retrying user=%s model=%s err=%v", userID, modelName, err)
+		}
+	}
+	if len(errs) == 0 {
+		return nil, "", fmt.Errorf("ai navigator brief model not configured")
+	}
+	return nil, "", fmt.Errorf("ai navigator brief failed across models: %s", strings.Join(errs, " | "))
 }
 
 func chooseAINavigatorBriefModelOverride(modelName *string, settings *model.UserSettings) *string {

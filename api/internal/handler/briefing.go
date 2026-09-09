@@ -167,12 +167,12 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.BriefingNavigatorEnvelope{})
 		return
 	}
-	persona := selectBriefingNavigatorPersona(r.Context(), h.cache, userID, settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
 		resolvedModel = strings.TrimSpace(*modelName)
 	}
+	persona := selectBriefingNavigatorRequestPersona(r.Context(), h.cache, userID, resolvedModel, preview, settings)
 	cacheKey := cacheKeyBriefingNavigator(userID, persona, resolvedModel, preview)
 	var cached model.BriefingNavigatorEnvelope
 	hasCached := false
@@ -734,6 +734,32 @@ func selectBriefingNavigatorPersona(ctx context.Context, cache service.JSONCache
 		}
 	}
 	return service.ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
+}
+
+func selectBriefingNavigatorRequestPersona(
+	ctx context.Context,
+	cache service.JSONCache,
+	userID string,
+	modelName string,
+	preview bool,
+	settings *model.UserSettings,
+) string {
+	if settings == nil || service.NormalizePersonaMode(&settings.NavigatorPersonaMode) != service.PersonaModeRandom {
+		return selectBriefingNavigatorPersona(ctx, cache, userID, settings)
+	}
+	if cache == nil || strings.TrimSpace(userID) == "" {
+		return selectBriefingNavigatorPersona(ctx, cache, userID, settings)
+	}
+
+	key := cacheKeyBriefingNavigatorRequestPersona(userID, modelName, preview)
+	var selected string
+	if ok, err := cache.GetJSON(ctx, key, &selected); err == nil && ok && strings.TrimSpace(selected) != "" {
+		return normalizeBriefingNavigatorPersona(selected)
+	}
+
+	selected = selectBriefingNavigatorPersona(ctx, cache, userID, settings)
+	_ = cache.SetJSON(ctx, key, selected, briefingSnapshotMaxAge+2*time.Minute)
+	return selected
 }
 
 func rememberBriefingNavigatorPersona(ctx context.Context, cache service.JSONCache, userID, persona string) {

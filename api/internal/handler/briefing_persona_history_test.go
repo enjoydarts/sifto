@@ -91,3 +91,20 @@ func TestSelectBriefingNavigatorPersonaUsesCacheHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectBriefingNavigatorRequestPersonaStaysStableWhilePolling(t *testing.T) {
+	cache := newPersonaHistoryTestCache()
+	ctx := context.Background()
+	settings := &model.UserSettings{
+		NavigatorPersonaMode: "random",
+		NavigatorPersona:     "editor",
+	}
+
+	first := selectBriefingNavigatorRequestPersona(ctx, cache, "u1", "gpt-oss-120b", false, settings)
+	for i := 0; i < 20; i++ {
+		got := selectBriefingNavigatorRequestPersona(ctx, cache, "u1", "gpt-oss-120b", false, settings)
+		if got != first {
+			t.Fatalf("poll selected persona %q, want stable persona %q", got, first)
+		}
+	}
+}

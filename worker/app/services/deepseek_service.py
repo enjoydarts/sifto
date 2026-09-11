@@ -3,12 +3,12 @@ from .provider_base import ProviderConfig, OpenAICompatProvider
 _config = ProviderConfig(
     provider_name="deepseek",
     env_prefix="DEEPSEEK",
-    pricing_source_version="deepseek_pricing_2026_08_24_peak",
+    pricing_source_version="deepseek_pricing_2026_09_10_peak",
     api_base_url="https://api.deepseek.com/chat/completions",
     api_base_url_env="DEEPSEEK_API_BASE_URL",
     default_model="openai/gpt-oss-120b",
     default_translate_model="openai/gpt-oss-20b",
-    model_families=["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-reasoner", "deepseek-chat"],
+    model_families=["deepseek-v4-pro", "deepseek-flash", "deepseek-reasoner", "deepseek-chat"],
     no_temperature_families=["deepseek-reasoner"],
 )
 _p = OpenAICompatProvider(_config)

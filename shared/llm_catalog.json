@@ -65,6 +65,7 @@
       "id": "deepseek",
       "api_key_header": "x-deepseek-api-key",
       "match_exact": [
+        "deepseek-flash",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "deepseek-chat",
@@ -72,12 +73,12 @@
       ],
       "match_prefixes": [],
       "default_models": {
-        "facts": "deepseek-chat",
-        "summary": "deepseek-chat",
-        "digest_cluster_draft": "deepseek-chat",
-        "digest": "deepseek-chat",
-        "ask": "deepseek-chat",
-        "source_suggestion": "deepseek-chat"
+        "facts": "deepseek-flash",
+        "summary": "deepseek-flash",
+        "digest_cluster_draft": "deepseek-flash",
+        "digest": "deepseek-flash",
+        "ask": "deepseek-flash",
+        "source_suggestion": "deepseek-flash"
       },
       "settings_field_base": "DeepSeek"
     },
@@ -4759,7 +4760,7 @@
       }
     },
     {
-      "id": "deepseek-v4-flash",
+      "id": "deepseek-flash",
       "provider": "deepseek",
       "available_purposes": [
         "facts",
@@ -4775,7 +4776,7 @@
         "fast",
         "latest"
       ],
-      "comment": "DeepSeek V4 系の軽量側。1M context と低コストを両立し、抽出や通常要約の主力候補として使いやすい。",
+      "comment": "DeepSeek の軽量モデル。1M context と低コストを両立し、抽出や通常要約の主力候補として使いやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -4785,10 +4786,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "deepseek_pricing_2026_08_24_peak",
-        "input_per_mtok_usd": 0.44,
-        "output_per_mtok_usd": 1.32,
-        "cache_read_per_mtok_usd": 0.014
+        "pricing_source": "deepseek_pricing_2026_09_10_peak",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.006
       }
     },
     {
@@ -4827,20 +4828,13 @@
     {
       "id": "deepseek-chat",
       "provider": "deepseek",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "facts",
       "highlights": [
         "fast"
       ],
-      "comment": "互換 alias。将来的には deepseek-v4-flash へ寄せる前提だが、既存設定の互換維持用として残している。",
+      "comment": "提供終了した過去モデル。利用履歴と当時の料金を参照するため catalog に保持している。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -4859,18 +4853,11 @@
     {
       "id": "deepseek-reasoner",
       "provider": "deepseek",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
-      "comment": "互換 alias。thinking 側は deepseek-v4-flash の推論モードに対応し、既存設定の互換維持用として残している。",
+      "comment": "提供終了した過去モデル。利用履歴と当時の料金を参照するため catalog に保持している。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,

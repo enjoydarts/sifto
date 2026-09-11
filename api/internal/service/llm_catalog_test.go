@@ -52,11 +52,17 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gemini-3.5-flash-lite"); got == nil {
 		t.Fatal("gemini-3.5-flash-lite not found in catalog")
 	}
-	if got := findModelCatalog("deepseek-chat"); got == nil {
-		t.Fatal("deepseek-chat not found in catalog")
+	if got := findModelCatalog("deepseek-chat"); got == nil || len(got.AvailablePurposes) != 0 {
+		t.Fatal("retired deepseek-chat should remain for history but not be selectable")
 	}
-	if got := findModelCatalog("deepseek-v4-flash"); got == nil {
-		t.Fatal("deepseek-v4-flash not found in catalog")
+	if got := findModelCatalog("deepseek-reasoner"); got == nil || len(got.AvailablePurposes) != 0 {
+		t.Fatal("retired deepseek-reasoner should remain for history but not be selectable")
+	}
+	if got := findModelCatalog("deepseek-flash"); got == nil {
+		t.Fatal("deepseek-flash not found in catalog")
+	}
+	if got := findModelCatalog("deepseek-v4-flash"); got != nil {
+		t.Fatal("retired deepseek-v4-flash should not remain in the display catalog")
 	}
 	if got := findModelCatalog("deepseek-v4-pro"); got == nil {
 		t.Fatal("deepseek-v4-pro not found in catalog")
@@ -299,9 +305,11 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "qwen/qwen3.8-27b", provider: "groq"},
+		{model: "deepseek-flash", provider: "deepseek"},
 		{model: "deepseek-v4-flash", provider: "deepseek"},
 		{model: "deepseek-v4-pro", provider: "deepseek"},
 		{model: "deepseek-chat", provider: "deepseek"},
+		{model: "deepseek-reasoner", provider: "deepseek"},
 		{model: "qwen3.5-plus", provider: "alibaba"},
 		{model: "qwen3.6-plus", provider: "alibaba"},
 		{model: "qwen3.6-flash", provider: "alibaba"},
@@ -403,7 +411,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "anthropic", purpose: "digest", want: "claude-sonnet-5"},
 		{provider: "anthropic", purpose: "ask", want: "claude-sonnet-5"},
 		{provider: "openai", purpose: "facts", want: "gpt-5.4-mini"},
-		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
+		{provider: "deepseek", purpose: "summary", want: "deepseek-flash"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
 		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
 		{provider: "alibaba", purpose: "facts", want: "qwen3.8-flash"},

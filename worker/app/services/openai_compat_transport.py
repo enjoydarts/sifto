@@ -62,9 +62,10 @@ def _is_glm_model(model: str) -> bool:
     return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
 
 
-def _is_deepseek_v4_model(model: str) -> bool:
+def _is_deepseek_thinking_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
     return normalized in {
+        "deepseek-flash",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "deepseek-ai/deepseek-v4-flash",
@@ -124,7 +125,7 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         # exhaust output tokens into reasoning_content and leave message.content empty.
         body["thinking"] = {"type": "disabled"}
         return
-    if provider_name == "deepseek" and _is_deepseek_v4_model(normalized_model):
+    if provider_name == "deepseek" and _is_deepseek_thinking_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         return
     if provider_name == "deepinfra":
@@ -141,7 +142,7 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
             return
     if provider_name != "featherless":
         return
-    if _is_deepseek_v4_model(normalized_model):
+    if _is_deepseek_thinking_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         body["reasoning"] = {"enabled": False}
         body["chat_template_kwargs"] = {"enable_thinking": False}

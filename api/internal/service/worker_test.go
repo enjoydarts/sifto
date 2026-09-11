@@ -129,6 +129,29 @@ func TestWorkerHeadersUsesPLaMoHeaderForPLaMoModels(t *testing.T) {
 	}
 }
 
+func TestWorkerHeadersIncludesExplicitProviderForDeepSeekModel(t *testing.T) {
+	headers := workerHeadersForModel(
+		workerTestStringPtr("deepseek-flash"),
+		nil,
+		nil,
+		nil,
+		workerTestStringPtr("deepseek-key"),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	if got := headers["X-Sifto-LLM-Provider"]; got != "deepseek" {
+		t.Fatalf("X-Sifto-LLM-Provider = %q, want %q", got, "deepseek")
+	}
+}
+
 func TestExtractFactsWithModelUsesMinimaxHeader(t *testing.T) {
 	var gotMinimax string
 	var gotOpenAI string

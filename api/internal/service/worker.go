@@ -1482,6 +1482,14 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 
 func workerHeadersForModel(model *string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, aivisAPIKey *string, fishAudioAPIKey *string, elevenLabsAPIKey *string, internalSecret string) map[string]string {
 	headers := workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, nil, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, nil, internalSecret)
+	if model != nil {
+		if provider := CatalogProviderForModel(*model); provider != "" {
+			if headers == nil {
+				headers = map[string]string{}
+			}
+			headers["X-Sifto-LLM-Provider"] = provider
+		}
+	}
 	if headers == nil && openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != "" {
 		headers = map[string]string{}
 	}

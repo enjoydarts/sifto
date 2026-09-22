@@ -62,6 +62,11 @@ def _is_glm_model(model: str) -> bool:
     return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
 
 
+def _is_zai_glm_5_3_family(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized in {"glm-5.3", "glm-5.3-flash", "glm-5.3-flashx"}
+
+
 def _is_deepseek_thinking_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
     return normalized in {
@@ -113,10 +118,10 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         body.pop("top_p", None)
         body["reasoning_effort"] = "max"
         return
-    if provider_name == "zai" and normalized_model.strip().lower() == "glm-5.3":
-        # GLM-5.3 rejects requests that disable thinking. Use the lowest
-        # supported effort for Sifto's structured tasks so reasoning does not
-        # consume more of the response budget than necessary.
+    if provider_name == "zai" and _is_zai_glm_5_3_family(normalized_model):
+        # The GLM-5.3 family rejects requests that disable thinking. Use the
+        # lowest supported effort for Sifto's structured tasks so reasoning
+        # does not consume more of the response budget than necessary.
         body["thinking"] = {"type": "enabled"}
         body["reasoning_effort"] = "low"
         return

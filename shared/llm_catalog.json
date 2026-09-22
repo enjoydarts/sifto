@@ -88,6 +88,8 @@
       "match_exact": [
         "qwen3.8-flash",
         "qwen3.8-max",
+        "qwen-plus-character",
+        "qwen-flash-character",
         "qwen3.7-max",
         "qwen3.7-plus",
         "qwen3-max",
@@ -2207,6 +2209,71 @@
         "pricing_source": "user_provided_alibaba_virginia_qwen3_8_flash_2026_08",
         "input_per_mtok_usd": 0.113,
         "output_per_mtok_usd": 0.382
+      }
+    },
+    {
+      "id": "qwen-plus-character",
+      "provider": "alibaba",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": [
+        "experimental",
+        "jsonStable"
+      ],
+      "comment": "Alibaba Model Studio Global / Virginia のロールプレイ特化モデル。人格や語り口の一貫性を活かした AI ナビゲーター、対話、音声ブリーフィング台本の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_modelstudio_character_virginia_2026_09",
+        "input_per_mtok_usd": 0.115,
+        "output_per_mtok_usd": 0.287
+      }
+    },
+    {
+      "id": "qwen-flash-character",
+      "provider": "alibaba",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": [
+        "experimental",
+        "fast",
+        "jsonStable"
+      ],
+      "comment": "Alibaba Model Studio Global / Virginia の軽量ロールプレイ特化モデル。自然な会話調を低コストで生成でき、AI ナビゲーターや音声ブリーフィング台本の試行に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_modelstudio_character_virginia_2026_09",
+        "input_per_mtok_usd": 0.034,
+        "output_per_mtok_usd": 0.203
       }
     },
     {

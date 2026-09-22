@@ -4,6 +4,28 @@ from app.services.llm_catalog import model_pricing, model_supports, provider_for
 
 
 class AlibabaCatalogTests(unittest.TestCase):
+    def test_qwen_plus_character_is_available(self):
+        pricing = model_pricing("qwen-plus-character")
+
+        self.assertEqual(provider_for_model("qwen-plus-character"), "alibaba")
+        self.assertIsNotNone(pricing)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.115)
+        self.assertEqual(pricing["output_per_mtok_usd"], 0.287)
+        self.assertTrue(model_supports("qwen-plus-character", "supports_structured_output"))
+        self.assertFalse(model_supports("qwen-plus-character", "supports_reasoning"))
+        self.assertFalse(model_supports("qwen-plus-character", "supports_tool_calling"))
+
+    def test_qwen_flash_character_is_available(self):
+        pricing = model_pricing("qwen-flash-character")
+
+        self.assertEqual(provider_for_model("qwen-flash-character"), "alibaba")
+        self.assertIsNotNone(pricing)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.034)
+        self.assertEqual(pricing["output_per_mtok_usd"], 0.203)
+        self.assertTrue(model_supports("qwen-flash-character", "supports_structured_output"))
+        self.assertFalse(model_supports("qwen-flash-character", "supports_reasoning"))
+        self.assertFalse(model_supports("qwen-flash-character", "supports_tool_calling"))
+
     def test_qwen38_flash_is_available(self):
         pricing = model_pricing("qwen3.8-flash")
 

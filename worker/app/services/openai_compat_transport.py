@@ -93,6 +93,22 @@ def _normalize_openai_compat_max_tokens(provider_name: str, max_output_tokens: i
     return max(1, value)
 
 
+def _is_non_retryable_quota_response(response: httpx.Response) -> bool:
+    if response.status_code != 429:
+        return False
+    body = str(response.text or "").lower()
+    permanent_quota_markers = (
+        "quota exhausted",
+        "insufficient balance",
+        "no resource package",
+        "weekly limit exhausted",
+        "monthly limit exhausted",
+        '"code":"1113"',
+        '"code":1113',
+    )
+    return any(marker in body for marker in permanent_quota_markers)
+
+
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
     if provider_name == "cerebras":
         if _is_gpt_oss_model(normalized_model):
@@ -575,7 +591,7 @@ def run_chat_json(
                 if retry_usage.get("execution_failures"):
                     usage["execution_failures"] = list(retry_usage["execution_failures"])
                 return text, usage
-            if resp.status_code in retryable_status and i < attempts - 1:
+            if resp.status_code in retryable_status and i < attempts - 1 and not _is_non_retryable_quota_response(resp):
                 _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
                 sleep_sec = base_sleep_sec * (2**i)
                 logger.warning(
@@ -769,7 +785,7 @@ async def run_chat_json_async(
                 if retry_usage.get("execution_failures"):
                     usage["execution_failures"] = list(retry_usage["execution_failures"])
                 return text, usage
-            if resp.status_code in retryable_status and i < attempts - 1:
+            if resp.status_code in retryable_status and i < attempts - 1 and not _is_non_retryable_quota_response(resp):
                 _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
                 sleep_sec = base_sleep_sec * (2**i)
                 logger.warning(

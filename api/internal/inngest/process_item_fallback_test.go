@@ -1,6 +1,10 @@
 package inngest
 
-import "testing"
+import (
+	"testing"
+
+	inngesterrors "github.com/inngest/inngestgo/errors"
+)
 
 func TestIsTransientLLMWorkerError(t *testing.T) {
 	tests := []struct {
@@ -25,7 +29,7 @@ func TestIsTransientLLMWorkerError(t *testing.T) {
 	}
 }
 
-func TestCanUseLLMFallbackAfterRetry(t *testing.T) {
+func TestCanUseLLMFallback(t *testing.T) {
 	tests := []struct {
 		name          string
 		primaryModel  *string
@@ -63,85 +67,34 @@ func TestCanUseLLMFallbackAfterRetry(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		if got := canUseLLMFallbackAfterRetry(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
-			t.Fatalf("%s: canUseLLMFallbackAfterRetry(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
+		if got := canUseLLMFallback(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
+			t.Fatalf("%s: canUseLLMFallback(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
 		}
 	}
 }
 
-func TestShouldRetrySameModelLLMAttempt(t *testing.T) {
-	tests := []struct {
-		name             string
-		err              error
-		sameModelRetried bool
-		want             bool
-	}{
-		{name: "structured parse failure retries same model first", err: assertErr("worker /summarize: status 500 detail=summarize failed: featherless summarize parse failed: response_snippet=本文"), sameModelRetried: false, want: true},
-		{name: "plain parse failure retries same model first", err: assertErr("worker /extract-facts: status 500 detail=featherless extract_facts parse failed"), sameModelRetried: false, want: true},
-		{name: "rate limit retries same model first", err: assertErr("worker /summarize: status 500 detail=featherless chat.completions failed status=429"), sameModelRetried: false, want: true},
-		{name: "already retried stops same model retry", err: assertErr("worker /summarize: status 500 detail=featherless chat.completions failed status=429"), sameModelRetried: true, want: false},
-		{name: "capability error does not retry", err: assertErr("model missing required capability for facts"), sameModelRetried: false, want: false},
-	}
-	for _, tt := range tests {
-		if got := shouldRetrySameModelLLMAttempt(tt.err, tt.sameModelRetried); got != tt.want {
-			t.Fatalf("%s: shouldRetrySameModelLLMAttempt(%v, %t) = %v, want %v", tt.name, tt.err, tt.sameModelRetried, got, tt.want)
-		}
-	}
-}
+func TestStopInngestRetriesForFallback(t *testing.T) {
+	primaryModel := strptr("openrouter::google/gemini-2.5-flash")
+	fallbackModel := strptr("openrouter::openai/gpt-oss-120b")
+	retryableErr := assertErr("worker /summarize: status 500 detail=summarize failed: openrouter chat.completions failed status=429")
+	nonRetryableErr := assertErr("model missing required capability for summary")
 
-func TestShouldFallbackFactsAttempt(t *testing.T) {
 	tests := []struct {
-		name             string
-		primaryModel     *string
-		fallbackModel    *string
-		err              error
-		sameModelRetried bool
-		want             bool
+		name          string
+		primaryModel  *string
+		fallbackModel *string
+		err           error
+		wantNoRetry   bool
 	}{
-		{
-			name:             "transient first failure retries same model first",
-			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
-			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
-			err:              assertErr("worker /extract-facts: status 500 detail=extract_facts failed status=429"),
-			sameModelRetried: false,
-			want:             false,
-		},
-		{
-			name:             "transient after same model retry falls back",
-			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
-			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
-			err:              assertErr("worker /extract-facts: status 500 detail=extract_facts failed status=429"),
-			sameModelRetried: true,
-			want:             true,
-		},
-		{
-			name:             "structural parse failure retries same model first",
-			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
-			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
-			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
-			sameModelRetried: false,
-			want:             false,
-		},
-		{
-			name:             "structural parse failure after same model retry falls back",
-			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
-			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
-			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
-			sameModelRetried: true,
-			want:             true,
-		},
-		{
-			name:             "same fallback model does not fall back",
-			primaryModel:     strptr("openrouter::openai/gpt-oss-120b"),
-			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
-			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
-			sameModelRetried: true,
-			want:             false,
-		},
+		{name: "retryable error with fallback stops step retries", primaryModel: primaryModel, fallbackModel: fallbackModel, err: retryableErr, wantNoRetry: true},
+		{name: "retryable error without fallback keeps step retries", primaryModel: primaryModel, err: retryableErr, wantNoRetry: false},
+		{name: "same fallback keeps step retries", primaryModel: primaryModel, fallbackModel: primaryModel, err: retryableErr, wantNoRetry: false},
+		{name: "non retryable error keeps step retries", primaryModel: primaryModel, fallbackModel: fallbackModel, err: nonRetryableErr, wantNoRetry: false},
 	}
 	for _, tt := range tests {
-		if got := shouldFallbackFactsAttempt(tt.primaryModel, tt.fallbackModel, tt.err, tt.sameModelRetried); got != tt.want {
-			t.Fatalf("%s: shouldFallbackFactsAttempt(%v, %v, %v, %t) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, tt.sameModelRetried, got, tt.want)
+		got := stopInngestRetriesForFallback(tt.primaryModel, tt.fallbackModel, tt.err)
+		if isNoRetry := inngesterrors.IsNoRetryError(got); isNoRetry != tt.wantNoRetry {
+			t.Fatalf("%s: IsNoRetryError() = %v, want %v", tt.name, isNoRetry, tt.wantNoRetry)
 		}
 	}
 }

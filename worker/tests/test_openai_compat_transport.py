@@ -9,6 +9,7 @@ import httpx
 from app.services.openai_compat_transport import (
     ProviderConcurrencyBusy,
     _acquire_redis_provider_lease,
+    _is_non_retryable_quota_response,
     _provider_user_concurrency_wait_sec,
     _provider_user_max_concurrency,
     provider_request_context,
@@ -166,6 +167,26 @@ class _RetryThenSuccessClient:
                 "choices": [{"message": {"content": '{"answer":"ok"}'}}],
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1},
             },
+        )
+
+
+class _QuotaExhaustedClient:
+    call_count = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        _QuotaExhaustedClient.call_count += 1
+        return httpx.Response(
+            429,
+            json={"error": {"message": "quota exhausted"}},
         )
 
 
@@ -776,6 +797,42 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(
             usage.get("execution_failures"),
             [{"model": "openrouter::auto", "reason": "status=429 body={\"error\":{\"message\":\"Rate limit reached\"}}"}],
+        )
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _QuotaExhaustedClient)
+    def test_quota_exhausted_does_not_retry_same_provider(self):
+        _QuotaExhaustedClient.call_count = 0
+
+        with self.assertRaisesRegex(RuntimeError, "quota exhausted"):
+            run_chat_json(
+                "Return JSON",
+                "mimo::mimo-v2-pro",
+                "test-key",
+                url="https://example.com/chat/completions",
+                normalize_model_name=lambda model: model,
+                supports_strict_schema=lambda model: False,
+                timeout_sec=5,
+                attempts=3,
+                base_sleep_sec=0,
+                provider_name="mimo",
+                logger=_ListLogger(),
+                response_schema={"type": "object"},
+            )
+
+        self.assertEqual(_QuotaExhaustedClient.call_count, 1)
+
+    def test_only_permanent_quota_429_is_non_retryable(self):
+        self.assertTrue(
+            _is_non_retryable_quota_response(httpx.Response(429, text="Insufficient balance or no resource package"))
+        )
+        self.assertTrue(
+            _is_non_retryable_quota_response(httpx.Response(429, text='{"code":1113}'))
+        )
+        self.assertFalse(
+            _is_non_retryable_quota_response(httpx.Response(429, text="Rate limit reached"))
+        )
+        self.assertFalse(
+            _is_non_retryable_quota_response(httpx.Response(503, text="quota exhausted"))
         )
 
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyLengthThenSuccessClient)

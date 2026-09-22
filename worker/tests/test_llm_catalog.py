@@ -30,6 +30,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("xai", "grok-4"),
     ("xai", "grok-4.5"),
     ("xai", "grok-4.6"),
+    ("xai", "grok-4.7"),
     ("zai", "glm-5.3"),
     ("zai", "glm-5.3-flash"),
     ("fireworks", "fireworks/deepseek-v3p1"),

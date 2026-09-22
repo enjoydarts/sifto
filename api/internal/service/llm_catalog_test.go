@@ -184,6 +184,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("grok-4.6"); got == nil {
 		t.Fatal("grok-4.6 not found in catalog")
 	}
+	if got := findModelCatalog("grok-4.7"); got == nil {
+		t.Fatal("grok-4.7 not found in catalog")
+	}
 	if got := findModelCatalog("glm-5.3"); got == nil {
 		t.Fatal("glm-5.3 not found in catalog")
 	}
@@ -339,6 +342,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
 		{model: "grok-4.3", provider: "xai"},
 		{model: "grok-4.6", provider: "xai"},
+		{model: "grok-4.7", provider: "xai"},
 		{model: "glm-5.3", provider: "zai"},
 		{model: "glm-5.3-flash", provider: "zai"},
 		{model: "gemma-4-31b-it", provider: "google"},
@@ -506,22 +510,22 @@ func TestLLMCatalogPricingMatchesCacheCapabilities(t *testing.T) {
 	}
 }
 
-func TestLLMCatalogGrok46PricingAndLatestHighlight(t *testing.T) {
-	item := findModelCatalog("grok-4.6")
+func TestLLMCatalogGrok47PricingAndLatestHighlight(t *testing.T) {
+	item := findModelCatalog("grok-4.7")
 	if item == nil {
-		t.Fatal("grok-4.6 not found in catalog")
+		t.Fatal("grok-4.7 not found in catalog")
 	}
 	if item.Pricing == nil {
-		t.Fatal("grok-4.6 has nil pricing")
+		t.Fatal("grok-4.7 has nil pricing")
 	}
 	if got, want := item.Pricing.InputPerMTokUSD, 2.0; got != want {
-		t.Fatalf("grok-4.6 input_per_mtok_usd = %v, want %v", got, want)
+		t.Fatalf("grok-4.7 input_per_mtok_usd = %v, want %v", got, want)
 	}
 	if got, want := item.Pricing.OutputPerMTokUSD, 6.0; got != want {
-		t.Fatalf("grok-4.6 output_per_mtok_usd = %v, want %v", got, want)
+		t.Fatalf("grok-4.7 output_per_mtok_usd = %v, want %v", got, want)
 	}
 	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.5; got != want {
-		t.Fatalf("grok-4.6 cache_read_per_mtok_usd = %v, want %v", got, want)
+		t.Fatalf("grok-4.7 cache_read_per_mtok_usd = %v, want %v", got, want)
 	}
 
 	latestXAIModels := make([]string, 0, 1)
@@ -535,8 +539,8 @@ func TestLLMCatalogGrok46PricingAndLatestHighlight(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(latestXAIModels, []string{"grok-4.6"}) {
-		t.Fatalf("latest xAI models = %v, want [grok-4.6]", latestXAIModels)
+	if !reflect.DeepEqual(latestXAIModels, []string{"grok-4.7"}) {
+		t.Fatalf("latest xAI models = %v, want [grok-4.7]", latestXAIModels)
 	}
 }
 

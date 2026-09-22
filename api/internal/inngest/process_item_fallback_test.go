@@ -131,20 +131,28 @@ func TestExecutionFailedModel(t *testing.T) {
 }
 
 func TestShouldRetryExtractBody(t *testing.T) {
-	if !shouldRetryExtractBody(0, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
-		t.Fatal("first extract-body failure should retry")
+	tests := []struct {
+		name    string
+		attempt int
+		err     error
+		want    bool
+	}{
+		{name: "nil", attempt: 0, err: nil, want: false},
+		{name: "generic extraction failure is permanent", attempt: 0, err: assertErr("worker /extract-body: status 422 detail=Failed to extract body"), want: false},
+		{name: "youtube transcript unavailable is permanent", attempt: 0, err: assertErr("worker /extract-body: status 422 detail=youtube transcript unavailable"), want: false},
+		{name: "unauthorized is permanent", attempt: 0, err: assertErr("worker /extract-body: status 401 detail=unauthorized"), want: false},
+		{name: "forbidden in worker detail is permanent", attempt: 0, err: assertErr("worker /extract-body: status 422 detail=Client error '403 Forbidden'"), want: false},
+		{name: "not found is permanent", attempt: 0, err: assertErr("worker /extract-body: status 404 detail=not found"), want: false},
+		{name: "gone is permanent", attempt: 0, err: assertErr("worker /extract-body: status 410 detail=gone"), want: false},
+		{name: "timeout retries", attempt: 0, err: assertErr("worker /extract-body: context deadline exceeded"), want: true},
+		{name: "rate limit retries", attempt: 1, err: assertErr("worker /extract-body: status 429 detail=rate limited"), want: true},
+		{name: "server error retries", attempt: 0, err: assertErr("worker /extract-body: status 503 detail=unavailable"), want: true},
+		{name: "third transient failure stops", attempt: 2, err: assertErr("worker /extract-body: context deadline exceeded"), want: false},
 	}
-	if shouldRetryExtractBody(0, assertErr("worker /extract-body: status 422 detail=youtube transcript unavailable")) {
-		t.Fatal("youtube transcript unavailable should not retry")
-	}
-	if !shouldRetryExtractBody(1, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
-		t.Fatal("second extract-body failure should retry")
-	}
-	if shouldRetryExtractBody(2, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
-		t.Fatal("third extract-body failure should stop retrying")
-	}
-	if shouldRetryExtractBody(0, nil) {
-		t.Fatal("nil error should not retry")
+	for _, tt := range tests {
+		if got := shouldRetryExtractBody(tt.attempt, tt.err); got != tt.want {
+			t.Fatalf("%s: shouldRetryExtractBody(%d, %v) = %v, want %v", tt.name, tt.attempt, tt.err, got, tt.want)
+		}
 	}
 }
 
@@ -152,8 +160,8 @@ func TestShouldDeleteOnExtractBodyFailure(t *testing.T) {
 	if !shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=youtube transcript unavailable")) {
 		t.Fatal("youtube transcript unavailable should delete")
 	}
-	if shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot")) {
-		t.Fatal("yt-dlp metadata failure should not delete")
+	if !shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot")) {
+		t.Fatal("yt-dlp metadata failure should delete after retries")
 	}
 	if !shouldDeleteOnExtractBodyFailure(assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
 		t.Fatal("generic extract failure should delete after retries")
@@ -161,8 +169,11 @@ func TestShouldDeleteOnExtractBodyFailure(t *testing.T) {
 	for _, message := range []string{
 		"worker /extract-body: status 403 detail=forbidden",
 		"worker /extract-body: status 404 detail=not found",
+		"worker /extract-body: status 410 detail=gone",
+		"worker /extract-body: status 429 detail=rate limited",
 		"worker /extract-body: status 500 detail=upstream error",
 		"worker /extract-body: status 502 body=bad gateway",
+		"worker /extract-body: context deadline exceeded",
 	} {
 		if !shouldDeleteOnExtractBodyFailure(assertErr(message)) {
 			t.Fatalf("%q should delete after retries", message)

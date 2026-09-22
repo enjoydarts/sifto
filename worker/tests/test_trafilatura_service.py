@@ -18,6 +18,13 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["content"], "text")
         mocked_extract.assert_called_once_with("https://example.com/report.pdf")
 
+    def test_extract_body_propagates_refetch_failure(self):
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
+            "app.services.trafilatura_service.httpx.get", side_effect=TimeoutError("refetch timed out")
+        ):
+            with self.assertRaisesRegex(TimeoutError, "refetch timed out"):
+                extract_body("https://example.com/start")
+
     def test_extract_body_uses_pdf_bytes_extractor_for_pdf_response_header(self):
         response = Mock()
         response.raise_for_status.return_value = None

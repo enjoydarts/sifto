@@ -1207,30 +1207,57 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			var extracted *service.ExtractBodyResponse
 			var err error
 			for attempt := 0; attempt < 3; attempt++ {
-				stepLabel := "extract-body"
+				// Keep the v2 step IDs distinct from the legacy response shape so
+				// in-flight runs can migrate without decoding old step state into
+				// processExtractBodyAttemptResult.
+				stepLabel := "extract-body-v2"
 				if attempt > 0 {
-					stepLabel = fmt.Sprintf("extract-body-%d", attempt+1)
+					stepLabel = fmt.Sprintf("extract-body-v2-%d", attempt+1)
 				}
-				extracted, err = step.Run(ctx, stepLabel, func(ctx context.Context) (*service.ExtractBodyResponse, error) {
+				attemptResult, stepErr := step.Run(ctx, stepLabel, func(ctx context.Context) (*processExtractBodyAttemptResult, error) {
 					log.Printf("process-item extract-body start item_id=%s attempt=%d", itemID, attempt+1)
-					return deps.worker.ExtractBody(ctx, url)
+					resp, extractErr := deps.worker.ExtractBody(ctx, url)
+					if extractErr != nil {
+						return &processExtractBodyAttemptResult{
+							Partial:      service.ExtractBodyPartial(extractErr),
+							ErrorMessage: extractErr.Error(),
+						}, nil
+					}
+					return &processExtractBodyAttemptResult{Extracted: resp}, nil
 				})
-				if err == nil {
+				if stepErr != nil {
+					return nil, fmt.Errorf("extract body step: %w", stepErr)
+				}
+				if attemptResult != nil && attemptResult.Extracted != nil {
+					extracted = attemptResult.Extracted
+					err = nil
 					break
 				}
-				persistPartialExtractMetadata(ctx, deps.itemRepo, deps.cache, itemID, service.ExtractBodyPartial(err))
+				errorMessage := "extract body returned no result"
+				if attemptResult != nil && strings.TrimSpace(attemptResult.ErrorMessage) != "" {
+					errorMessage = attemptResult.ErrorMessage
+					persistPartialExtractMetadata(ctx, deps.itemRepo, deps.cache, itemID, attemptResult.Partial)
+				}
+				err = errors.New(errorMessage)
 				log.Printf("process-item extract-body failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 				if !shouldRetryExtractBody(attempt, err) {
-					if shouldDeleteOnExtractBodyFailure(err) {
-						return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and deleted", err)
+					if !shouldDeleteOnExtractBodyFailure(err) {
+						return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and failed", err)
 					}
-					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and failed", err)
+					if markErr := markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, "extract body failed and deleted", err); markErr != nil {
+						return nil, markErr
+					}
+					log.Printf("process-item extract-body deleted item_id=%s attempts=%d err=%v", itemID, attempt+1, err)
+					return map[string]string{"item_id": itemID, "status": "deleted"}, nil
 				}
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
 			if reason := invalidExtractReason(extracted.Title, extracted.Content); reason != "" {
 				log.Printf("process-item invalid-extract deleted item_id=%s reason=%s", itemID, reason)
-				return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, reason, fmt.Errorf("content rejected after extract"))
+				if markErr := markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, reason, fmt.Errorf("content rejected after extract")); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]string{"item_id": itemID, "status": "deleted"}, nil
 			}
 
 			if err := updateItemAfterExtract(ctx, deps.itemRepo, itemID, extracted); err != nil {

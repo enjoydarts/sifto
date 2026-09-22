@@ -249,7 +249,7 @@ def extract_body(url: str) -> dict | None:
                         "published_at": None,
                         "image_url": None,
                     }
-                return None
+                raise
 
         try:
             # `output_format="python"` is only supported by bare_extraction().

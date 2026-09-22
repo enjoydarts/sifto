@@ -13,9 +13,13 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/enjoydarts/sifto/api/internal/timeutil"
-	inngesterrors "github.com/inngest/inngestgo/errors"
 	"github.com/inngest/inngestgo/step"
 )
+
+type llmPrimaryFailure struct {
+	Model   *string
+	Message string
+}
 
 type processItemEventData struct {
 	ItemID    string `json:"item_id"`
@@ -49,13 +53,15 @@ type processItemDeps struct {
 }
 
 type processFactsAttemptResult struct {
-	Facts   *service.ExtractFactsResponse
-	Runtime *llmRuntime
+	Facts          *service.ExtractFactsResponse
+	Runtime        *llmRuntime
+	PrimaryFailure *llmPrimaryFailure
 }
 
 type processSummaryAttemptResult struct {
-	Summary *service.SummarizeResponse
-	Runtime *llmRuntime
+	Summary        *service.SummarizeResponse
+	Runtime        *llmRuntime
+	PrimaryFailure *llmPrimaryFailure
 }
 
 type processFactsStageResult struct {
@@ -233,13 +239,6 @@ func isTransientLLMWorkerError(err error) bool {
 
 func canUseLLMFallback(primaryResolvedModel, fallbackModel *string, err error) bool {
 	return isRetryableLLMAttemptError(err) && hasDistinctLLMFallback(primaryResolvedModel, fallbackModel)
-}
-
-func stopInngestRetriesForFallback(primaryResolvedModel, fallbackModel *string, err error) error {
-	if canUseLLMFallback(primaryResolvedModel, fallbackModel, err) {
-		return inngesterrors.NoRetryError(err)
-	}
-	return err
 }
 
 func isRetryableLLMAttemptError(err error) bool {
@@ -449,7 +448,37 @@ func extractAndPersistFacts(
 				factsPromptConfig,
 			)
 			if err != nil {
-				return nil, stopInngestRetriesForFallback(runtime.Model, fallbackModelOverride, err)
+				if !canUseLLMFallback(runtime.Model, fallbackModelOverride, err) {
+					return nil, err
+				}
+				primaryFailure := &llmPrimaryFailure{Model: runtime.Model, Message: err.Error()}
+				log.Printf("process-item extract-facts fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(runtime.Model), ptrStringValue(fallbackModelOverride))
+				fallbackRuntime, fallbackErr := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, fallbackModelOverride, "facts")
+				if fallbackErr != nil {
+					return nil, fallbackErr
+				}
+				currentRuntime = fallbackRuntime
+				resp, fallbackErr = deps.worker.ExtractFactsWithModel(
+					workerCtx,
+					titleForLLM,
+					content,
+					fallbackRuntime.AnthropicKey,
+					fallbackRuntime.GoogleKey,
+					fallbackRuntime.GroqKey,
+					fallbackRuntime.DeepSeekKey,
+					fallbackRuntime.AlibabaKey,
+					fallbackRuntime.MistralKey,
+					fallbackRuntime.XAIKey,
+					fallbackRuntime.ZAIKey,
+					fallbackRuntime.FireworksKey,
+					fallbackRuntime.OpenAIKey,
+					fallbackRuntime.Model,
+					factsPromptConfig,
+				)
+				if fallbackErr != nil {
+					return nil, fallbackErr
+				}
+				return &processFactsAttemptResult{Facts: resp, Runtime: fallbackRuntime, PrimaryFailure: primaryFailure}, nil
 			}
 			return &processFactsAttemptResult{
 				Facts:   resp,
@@ -462,14 +491,13 @@ func extractAndPersistFacts(
 				failedModel = executionFailedModel(factsAttempt.Runtime, failedModel)
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, factsPromptResolution, err)
-			if canUseLLMFallback(failedModel, fallbackModelOverride, err) {
-				log.Printf("process-item extract-facts fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(failedModel), ptrStringValue(fallbackModelOverride))
-				currentModelOverride = fallbackModelOverride
-				usingFallback = true
-				sameModelRetried = false
-				continue
-			}
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
+		}
+		if factsAttempt.PrimaryFailure != nil {
+			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.PrimaryFailure.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, factsPromptResolution, fmt.Errorf("%s", factsAttempt.PrimaryFailure.Message))
+			currentModelOverride = fallbackModelOverride
+			usingFallback = true
+			sameModelRetried = false
 		}
 
 		factsResp = factsAttempt.Facts
@@ -661,7 +689,21 @@ func summarizeAndPersistItem(
 			workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", userIDPtr, &data.SourceID, &itemID, nil)
 			resp, err := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.AlibabaKey, runtime.MistralKey, runtime.XAIKey, runtime.ZAIKey, runtime.FireworksKey, runtime.OpenAIKey, runtime.Model, summaryPromptConfig)
 			if err != nil {
-				return nil, stopInngestRetriesForFallback(runtime.Model, fallbackModelOverride, err)
+				if !canUseLLMFallback(runtime.Model, fallbackModelOverride, err) {
+					return nil, err
+				}
+				primaryFailure := &llmPrimaryFailure{Model: runtime.Model, Message: err.Error()}
+				log.Printf("process-item summarize fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(runtime.Model), ptrStringValue(fallbackModelOverride))
+				fallbackRuntime, fallbackErr := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, fallbackModelOverride, "summary")
+				if fallbackErr != nil {
+					return nil, fallbackErr
+				}
+				primaryRuntime = fallbackRuntime
+				resp, fallbackErr = deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, fallbackRuntime.AnthropicKey, fallbackRuntime.GoogleKey, fallbackRuntime.GroqKey, fallbackRuntime.DeepSeekKey, fallbackRuntime.AlibabaKey, fallbackRuntime.MistralKey, fallbackRuntime.XAIKey, fallbackRuntime.ZAIKey, fallbackRuntime.FireworksKey, fallbackRuntime.OpenAIKey, fallbackRuntime.Model, summaryPromptConfig)
+				if fallbackErr != nil {
+					return nil, fallbackErr
+				}
+				return &processSummaryAttemptResult{Summary: resp, Runtime: fallbackRuntime, PrimaryFailure: primaryFailure}, nil
 			}
 			return &processSummaryAttemptResult{
 				Summary: resp,
@@ -674,37 +716,10 @@ func summarizeAndPersistItem(
 				failedModel = executionFailedModel(summaryAttempt.Runtime, failedModel)
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, summaryPromptResolution, err)
-			if canUseLLMFallback(failedModel, fallbackModelOverride, err) {
-				fallbackStepLabel := stepLabel + "-fallback"
-				log.Printf("process-item summarize fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(failedModel), ptrStringValue(fallbackModelOverride))
-				var fallbackRuntime *llmRuntime
-				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
-					log.Printf("process-item summarize fallback start item_id=%s attempt=%d", itemID, attempt+1)
-					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, fallbackModelOverride, "summary")
-					if runtimeErr != nil {
-						return nil, runtimeErr
-					}
-					fallbackRuntime = runtime
-					sourceChars := len(sourceContent)
-					workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", userIDPtr, &data.SourceID, &itemID, nil)
-					resp, workerErr := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.AlibabaKey, runtime.MistralKey, runtime.XAIKey, runtime.ZAIKey, runtime.FireworksKey, runtime.OpenAIKey, runtime.Model, summaryPromptConfig)
-					if workerErr != nil {
-						return nil, workerErr
-					}
-					return &processSummaryAttemptResult{Summary: resp, Runtime: runtime}, nil
-				})
-				if fallbackErr != nil {
-					fallbackFailedModel := executionFailedModel(fallbackRuntime, fallbackModelOverride)
-					if fallbackAttempt != nil {
-						fallbackFailedModel = executionFailedModel(fallbackAttempt.Runtime, fallbackFailedModel)
-					}
-					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, summaryPromptResolution, fallbackErr)
-					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", fallbackErr)
-				}
-				summaryAttempt = fallbackAttempt
-			} else {
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", err)
-			}
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", err)
+		}
+		if summaryAttempt.PrimaryFailure != nil {
+			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", summaryAttempt.PrimaryFailure.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, summaryPromptResolution, fmt.Errorf("%s", summaryAttempt.PrimaryFailure.Message))
 		}
 
 		summary = summaryAttempt.Summary

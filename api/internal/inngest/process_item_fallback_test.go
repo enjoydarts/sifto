@@ -1,10 +1,6 @@
 package inngest
 
-import (
-	"testing"
-
-	inngesterrors "github.com/inngest/inngestgo/errors"
-)
+import "testing"
 
 func TestIsTransientLLMWorkerError(t *testing.T) {
 	tests := []struct {
@@ -69,32 +65,6 @@ func TestCanUseLLMFallback(t *testing.T) {
 	for _, tt := range tests {
 		if got := canUseLLMFallback(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
 			t.Fatalf("%s: canUseLLMFallback(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
-		}
-	}
-}
-
-func TestStopInngestRetriesForFallback(t *testing.T) {
-	primaryModel := strptr("openrouter::google/gemini-2.5-flash")
-	fallbackModel := strptr("openrouter::openai/gpt-oss-120b")
-	retryableErr := assertErr("worker /summarize: status 500 detail=summarize failed: openrouter chat.completions failed status=429")
-	nonRetryableErr := assertErr("model missing required capability for summary")
-
-	tests := []struct {
-		name          string
-		primaryModel  *string
-		fallbackModel *string
-		err           error
-		wantNoRetry   bool
-	}{
-		{name: "retryable error with fallback stops step retries", primaryModel: primaryModel, fallbackModel: fallbackModel, err: retryableErr, wantNoRetry: true},
-		{name: "retryable error without fallback keeps step retries", primaryModel: primaryModel, err: retryableErr, wantNoRetry: false},
-		{name: "same fallback keeps step retries", primaryModel: primaryModel, fallbackModel: primaryModel, err: retryableErr, wantNoRetry: false},
-		{name: "non retryable error keeps step retries", primaryModel: primaryModel, fallbackModel: fallbackModel, err: nonRetryableErr, wantNoRetry: false},
-	}
-	for _, tt := range tests {
-		got := stopInngestRetriesForFallback(tt.primaryModel, tt.fallbackModel, tt.err)
-		if isNoRetry := inngesterrors.IsNoRetryError(got); isNoRetry != tt.wantNoRetry {
-			t.Fatalf("%s: IsNoRetryError() = %v, want %v", tt.name, isNoRetry, tt.wantNoRetry)
 		}
 	}
 }

@@ -27,14 +27,20 @@ type llmCheckConfig[T any] struct {
 	onExecutionError func(err error) *T
 }
 
+type llmCheckAttemptResult[T any] struct {
+	Result         *T
+	Runtime        *llmRuntime
+	PrimaryFailure *llmPrimaryFailure
+}
+
 func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCheckConfig[T]) (*T, bool, error) {
 	stepName := cfg.baseStepName
 	if cfg.attempt > 0 {
 		stepName = fmt.Sprintf("%s-%d", cfg.baseStepName, cfg.attempt+1)
 	}
 
-	var primaryRuntime *llmRuntime
-	result, err := step.Run(ctx, stepName, func(ctx context.Context) (*T, error) {
+	var attemptRuntime *llmRuntime
+	attemptResult, err := step.Run(ctx, stepName, func(ctx context.Context) (*llmCheckAttemptResult[T], error) {
 		runtime := cfg.defaultRuntime
 		if chooseModelOverride(cfg.modelOverride, nil) != nil {
 			resolved, resolveErr := resolveLLMRuntime(ctx, deps.keyProvider, cfg.userID, cfg.modelOverride, cfg.resolvePurpose)
@@ -43,52 +49,49 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 			}
 			runtime = resolved
 		}
-		primaryRuntime = runtime
+		attemptRuntime = runtime
 		resp, callErr := cfg.call(runtime)
 		if callErr != nil {
-			return nil, stopInngestRetriesForFallback(runtime.Model, cfg.fallbackModel, callErr)
+			if !canUseLLMFallback(runtime.Model, cfg.fallbackModel, callErr) {
+				return nil, callErr
+			}
+			primaryFailure := &llmPrimaryFailure{Model: runtime.Model, Message: callErr.Error()}
+			log.Printf("process-item %s fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s err=%v", cfg.purpose, ptrStringValue(cfg.itemID), cfg.attempt+1, ptrStringValue(runtime.Model), ptrStringValue(cfg.fallbackModel), callErr)
+			fallbackRuntime, resolveErr := resolveLLMRuntime(ctx, deps.keyProvider, cfg.userID, cfg.fallbackModel, cfg.resolvePurpose)
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			attemptRuntime = fallbackRuntime
+			resp, callErr = cfg.call(fallbackRuntime)
+			if callErr != nil {
+				return nil, callErr
+			}
+			if resp == nil {
+				return nil, fmt.Errorf("%s fallback returned nil response", cfg.purpose)
+			}
+			recordLLMUsage(ctx, deps.llmUsageRepo, cfg.purpose, cfg.getLLM(resp), cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
+			return &llmCheckAttemptResult[T]{Result: resp, Runtime: fallbackRuntime, PrimaryFailure: primaryFailure}, nil
 		}
 		if resp == nil {
 			return nil, fmt.Errorf("%s returned nil response", cfg.purpose)
 		}
 		recordLLMUsage(ctx, deps.llmUsageRepo, cfg.purpose, cfg.getLLM(resp), cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
-		return resp, nil
+		return &llmCheckAttemptResult[T]{Result: resp, Runtime: runtime}, nil
 	})
 	if err != nil {
-		failedModel := executionFailedModel(primaryRuntime, cfg.modelOverride)
+		failedModel := executionFailedModel(attemptRuntime, cfg.modelOverride)
 		if failedModel == nil && cfg.defaultRuntime != nil {
 			failedModel = cfg.defaultRuntime.Model
 		}
 		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, failedModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, err)
-		if canUseLLMFallback(failedModel, cfg.fallbackModel, err) {
-			fallbackStepName := stepName + "-fallback"
-			log.Printf("process-item %s fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s err=%v", cfg.purpose, ptrStringValue(cfg.itemID), cfg.attempt+1, ptrStringValue(failedModel), ptrStringValue(cfg.fallbackModel), err)
-			fallbackResult, fallbackErr := step.Run(ctx, fallbackStepName, func(ctx context.Context) (*T, error) {
-				runtime, resolveErr := resolveLLMRuntime(ctx, deps.keyProvider, cfg.userID, cfg.fallbackModel, cfg.resolvePurpose)
-				if resolveErr != nil {
-					return nil, resolveErr
-				}
-				resp, callErr := cfg.call(runtime)
-				if callErr != nil {
-					return nil, callErr
-				}
-				if resp == nil {
-					return nil, fmt.Errorf("%s fallback returned nil response", cfg.purpose)
-				}
-				recordLLMUsage(ctx, deps.llmUsageRepo, cfg.purpose, cfg.getLLM(resp), cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
-				return resp, nil
-			})
-			if fallbackErr == nil {
-				recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, cfg.purpose, cfg.getLLM(fallbackResult), cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
-				return fallbackResult, strings.EqualFold(strings.TrimSpace(cfg.getVerdict(fallbackResult)), "fail"), nil
-			}
-			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, cfg.fallbackModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, fallbackErr)
-			err = fallbackErr
-		}
 		if cfg.onExecutionError != nil {
 			return cfg.onExecutionError(err), false, nil
 		}
 		return nil, false, err
+	}
+	result := attemptResult.Result
+	if attemptResult.PrimaryFailure != nil {
+		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, attemptResult.PrimaryFailure.Model, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, fmt.Errorf("%s", attemptResult.PrimaryFailure.Message))
 	}
 
 	recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, cfg.purpose, cfg.getLLM(result), cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)

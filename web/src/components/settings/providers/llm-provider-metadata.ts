@@ -42,7 +42,7 @@ export function inferProviderLabelFromModelID(modelID: string, t: Translate): st
   if (modelID.startsWith("minimax::") || modelID.startsWith("minimax/")) {
     return t("settings.modelGuide.provider.minimax", "MiniMax");
   }
-  if (modelID.startsWith("mimo-v2-")) {
+  if (modelID.startsWith("mimo-v2-") || modelID.startsWith("mimo-v2.")) {
     return t("settings.modelGuide.provider.xiaomi_mimo_token_plan", "Xiaomi MiMo (TokenPlan)");
   }
   if (modelID.startsWith("together::")) {

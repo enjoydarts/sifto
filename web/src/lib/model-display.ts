@@ -64,6 +64,10 @@ export function formatModelDisplayName(model: string): string {
         ? model.slice("deepinfra/".length)
       : model;
   switch (raw) {
+    case "mimo-v2.6-pro":
+      return "MiMo-V2.6-Pro";
+    case "mimo-v2.6-flash":
+      return "MiMo-V2.6-Flash";
     case "mimo-v2-pro":
       return "MiMo-V2-Pro";
     case "mimo-v2-omni":

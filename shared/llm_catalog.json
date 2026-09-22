@@ -206,6 +206,8 @@
       "id": "xiaomi_mimo_token_plan",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
+        "mimo-v2.6-pro",
+        "mimo-v2.6-flash",
         "mimo-v2.5",
         "mimo-v2.5-pro",
         "mimo-v2-pro",
@@ -3047,6 +3049,74 @@
         "pricing_source": "plamo_manual_jpy_2026_06_usd150",
         "input_per_mtok_usd": 0.4,
         "output_per_mtok_usd": 1.6667
+      }
+    },
+    {
+      "id": "mimo-v2.6-pro",
+      "provider": "xiaomi_mimo_token_plan",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": [
+        "multimodal",
+        "openaiCompat",
+        "reasoning",
+        "long-context"
+      ],
+      "comment": "Xiaomi MiMo (TokenPlan) の 2.6 系フラッグシップモデル。1M context とネイティブマルチモーダル、深い推論を活かし、複雑な要約、ダイジェスト、質問応答に使う候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xiaomi_mimo_token_plan_subscription_2026_09",
+        "input_per_mtok_usd": 0,
+        "output_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "provider": "xiaomi_mimo_token_plan",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": [
+        "multimodal",
+        "openaiCompat",
+        "reasoning",
+        "long-context"
+      ],
+      "comment": "Xiaomi MiMo (TokenPlan) の 2.6 系高速モデル。1M context とネイティブマルチモーダルに対応し、速度を重視する事実抽出や要約、ソース提案に使う候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xiaomi_mimo_token_plan_subscription_2026_09",
+        "input_per_mtok_usd": 0,
+        "output_per_mtok_usd": 0
       }
     },
     {

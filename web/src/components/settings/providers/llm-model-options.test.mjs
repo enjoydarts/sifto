@@ -86,6 +86,14 @@ test("buildOptionsForChatModel marks featherless unavailable and removed entries
   assert.equal(options[1].badge, "Removed");
 });
 
+test("buildOptionsForChatModel identifies a missing MiMo V2.6 model as Xiaomi TokenPlan", () => {
+  const [option] = buildOptionsForChatModel(null, "mimo-v2.6-pro", t);
+
+  assert.equal(option.provider, "Xiaomi MiMo (TokenPlan)");
+  assert.equal(option.label, "MiMo-V2.6-Pro");
+  assert.equal(option.selectedLabel, "Xiaomi MiMo (TokenPlan) / MiMo-V2.6-Pro");
+});
+
 test("buildOptionsForPurpose formats DeepInfra entries with provider label and pricing", () => {
   const catalog = {
     chat_models: [

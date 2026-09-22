@@ -6,6 +6,8 @@ import { formatModelDisplayName, providerLabel } from "./model-display.ts";
 test("formatModelDisplayName formats Xiaomi MiMo models with branded casing", () => {
   assert.equal(formatModelDisplayName("mimo-v2-pro"), "MiMo-V2-Pro");
   assert.equal(formatModelDisplayName("mimo-v2-omni"), "MiMo-V2-Omni");
+  assert.equal(formatModelDisplayName("mimo-v2.6-pro"), "MiMo-V2.6-Pro");
+  assert.equal(formatModelDisplayName("mimo-v2.6-flash"), "MiMo-V2.6-Flash");
 });
 
 test("providerLabel formats Xiaomi MiMo TokenPlan provider label consistently", () => {

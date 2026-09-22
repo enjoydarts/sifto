@@ -24,6 +24,8 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("minimax", "MiniMax-M3"),
     ("plamo", "plamo-3.0-prime"),
     ("xiaomi_mimo_token_plan", "mimo-v2-pro"),
+    ("xiaomi_mimo_token_plan", "mimo-v2.6-pro"),
+    ("xiaomi_mimo_token_plan", "mimo-v2.6-flash"),
     ("moonshot", "kimi-k3"),
     ("xai", "grok-4"),
     ("xai", "grok-4.5"),

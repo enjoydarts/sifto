@@ -235,6 +235,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("mimo-v2.5-pro"); got == nil {
 		t.Fatal("mimo-v2.5-pro not found in catalog")
 	}
+	if got := findModelCatalog("mimo-v2.6-pro"); got == nil {
+		t.Fatal("mimo-v2.6-pro not found in catalog")
+	}
+	if got := findModelCatalog("mimo-v2.6-flash"); got == nil {
+		t.Fatal("mimo-v2.6-flash not found in catalog")
+	}
 	if got := findModelCatalog("mimo-v2-omni"); got == nil {
 		t.Fatal("mimo-v2-omni not found in catalog")
 	}
@@ -357,6 +363,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "mimo-v2-pro", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2.5", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2.5-pro", provider: "xiaomi_mimo_token_plan"},
+		{model: "mimo-v2.6-pro", provider: "xiaomi_mimo_token_plan"},
+		{model: "mimo-v2.6-flash", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2-omni", provider: "xiaomi_mimo_token_plan"},
 		{model: TogetherAliasModelID("google/gemma-4-31B-it"), provider: "together"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.6"), provider: "together"},

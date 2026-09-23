@@ -66,6 +66,7 @@ type createItemBulkJobResponse struct {
 	Status       string `json:"status"`
 	JobID        string `json:"job_id"`
 	MatchedCount int    `json:"matched_count"`
+	Reused       bool   `json:"reused"`
 }
 
 func validateCreateItemBulkJobRequest(body createItemBulkJobRequest) (repository.ItemBulkJobAction, repository.ItemBulkJobFilters, string) {
@@ -206,16 +207,19 @@ func (h *ItemHandler) CreateBulkJob(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	if err := h.publisher.SendItemBulkJobRunE(r.Context(), job.ID, "manual"); err != nil {
-		http.Error(w, "failed to enqueue bulk job", http.StatusBadGateway)
-		return
+	if !job.Reused {
+		if err := h.publisher.SendItemBulkJobRunE(r.Context(), job.ID, "manual"); err != nil {
+			http.Error(w, "failed to enqueue bulk job", http.StatusBadGateway)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, createItemBulkJobResponse{
-		Status:       "queued",
+		Status:       job.Status,
 		JobID:        job.ID,
 		MatchedCount: job.MatchedCount,
+		Reused:       job.Reused,
 	})
 }
 

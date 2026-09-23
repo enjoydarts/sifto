@@ -2710,6 +2710,7 @@ export const jaDict: Dict = {
   "items.pendingActions.filteredBulkMessage": "現在の表示条件に一致する全ページの記事をバックグラウンド処理に追加します。",
   "items.pendingActions.searchUnsupported": "検索中の全件一括処理はまだ対応していません。",
   "items.pendingActions.bulkJobQueued": "{{count}}件をバックグラウンド処理に追加しました",
+  "items.pendingActions.bulkJobAlreadyRunning": "既存の一括処理を継続しています（対象{{count}}件）",
   "items.read.read": "既読",
   "items.read.unread": "未読",
   "items.read.markRead": "既読にする",

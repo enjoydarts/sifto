@@ -2710,6 +2710,7 @@ export const enDict: Dict = {
   "items.pendingActions.filteredBulkMessage": "All items across every page matching the current filters will be queued for background processing.",
   "items.pendingActions.searchUnsupported": "Bulk actions for search results are not supported yet.",
   "items.pendingActions.bulkJobQueued": "Queued {{count}} items for background processing",
+  "items.pendingActions.bulkJobAlreadyRunning": "Continuing the existing bulk job ({{count}} items)",
   "items.read.read": "Read",
   "items.read.unread": "Unread",
   "items.read.markRead": "Mark read",

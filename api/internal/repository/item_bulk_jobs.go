@@ -36,6 +36,7 @@ type ItemBulkJob struct {
 	ProcessedCount int
 	QueuedCount    int
 	SkippedCount   int
+	Reused         bool
 }
 
 type ItemBulkJobCandidate struct {
@@ -93,18 +94,34 @@ func (r *ItemRepo) CreateItemBulkJob(ctx context.Context, userID string, action 
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID); err != nil {
 		return ItemBulkJob{}, err
 	}
-	var activeJobExists bool
-	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM item_bulk_jobs
-			WHERE user_id = $1 AND status IN ('queued', 'running')
-		)
-	`, userID).Scan(&activeJobExists); err != nil {
-		return ItemBulkJob{}, err
+	var activeJob ItemBulkJob
+	var activeFilterJSON []byte
+	err = tx.QueryRow(ctx, `
+		SELECT id, user_id, action, filters, status, matched_count, processed_count, queued_count, skipped_count
+		FROM item_bulk_jobs
+		WHERE user_id = $1 AND status IN ('queued', 'running')
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID).Scan(
+		&activeJob.ID,
+		&activeJob.UserID,
+		&activeJob.Action,
+		&activeFilterJSON,
+		&activeJob.Status,
+		&activeJob.MatchedCount,
+		&activeJob.ProcessedCount,
+		&activeJob.QueuedCount,
+		&activeJob.SkippedCount,
+	)
+	if err == nil {
+		if len(activeFilterJSON) > 0 {
+			_ = json.Unmarshal(activeFilterJSON, &activeJob.Filters)
+		}
+		activeJob.Reused = true
+		return activeJob, nil
 	}
-	if activeJobExists {
-		return ItemBulkJob{}, ErrConflict
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return ItemBulkJob{}, err
 	}
 
 	var job ItemBulkJob

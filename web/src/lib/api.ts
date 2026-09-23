@@ -684,7 +684,7 @@ export const api = {
       genre?: string;
     };
   }) =>
-    apiFetch<{ status: string; job_id: string; matched_count: number }>("/items/bulk-jobs", {
+    apiFetch<{ status: string; job_id: string; matched_count: number; reused: boolean }>("/items/bulk-jobs", {
       method: "POST",
       body: JSON.stringify(body),
     }),

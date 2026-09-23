@@ -461,7 +461,10 @@ export function useItemsPageData() {
           ...(genre ? { genre } : {}),
         },
       });
-      showToast(t("items.pendingActions.bulkJobQueued").replace("{{count}}", String(result.matched_count)), "success");
+      const messageKey = result.reused
+        ? "items.pendingActions.bulkJobAlreadyRunning"
+        : "items.pendingActions.bulkJobQueued";
+      showToast(t(messageKey).replace("{{count}}", String(result.matched_count)), "success");
       setPendingBulkAction("");
       await queryClient.invalidateQueries({ queryKey: queryKeys.items.feedPrefix });
       await queryClient.invalidateQueries({ queryKey: queryKeys.queues.focus() });

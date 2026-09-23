@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -17,11 +18,12 @@ const (
 )
 
 type ItemBulkJobFilters struct {
-	Status   string `json:"status"`
-	SourceID string `json:"source_id,omitempty"`
-	Topic    string `json:"topic,omitempty"`
-	Genre    string `json:"genre,omitempty"`
-	Query    string `json:"q,omitempty"`
+	Status              string     `json:"status"`
+	SourceID            string     `json:"source_id,omitempty"`
+	Topic               string     `json:"topic,omitempty"`
+	Genre               string     `json:"genre,omitempty"`
+	Query               string     `json:"q,omitempty"`
+	RetryEligibleBefore *time.Time `json:"retry_eligible_before,omitempty"`
 }
 
 type ItemBulkJob struct {
@@ -37,10 +39,14 @@ type ItemBulkJob struct {
 }
 
 type ItemBulkJobCandidate struct {
-	ID       string
-	SourceID string
-	URL      string
+	ID        string
+	SourceID  string
+	URL       string
+	Status    string
+	UpdatedAt time.Time
 }
+
+const itemBulkRetryStaleAfter = 30 * time.Minute
 
 func normalizeItemBulkJobAction(action ItemBulkJobAction) (ItemBulkJobAction, error) {
 	switch action {
@@ -69,6 +75,8 @@ func (r *ItemRepo) CreateItemBulkJob(ctx context.Context, userID string, action 
 	if err := validateItemBulkJobFilters(filters); err != nil {
 		return ItemBulkJob{}, err
 	}
+	retryEligibleBefore := time.Now().UTC().Add(-itemBulkRetryStaleAfter)
+	filters.RetryEligibleBefore = &retryEligibleBefore
 	filterJSON, err := json.Marshal(filters)
 	if err != nil {
 		return ItemBulkJob{}, err
@@ -79,6 +87,25 @@ func (r *ItemRepo) CreateItemBulkJob(ctx context.Context, userID string, action 
 		return ItemBulkJob{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	// Serialize job creation per user so that repeated clicks cannot create
+	// multiple producers which enqueue the same pending items concurrently.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID); err != nil {
+		return ItemBulkJob{}, err
+	}
+	var activeJobExists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM item_bulk_jobs
+			WHERE user_id = $1 AND status IN ('queued', 'running')
+		)
+	`, userID).Scan(&activeJobExists); err != nil {
+		return ItemBulkJob{}, err
+	}
+	if activeJobExists {
+		return ItemBulkJob{}, ErrConflict
+	}
 
 	var job ItemBulkJob
 	err = tx.QueryRow(ctx, `
@@ -106,6 +133,15 @@ func (r *ItemRepo) CreateItemBulkJob(ctx context.Context, userID string, action 
 		params.Genre = &genre
 	}
 	joins, where, args := buildItemListFilterParts(userID, params, true)
+	args = append(args, retryEligibleBefore)
+	retryEligibleBeforeArg := `$` + itoa(len(args))
+	where += ` AND (
+		i.status = 'failed'
+		OR (
+			i.status IN ('new', 'fetched', 'facts_extracted')
+			AND i.updated_at <= ` + retryEligibleBeforeArg + `
+		)
+	)`
 	args = append(args, job.ID)
 	jobIDArg := `$` + itoa(len(args))
 
@@ -196,7 +232,7 @@ func (r *ItemRepo) ClaimItemBulkJobItems(ctx context.Context, jobID string, limi
 			WHERE j.job_id = $1 AND j.item_id = claimed.item_id
 			RETURNING j.item_id
 		)
-		SELECT i.id, i.source_id, i.url
+		SELECT i.id, i.source_id, i.url, i.status, i.updated_at
 		FROM updated u
 		JOIN items i ON i.id = u.item_id
 		ORDER BY u.item_id
@@ -209,7 +245,7 @@ func (r *ItemRepo) ClaimItemBulkJobItems(ctx context.Context, jobID string, limi
 	candidates := make([]ItemBulkJobCandidate, 0)
 	for rows.Next() {
 		var item ItemBulkJobCandidate
-		if err := rows.Scan(&item.ID, &item.SourceID, &item.URL); err != nil {
+		if err := rows.Scan(&item.ID, &item.SourceID, &item.URL, &item.Status, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		candidates = append(candidates, item)
@@ -221,6 +257,20 @@ func (r *ItemRepo) ClaimItemBulkJobItems(ctx context.Context, jobID string, limi
 		return nil, err
 	}
 	return candidates, nil
+}
+
+func ItemBulkJobCandidateEligible(candidate ItemBulkJobCandidate, filters ItemBulkJobFilters, now time.Time) bool {
+	if candidate.Status == "failed" {
+		return true
+	}
+	if candidate.Status != "new" && candidate.Status != "fetched" && candidate.Status != "facts_extracted" {
+		return false
+	}
+	cutoff := now.UTC().Add(-itemBulkRetryStaleAfter)
+	if filters.RetryEligibleBefore != nil && !filters.RetryEligibleBefore.IsZero() {
+		cutoff = filters.RetryEligibleBefore.UTC()
+	}
+	return !candidate.UpdatedAt.After(cutoff)
 }
 
 func (r *ItemRepo) MarkItemBulkJobItemProcessed(ctx context.Context, jobID string, itemID string) error {

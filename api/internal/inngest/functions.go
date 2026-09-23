@@ -1058,9 +1058,9 @@ func feedItemURLs(feed *gofeed.Feed) []string {
 
 func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.JSONCache) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemRepo(db)
-	batchSize := envIntOrDefault("ITEM_BULK_JOB_BATCH_SIZE", 50)
+	batchSize := envIntOrDefault("ITEM_BULK_JOB_BATCH_SIZE", 5)
 	if batchSize <= 0 {
-		batchSize = 50
+		batchSize = 5
 	}
 	if batchSize > 200 {
 		batchSize = 200
@@ -1074,8 +1074,16 @@ func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.J
 			Concurrency: []inngestgo.ConfigStepConcurrency{
 				{
 					Limit: 1,
+				},
+				{
+					Limit: 1,
 					Key:   inngestgo.StrPtr("event.data.job_id"),
 				},
+			},
+			Throttle: &inngestgo.ConfigThrottle{
+				Limit:  1,
+				Period: 30 * time.Second,
+				Burst:  1,
 			},
 		},
 		inngestgo.EventTrigger("item-bulk-job/run", nil),
@@ -1094,6 +1102,10 @@ func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.J
 				return nil, err
 			}
 			for _, candidate := range candidates {
+				if !repository.ItemBulkJobCandidateEligible(candidate, job.Filters, time.Now()) {
+					_ = itemRepo.MarkItemBulkJobItemSkipped(ctx, jobID, candidate.ID, "item is no longer failed or stale")
+					continue
+				}
 				resetItem, err := resetItemForBulkJob(ctx, itemRepo, job, candidate)
 				if err != nil {
 					if !errors.Is(err, repository.ErrConflict) && !errors.Is(err, repository.ErrNotFound) {
@@ -1103,7 +1115,8 @@ func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.J
 					continue
 				}
 				reason := string(job.Action)
-				if _, err := client.Send(ctx, service.NewItemCreatedEvent(resetItem.ID, resetItem.SourceID, resetItem.URL, nil, reason)); err != nil {
+				eventID := fmt.Sprintf("item-bulk-job:%s:item:%s", jobID, resetItem.ID)
+				if _, err := client.Send(ctx, service.NewItemCreatedEventWithID(resetItem.ID, resetItem.SourceID, resetItem.URL, nil, reason, eventID)); err != nil {
 					log.Printf("item bulk job enqueue failed job_id=%s item_id=%s err=%v", jobID, candidate.ID, err)
 					_ = itemRepo.MarkItemBulkJobItemSkipped(ctx, jobID, candidate.ID, err.Error())
 					continue
@@ -1120,7 +1133,8 @@ func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.J
 				return nil, err
 			}
 			if remaining > 0 {
-				if _, err := client.Send(ctx, service.NewItemBulkJobRunEvent(jobID, "continue")); err != nil {
+				continuationEventID := fmt.Sprintf("item-bulk-job:%s:remaining:%d", jobID, remaining)
+				if _, err := client.Send(ctx, service.NewItemBulkJobRunEventWithID(jobID, "continue", continuationEventID)); err != nil {
 					_ = itemRepo.FailItemBulkJob(ctx, jobID, err.Error())
 					return nil, err
 				}
@@ -1177,6 +1191,10 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				{
 					Limit: 5,
 				},
+				{
+					Limit: 1,
+					Key:   inngestgo.StrPtr("event.data.item_id"),
+				},
 			},
 			Throttle: &inngestgo.ConfigThrottle{
 				Limit:  30,
@@ -1196,6 +1214,19 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					userIDPtr = &uid
 				} else {
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
+				}
+			}
+			if userIDPtr != nil && *userIDPtr != "" {
+				currentItem, err := deps.itemViewRepo.GetForRetry(ctx, itemID, *userIDPtr)
+				switch {
+				case errors.Is(err, repository.ErrConflict), errors.Is(err, repository.ErrNotFound):
+					log.Printf("process-item skip unavailable item item_id=%s", itemID)
+					return map[string]any{"item_id": itemID, "status": "skipped", "reason": "item unavailable"}, nil
+				case err != nil:
+					return nil, fmt.Errorf("load item processing state: %w", err)
+				case processItemStatusIsTerminal(currentItem.Status):
+					log.Printf("process-item skip terminal item item_id=%s status=%s", itemID, currentItem.Status)
+					return map[string]any{"item_id": itemID, "status": "skipped", "reason": "already processed"}, nil
 				}
 			}
 			var userModelSettings *model.UserSettings

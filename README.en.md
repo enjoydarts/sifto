@@ -440,6 +440,7 @@ See [.env.example](.env.example) for details. Only the important ones are listed
 | `INNGEST_SIGNING_KEY` | Inngest signing key |
 | `INNGEST_BASE_URL` | Self-host Inngest base URL |
 | `INNGEST_CF_ACCESS_CLIENT_ID` / `INNGEST_CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service token for self-host Inngest |
+| `ITEM_BULK_JOB_BATCH_SIZE` | Pending-item retry batch size (default: `5`) |
 | `USER_SECRET_ENCRYPTION_KEY` | User API key encryption key |
 | `NEXT_PUBLIC_API_URL` | Browser-facing API base URL |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |

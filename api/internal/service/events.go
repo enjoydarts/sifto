@@ -30,6 +30,14 @@ func (p *EventPublisher) SendItemCreatedE(ctx context.Context, itemID, sourceID,
 }
 
 func NewItemCreatedEvent(itemID, sourceID, url string, title *string, reason string) inngestgo.Event {
+	return newItemCreatedEvent(itemID, sourceID, url, title, reason, "")
+}
+
+func NewItemCreatedEventWithID(itemID, sourceID, url string, title *string, reason, eventID string) inngestgo.Event {
+	return newItemCreatedEvent(itemID, sourceID, url, title, reason, eventID)
+}
+
+func newItemCreatedEvent(itemID, sourceID, url string, title *string, reason, eventID string) inngestgo.Event {
 	data := map[string]any{
 		"item_id":    itemID,
 		"source_id":  sourceID,
@@ -40,10 +48,14 @@ func NewItemCreatedEvent(itemID, sourceID, url string, title *string, reason str
 	if title != nil {
 		data["title"] = *title
 	}
-	return inngestgo.Event{
+	event := inngestgo.Event{
 		Name: "item/created",
 		Data: data,
 	}
+	if eventID = strings.TrimSpace(eventID); eventID != "" {
+		event.ID = &eventID
+	}
+	return event
 }
 
 func (p *EventPublisher) SendItemCreatedWithReasonE(ctx context.Context, itemID, sourceID, url string, title *string, reason string) error {
@@ -58,7 +70,11 @@ func (p *EventPublisher) SendItemCreatedWithReasonE(ctx context.Context, itemID,
 }
 
 func NewItemBulkJobRunEvent(jobID, trigger string) inngestgo.Event {
-	return inngestgo.Event{
+	return NewItemBulkJobRunEventWithID(jobID, trigger, "")
+}
+
+func NewItemBulkJobRunEventWithID(jobID, trigger, eventID string) inngestgo.Event {
+	event := inngestgo.Event{
 		Name: "item-bulk-job/run",
 		Data: map[string]any{
 			"job_id":     strings.TrimSpace(jobID),
@@ -66,6 +82,10 @@ func NewItemBulkJobRunEvent(jobID, trigger string) inngestgo.Event {
 			"trigger_id": uuid.NewString(),
 		},
 	}
+	if eventID = strings.TrimSpace(eventID); eventID != "" {
+		event.ID = &eventID
+	}
+	return event
 }
 
 func (p *EventPublisher) SendItemBulkJobRunE(ctx context.Context, jobID, trigger string) error {

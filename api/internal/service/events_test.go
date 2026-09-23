@@ -31,3 +31,19 @@ func TestNewItemCreatedEventIncludesReasonAndTriggerID(t *testing.T) {
 		t.Fatalf("trigger_id = %q, want non-empty", triggerID)
 	}
 }
+
+func TestNewItemCreatedEventWithIDSetsDeduplicationID(t *testing.T) {
+	event := NewItemCreatedEventWithID("item-1", "source-1", "https://example.com/a", nil, "retry", "bulk-job:job-1:item-1")
+
+	if event.ID == nil || *event.ID != "bulk-job:job-1:item-1" {
+		t.Fatalf("event.ID = %v, want bulk job item ID", event.ID)
+	}
+}
+
+func TestNewItemBulkJobRunEventWithIDSetsDeduplicationID(t *testing.T) {
+	event := NewItemBulkJobRunEventWithID("job-1", "continue", "bulk-job:job-1:remaining:5")
+
+	if event.ID == nil || *event.ID != "bulk-job:job-1:remaining:5" {
+		t.Fatalf("event.ID = %v, want continuation ID", event.ID)
+	}
+}

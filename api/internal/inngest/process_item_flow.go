@@ -82,6 +82,10 @@ type processExtractBodyAttemptResult struct {
 	ErrorMessage string                       `json:"error_message,omitempty"`
 }
 
+func processItemStatusIsTerminal(status string) bool {
+	return strings.TrimSpace(status) == "summarized"
+}
+
 func shouldRetryExtractBody(attempt int, err error) bool {
 	if err == nil {
 		return false

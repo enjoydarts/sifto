@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "default_model": "jev-latest",
+  "models": [
+    {
+      "id": "jev-latest",
+      "match_exact": ["jev-latest"],
+      "match_prefix": ["jev-"],
+      "pricing_source": "typesafe_jev_2026_09",
+      "input_per_mtok_usd": 0.042,
+      "output_per_mtok_usd": 0.0
+    }
+  ],
+  "gate_policy": {
+    "version": "jev-quality-gate-v1",
+    "aggregate_threshold": 0.9,
+    "minimum_dimension_score": 0.8,
+    "minimum_confidence": 0.9,
+    "critical_dimension_score": 0.9
+  }
+}

@@ -5,6 +5,13 @@ from app.services.openai_service import _p
 
 
 class OpenAIServiceModelBehaviorTests(unittest.TestCase):
+    def test_gpt_6_sol_and_luna_use_responses_api_without_sampling_parameters(self):
+        for model in ("gpt-6-sol", "gpt-6-luna"):
+            with self.subTest(model=model):
+                self.assertTrue(_p._should_use_responses_api(model))
+                self.assertFalse(_p._supports_custom_temperature(model))
+                self.assertEqual(_p._responses_reasoning(model), {"effort": "none"})
+
     def test_gpt_6_astra_uses_responses_api_without_sampling_parameters(self):
         self.assertTrue(_p._should_use_responses_api("gpt-6-astra"))
         self.assertFalse(_p._supports_custom_temperature("gpt-6-astra"))

@@ -9,6 +9,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("anthropic", "claude-fable-5"),
     ("anthropic", "claude-fable-5-1"),
     ("anthropic", "claude-opus-5"),
+    ("anthropic", "claude-opus-5-5"),
     ("anthropic", "claude-opus-4-8"),
     ("google", "gemini-3.1-flash-lite"),
     ("google", "gemini-3.8-flash"),
@@ -49,6 +50,8 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("siliconflow", "siliconflow::zai-org/GLM-5.2"),
     ("siliconflow", "siliconflow::zai-org/GLM-5.3-Flash"),
     ("openai", "gpt-6-astra"),
+    ("openai", "gpt-6-sol"),
+    ("openai", "gpt-6-luna"),
     ("openai", "gpt-5.6-luna"),
 )
 

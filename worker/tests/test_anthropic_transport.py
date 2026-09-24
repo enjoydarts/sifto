@@ -6,6 +6,25 @@ from app.services.anthropic_transport import message_text, messages_create, mess
 
 
 class AnthropicTransportTests(unittest.TestCase):
+    @patch("app.services.anthropic_transport.client_for_api_key")
+    def test_messages_create_omits_sampling_parameters_for_opus_5_5(self, client_for_api_key):
+        client = type("Client", (), {})()
+        client.messages = type("Messages", (), {})()
+        client.messages.create = Mock(return_value=object())
+        client_for_api_key.return_value = client
+
+        messages_create(
+            "prompt",
+            "claude-opus-5-5",
+            api_key="anthropic-key",
+            temperature=0.2,
+            top_p=0.8,
+        )
+
+        kwargs = client.messages.create.call_args.kwargs
+        self.assertNotIn("temperature", kwargs)
+        self.assertNotIn("top_p", kwargs)
+
     def test_message_text_skips_thinking_blocks(self):
         message = type(
             "Message",

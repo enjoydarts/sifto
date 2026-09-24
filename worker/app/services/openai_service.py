@@ -17,16 +17,18 @@ from .task_transport_common import wrap_usage_transport
 class _OpenAIProvider(OpenAICompatProvider):
     def _should_use_responses_api(self, model: str) -> bool:
         family = self._normalize_model_family(model)
-        return family == "gpt-6-astra" or family.startswith("gpt-5")
+        return family.startswith("gpt-6") or family.startswith("gpt-5")
 
     def _supports_custom_temperature(self, model: str) -> bool:
         family = self._normalize_model_family(model)
-        return family != "gpt-6-astra" and not family.startswith("gpt-5")
+        return not family.startswith("gpt-6") and not family.startswith("gpt-5")
 
     def _responses_reasoning(self, model: str) -> dict | None:
         family = self._normalize_model_family(model)
         if family == "gpt-6-astra":
             return {"effort": "low"}
+        if family.startswith("gpt-6"):
+            return {"effort": "none"}
         if not family.startswith("gpt-5"):
             return None
         if family.endswith("-pro"):
@@ -143,7 +145,7 @@ _config = ProviderConfig(
     default_model="gpt-5",
     default_translate_model="gpt-5-mini",
     model_families=[
-        "gpt-6-astra",
+        "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
         "gpt-5.5-pro", "gpt-5.5", "gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2",
         "gpt-5.1", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5",
     ],

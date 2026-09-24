@@ -83,6 +83,12 @@ _ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_04"
 
 _LEGACY_MODEL_PRICING = {
     # USD per 1M tokens (Claude API pricing); cache write assumes 5m cache.
+    "claude-opus-5-5": {
+        "input_per_mtok_usd": 4.0,
+        "output_per_mtok_usd": 20.0,
+        "cache_write_per_mtok_usd": 5.0,
+        "cache_read_per_mtok_usd": 0.20,
+    },
     "claude-fable-5-1": {
         "input_per_mtok_usd": 10.0,
         "output_per_mtok_usd": 50.0,

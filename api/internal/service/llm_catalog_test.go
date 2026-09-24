@@ -19,6 +19,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-6-astra"); got == nil {
 		t.Fatal("gpt-6-astra not found in catalog")
 	}
+	if got := findModelCatalog("gpt-6-sol"); got == nil {
+		t.Fatal("gpt-6-sol not found in catalog")
+	}
+	if got := findModelCatalog("gpt-6-luna"); got == nil {
+		t.Fatal("gpt-6-luna not found in catalog")
+	}
 	if got := findModelCatalog("gpt-5.5"); got == nil {
 		t.Fatal("gpt-5.5 not found in catalog")
 	}
@@ -105,6 +111,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	}
 	if got := findModelCatalog("claude-opus-5"); got == nil {
 		t.Fatal("claude-opus-5 not found in catalog")
+	}
+	if got := findModelCatalog("claude-opus-5-5"); got == nil {
+		t.Fatal("claude-opus-5-5 not found in catalog")
 	}
 	if got := findModelCatalog("claude-sonnet-5"); got == nil {
 		t.Fatal("claude-sonnet-5 not found in catalog")
@@ -314,6 +323,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "claude-opus-4-8", provider: "anthropic"},
 		{model: "claude-opus-5", provider: "anthropic"},
+		{model: "claude-opus-5-5", provider: "anthropic"},
 		{model: "claude-sonnet-5", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-3.8-flash", provider: "google"},
@@ -392,6 +402,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("MiniMaxAI/MiniMax-M3"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "gpt-6-astra", provider: "openai"},
+		{model: "gpt-6-sol", provider: "openai"},
+		{model: "gpt-6-luna", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
 		{model: "gpt-5.6-sol", provider: "openai"},
 		{model: "gpt-5.6-terra", provider: "openai"},
@@ -593,6 +605,33 @@ func TestLLMCatalogClaudeOpus5Pricing(t *testing.T) {
 	}
 	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.5; got != want {
 		t.Fatalf("claude-opus-5 cache_read_per_mtok_usd = %v, want %v", got, want)
+	}
+}
+
+func TestLLMCatalogNewModelPricing(t *testing.T) {
+	tests := []struct {
+		model      string
+		input      float64
+		output     float64
+		cacheWrite float64
+		cacheRead  float64
+	}{
+		{model: "gpt-6-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
+		{model: "gpt-6-luna", input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01},
+		{model: "claude-opus-5-5", input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			item := findModelCatalog(tt.model)
+			if item == nil || item.Pricing == nil {
+				t.Fatalf("%s pricing not found in catalog", tt.model)
+			}
+			if item.Pricing.InputPerMTokUSD != tt.input || item.Pricing.OutputPerMTokUSD != tt.output ||
+				item.Pricing.CacheWritePerMTokUSD != tt.cacheWrite || item.Pricing.CacheReadPerMTokUSD != tt.cacheRead {
+				t.Fatalf("%s pricing = %#v", tt.model, item.Pricing)
+			}
+		})
 	}
 }
 

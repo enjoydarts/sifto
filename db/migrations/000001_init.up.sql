@@ -28,7 +28,7 @@ CREATE TABLE sources (
 CREATE TABLE items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
+  url TEXT UNIQUE NOT NULL,
   title TEXT,
   content_text TEXT,
   status TEXT NOT NULL DEFAULT 'new'
@@ -36,8 +36,7 @@ CREATE TABLE items (
   published_at TIMESTAMPTZ,
   fetched_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(source_id, url)
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 事実抽出結果

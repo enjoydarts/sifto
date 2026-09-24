@@ -20,14 +20,22 @@ func testItemQualityEvaluationRepoDB(t *testing.T) *pgxpool.Pool {
 func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	ctx := context.Background()
 	pool := testItemQualityEvaluationRepoDB(t)
+	const userID = "00000000-0000-4000-8000-000000000160"
+	const sourceID = "00000000-0000-4000-8000-000000000161"
 	const itemID = "00000000-0000-4000-8000-000000000162"
-	if _, err := pool.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID); err != nil {
-		t.Fatalf("clean item: %v", err)
+	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("clean user: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO items (id) VALUES ($1)`, itemID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email) VALUES ($1, 'jev-quality-repo@example.com')`, userID); err != nil {
+		t.Fatalf("prepare user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO sources (id, user_id, url, type) VALUES ($1, $2, 'https://example.com/feed', 'rss')`, sourceID, userID); err != nil {
+		t.Fatalf("prepare source: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO items (id, source_id, url) VALUES ($1, $2, 'https://example.com/item')`, itemID, sourceID); err != nil {
 		t.Fatalf("prepare item: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM items WHERE id = $1`, itemID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID) })
 
 	repo := NewItemQualityEvaluationRepo(pool)
 	base := ItemQualityEvaluationInput{

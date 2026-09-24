@@ -114,7 +114,7 @@ func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 	input := repository.ItemQualityEvaluationInput{
 		ItemID: ptrStringValue(config.ItemID), Kind: config.Kind, AttemptIndex: config.Attempt, Provider: "jev",
 		RequestedModel: deps.jevCatalog.DefaultModel, Model: deps.jevCatalog.DefaultModel,
-		Dimensions: map[string]service.JevDimension{},
+		Dimensions:       map[string]service.JevDimension{},
 		QualityThreshold: policy.AggregateThreshold, ConfidenceThreshold: policy.MinimumConfidence,
 		GatePolicyVersion: policy.Version, Decision: string(result.Gate.Decision),
 	}

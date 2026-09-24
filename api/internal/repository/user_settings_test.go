@@ -59,6 +59,12 @@ func lockUserSettingsRepoTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS faithfulness_check_fallback_model text`); err != nil {
 		t.Fatalf("ensure user_settings.faithfulness_check_fallback_model: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS jev_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.jev_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS jev_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.jev_api_key_last4: %v", err)
+	}
 }
 
 func TestUserSettingsRepoSetAndClearMiniMaxAPIKey(t *testing.T) {
@@ -103,6 +109,33 @@ func TestUserSettingsRepoSetAndClearMiniMaxAPIKey(t *testing.T) {
 	}
 	if enc != nil {
 		t.Fatalf("encrypted key after clear = %#v, want nil", enc)
+	}
+}
+
+func TestUserSettingsRepoSetAndClearJevAPIKey(t *testing.T) {
+	ctx := context.Background()
+	pool := testUserSettingsRepoDB(t)
+	userID := "00000000-0000-4000-8000-000000000041"
+	repo := NewUserSettingsRepo(pool)
+
+	settings, err := repo.SetJevAPIKey(ctx, userID, "encrypted-jev-key", "1234")
+	if err != nil {
+		t.Fatalf("SetJevAPIKey() error = %v", err)
+	}
+	if !settings.HasJevAPIKey || settings.JevAPIKeyLast4 == nil || *settings.JevAPIKeyLast4 != "1234" {
+		t.Fatalf("Jev key state = has:%v last4:%v", settings.HasJevAPIKey, settings.JevAPIKeyLast4)
+	}
+	enc, err := repo.GetJevAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc != "encrypted-jev-key" {
+		t.Fatalf("GetJevAPIKeyEncrypted() = %v, %v", enc, err)
+	}
+
+	settings, err = repo.ClearJevAPIKey(ctx, userID)
+	if err != nil {
+		t.Fatalf("ClearJevAPIKey() error = %v", err)
+	}
+	if settings.HasJevAPIKey || settings.JevAPIKeyLast4 != nil {
+		t.Fatalf("cleared Jev key state = %#v", settings)
 	}
 }
 

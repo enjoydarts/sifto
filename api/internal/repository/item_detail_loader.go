@@ -102,6 +102,11 @@ func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *m
 			detail.FactsCheckLLM = llm
 		}
 	}
+	if quality, qualityErr := NewItemQualityEvaluationRepo(r.db).LoadLatestByKind(ctx, itemID, "facts"); qualityErr == nil {
+		detail.FactsQuality = quality
+	} else {
+		log.Printf("item detail facts quality evaluation load failed item_id=%s err=%v", itemID, qualityErr)
+	}
 	return nil
 }
 
@@ -127,6 +132,11 @@ func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail 
 		if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "faithfulness_check"); llmErr == nil {
 			detail.FaithfulnessLLM = llm
 		}
+	}
+	if quality, qualityErr := NewItemQualityEvaluationRepo(r.db).LoadLatestByKind(ctx, itemID, "faithfulness"); qualityErr == nil {
+		detail.FaithfulnessQuality = quality
+	} else {
+		log.Printf("item detail faithfulness quality evaluation load failed item_id=%s err=%v", itemID, qualityErr)
 	}
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"strings"
@@ -153,8 +152,7 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("Jev HTTP status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("Jev HTTP status=%d", resp.StatusCode)
 	}
 	var decoded struct {
 		Model   string `json:"model"`
@@ -175,6 +173,11 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	}
 	if strings.TrimSpace(decoded.Model) == "" || len(decoded.Answers) != len(questions) {
 		return nil, fmt.Errorf("invalid Jev response")
+	}
+	for name := range questions {
+		if _, ok := decoded.Answers[name]; !ok {
+			return nil, fmt.Errorf("missing Jev answer %s", name)
+		}
 	}
 	dimensions := make(map[string]JevDimension, len(decoded.Answers))
 	for name, answer := range decoded.Answers {

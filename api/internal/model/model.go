@@ -76,6 +76,8 @@ type UserSettings struct {
 	HasElevenLabsAPIKey              bool       `json:"has_elevenlabs_api_key"`
 	CartesiaAPIKeyLast4              *string    `json:"cartesia_api_key_last4,omitempty"`
 	HasCartesiaAPIKey                bool       `json:"has_cartesia_api_key"`
+	JevAPIKeyLast4                   *string    `json:"jev_api_key_last4,omitempty"`
+	HasJevAPIKey                     bool       `json:"has_jev_api_key"`
 	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
 	PodcastEnabled                   bool       `json:"podcast_enabled"`
 	PodcastFeedSlug                  *string    `json:"podcast_feed_slug,omitempty"`
@@ -645,19 +647,55 @@ type PersonalScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	Facts             *ItemFacts                `json:"facts,omitempty"`
-	FactsLLM          *ItemSummaryLLM           `json:"facts_llm,omitempty"`
-	FactsExecutions   []ItemLLMExecutionAttempt `json:"facts_executions,omitempty"`
-	FactsCheck        *FactsCheck               `json:"facts_check,omitempty"`
-	FactsCheckLLM     *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
-	Summary           *ItemSummary              `json:"summary,omitempty"`
-	SummaryLLM        *ItemSummaryLLM           `json:"summary_llm,omitempty"`
-	SummaryExecutions []ItemLLMExecutionAttempt `json:"summary_executions,omitempty"`
-	Faithfulness      *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
-	FaithfulnessLLM   *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
-	Feedback          *ItemFeedback             `json:"feedback,omitempty"`
-	Note              *ItemNote                 `json:"note,omitempty"`
-	Highlights        []ItemHighlight           `json:"highlights,omitempty"`
+	Facts               *ItemFacts                `json:"facts,omitempty"`
+	FactsLLM            *ItemSummaryLLM           `json:"facts_llm,omitempty"`
+	FactsExecutions     []ItemLLMExecutionAttempt `json:"facts_executions,omitempty"`
+	FactsCheck          *FactsCheck               `json:"facts_check,omitempty"`
+	FactsCheckLLM       *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
+	FactsQuality        *ItemQualityEvaluation    `json:"facts_quality_evaluation,omitempty"`
+	Summary             *ItemSummary              `json:"summary,omitempty"`
+	SummaryLLM          *ItemSummaryLLM           `json:"summary_llm,omitempty"`
+	SummaryExecutions   []ItemLLMExecutionAttempt `json:"summary_executions,omitempty"`
+	Faithfulness        *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
+	FaithfulnessLLM     *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
+	FaithfulnessQuality *ItemQualityEvaluation    `json:"faithfulness_quality_evaluation,omitempty"`
+	Feedback            *ItemFeedback             `json:"feedback,omitempty"`
+	Note                *ItemNote                 `json:"note,omitempty"`
+	Highlights          []ItemHighlight           `json:"highlights,omitempty"`
+}
+
+type ItemQualityDimension struct {
+	Score         float64            `json:"score"`
+	RawScore      float64            `json:"raw_score"`
+	Confidence    float64            `json:"confidence"`
+	Legend        map[string]any     `json:"legend,omitempty"`
+	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+}
+
+type ItemQualityEvaluation struct {
+	ID                  string                          `json:"id"`
+	ItemID              string                          `json:"item_id"`
+	Kind                string                          `json:"kind"`
+	AttemptIndex        int                             `json:"attempt_index"`
+	Provider            string                          `json:"provider"`
+	RequestedModel      string                          `json:"requested_model"`
+	Model               string                          `json:"model"`
+	Dimensions          map[string]ItemQualityDimension `json:"dimensions"`
+	AggregateScore      float64                         `json:"aggregate_score"`
+	MinimumScore        float64                         `json:"minimum_score"`
+	MinimumConfidence   float64                         `json:"minimum_confidence"`
+	QualityThreshold    float64                         `json:"quality_threshold"`
+	ConfidenceThreshold float64                         `json:"confidence_threshold"`
+	GatePolicyVersion   string                          `json:"gate_policy_version"`
+	Decision            string                          `json:"decision"`
+	EscalationReason    *string                         `json:"escalation_reason,omitempty"`
+	ReasonDetail        *string                         `json:"reason_detail,omitempty"`
+	InputTokens         int                             `json:"input_tokens"`
+	OutputTokens        int                             `json:"output_tokens"`
+	EstimatedCostUSD    float64                         `json:"estimated_cost_usd"`
+	LatencyMS           int64                           `json:"latency_ms"`
+	CreatedAt           time.Time                       `json:"created_at"`
+	UpdatedAt           time.Time                       `json:"updated_at"`
 }
 
 type ItemFeedback struct {

@@ -41,7 +41,10 @@ type processItemDeps struct {
 	pushLogRepo        *repository.PushNotificationLogRepo
 	notificationRepo   *repository.NotificationPriorityRepo
 	readingGoalRepo    *repository.ReadingGoalRepo
+	qualityRepo        *repository.ItemQualityEvaluationRepo
 	worker             *service.WorkerClient
+	jev                *service.JevClient
+	jevCatalog         service.JevCatalog
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
 	publisher          *service.EventPublisher
@@ -557,43 +560,49 @@ func extractAndPersistFacts(
 			factsCheckModel = ptrStringOrNil(userModelSettings.FactsCheckModel)
 			factsCheckFallbackModel = ptrStringOrNil(userModelSettings.FactsCheckFallbackModel)
 		}
-		factsCheck, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.FactsCheckResponse]{
-			baseStepName:   "check-facts",
-			purpose:        "facts_check",
-			resolvePurpose: "facts",
-			attempt:        attempt,
-			userID:         userIDPtr,
-			sourceID:       &data.SourceID,
-			itemID:         &itemID,
-			modelOverride:  factsCheckModel,
-			fallbackModel:  factsCheckFallbackModel,
-			defaultRuntime: factsAttempt.Runtime,
-			call: func(runtime *llmRuntime) (*service.FactsCheckResponse, error) {
-				workerCtx := service.WithWorkerTraceMetadata(ctx, "facts_check", userIDPtr, &data.SourceID, &itemID, nil)
-				return deps.worker.CheckFactsWithModel(
-					workerCtx,
-					titleForLLM,
-					content,
-					factsResp.Facts,
-					runtime.AnthropicKey,
-					runtime.GoogleKey,
-					runtime.GroqKey,
-					runtime.DeepSeekKey,
-					runtime.AlibabaKey,
-					runtime.MistralKey,
-					runtime.XAIKey,
-					runtime.ZAIKey,
-					runtime.FireworksKey,
-					runtime.OpenAIKey,
-					runtime.Model,
-				)
-			},
-			getLLM:     func(result *service.FactsCheckResponse) *service.LLMUsage { return result.LLM },
-			getVerdict: func(result *service.FactsCheckResponse) string { return result.Verdict },
-			onExecutionError: func(err error) *service.FactsCheckResponse {
-				return fallbackFactsCheckWarning(err)
-			},
-		})
+		var factsCheck *service.FactsCheckResponse
+		var shouldRetry bool
+		if executeJevFactsPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts) {
+			factsCheck = &service.FactsCheckResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
+		} else {
+			factsCheck, shouldRetry, err = executeLLMCheck(ctx, deps, llmCheckConfig[service.FactsCheckResponse]{
+				baseStepName:   "check-facts",
+				purpose:        "facts_check",
+				resolvePurpose: "facts",
+				attempt:        attempt,
+				userID:         userIDPtr,
+				sourceID:       &data.SourceID,
+				itemID:         &itemID,
+				modelOverride:  factsCheckModel,
+				fallbackModel:  factsCheckFallbackModel,
+				defaultRuntime: factsAttempt.Runtime,
+				call: func(runtime *llmRuntime) (*service.FactsCheckResponse, error) {
+					workerCtx := service.WithWorkerTraceMetadata(ctx, "facts_check", userIDPtr, &data.SourceID, &itemID, nil)
+					return deps.worker.CheckFactsWithModel(
+						workerCtx,
+						titleForLLM,
+						content,
+						factsResp.Facts,
+						runtime.AnthropicKey,
+						runtime.GoogleKey,
+						runtime.GroqKey,
+						runtime.DeepSeekKey,
+						runtime.AlibabaKey,
+						runtime.MistralKey,
+						runtime.XAIKey,
+						runtime.ZAIKey,
+						runtime.FireworksKey,
+						runtime.OpenAIKey,
+						runtime.Model,
+					)
+				},
+				getLLM:     func(result *service.FactsCheckResponse) *service.LLMUsage { return result.LLM },
+				getVerdict: func(result *service.FactsCheckResponse) string { return result.Verdict },
+				onExecutionError: func(err error) *service.FactsCheckResponse {
+					return fallbackFactsCheckWarning(err)
+				},
+			})
+		}
 		if err != nil {
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "facts check", err)
 		}
@@ -769,40 +778,46 @@ func summarizeAndPersistItem(
 			faithfulnessModel = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
 			faithfulnessFallbackModel = ptrStringOrNil(userModelSettings.FaithfulnessCheckFallbackModel)
 		}
-		faithfulness, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.SummaryFaithfulnessResponse]{
-			baseStepName:   "check-summary-faithfulness",
-			purpose:        "faithfulness_check",
-			resolvePurpose: "summary",
-			attempt:        attempt,
-			userID:         userIDPtr,
-			sourceID:       &data.SourceID,
-			itemID:         &itemID,
-			modelOverride:  faithfulnessModel,
-			fallbackModel:  faithfulnessFallbackModel,
-			defaultRuntime: summaryAttempt.Runtime,
-			call: func(runtime *llmRuntime) (*service.SummaryFaithfulnessResponse, error) {
-				workerCtx := service.WithWorkerTraceMetadata(ctx, "faithfulness_check", userIDPtr, &data.SourceID, &itemID, nil)
-				return deps.worker.CheckSummaryFaithfulnessWithModel(
-					workerCtx,
-					titleForLLM,
-					facts,
-					summary.Summary,
-					runtime.AnthropicKey,
-					runtime.GoogleKey,
-					runtime.GroqKey,
-					runtime.DeepSeekKey,
-					runtime.AlibabaKey,
-					runtime.MistralKey,
-					runtime.XAIKey,
-					runtime.ZAIKey,
-					runtime.FireworksKey,
-					runtime.OpenAIKey,
-					runtime.Model,
-				)
-			},
-			getLLM:     func(result *service.SummaryFaithfulnessResponse) *service.LLMUsage { return result.LLM },
-			getVerdict: func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
-		})
+		var faithfulness *service.SummaryFaithfulnessResponse
+		var shouldRetry bool
+		if executeJevFaithfulnessPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary) {
+			faithfulness = &service.SummaryFaithfulnessResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
+		} else {
+			faithfulness, shouldRetry, err = executeLLMCheck(ctx, deps, llmCheckConfig[service.SummaryFaithfulnessResponse]{
+				baseStepName:   "check-summary-faithfulness",
+				purpose:        "faithfulness_check",
+				resolvePurpose: "summary",
+				attempt:        attempt,
+				userID:         userIDPtr,
+				sourceID:       &data.SourceID,
+				itemID:         &itemID,
+				modelOverride:  faithfulnessModel,
+				fallbackModel:  faithfulnessFallbackModel,
+				defaultRuntime: summaryAttempt.Runtime,
+				call: func(runtime *llmRuntime) (*service.SummaryFaithfulnessResponse, error) {
+					workerCtx := service.WithWorkerTraceMetadata(ctx, "faithfulness_check", userIDPtr, &data.SourceID, &itemID, nil)
+					return deps.worker.CheckSummaryFaithfulnessWithModel(
+						workerCtx,
+						titleForLLM,
+						facts,
+						summary.Summary,
+						runtime.AnthropicKey,
+						runtime.GoogleKey,
+						runtime.GroqKey,
+						runtime.DeepSeekKey,
+						runtime.AlibabaKey,
+						runtime.MistralKey,
+						runtime.XAIKey,
+						runtime.ZAIKey,
+						runtime.FireworksKey,
+						runtime.OpenAIKey,
+						runtime.Model,
+					)
+				},
+				getLLM:     func(result *service.SummaryFaithfulnessResponse) *service.LLMUsage { return result.LLM },
+				getVerdict: func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
+			})
+		}
 		if err != nil {
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "faithfulness check", err)
 		}

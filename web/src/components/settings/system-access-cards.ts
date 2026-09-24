@@ -29,7 +29,8 @@ export type AccessProviderID =
   | "aivis"
   | "elevenlabs"
   | "cartesia"
-  | "fish";
+  | "fish"
+  | "jev";
 
 export type AccessCardRuntime = {
   value: string;
@@ -103,6 +104,14 @@ type AccessCardMetadata = {
 // Dynamic data from backend drives the has/last4 state and some visibility, but metadata is
 // the remaining manual surface. Update here + i18n when adding providers that need cards.
 const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
+  {
+    id: "jev",
+    titleKey: "settings.jevTitle",
+    descriptionKey: "settings.jevDescription",
+    notSetKey: "settings.jevNotSet",
+    placeholder: "jev_...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_jev_api_key), last4: settings.jev_api_key_last4 ?? null }),
+  },
   {
     id: "anthropic",
     titleKey: "settings.anthropicTitle",

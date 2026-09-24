@@ -145,6 +145,40 @@ export interface FactsCheck {
   updated_at: string;
 }
 
+export interface ItemQualityDimension {
+  score: number;
+  raw_score: number;
+  confidence: number;
+  legend?: Record<string, unknown>;
+  probabilities?: Record<string, number>;
+}
+
+export interface ItemQualityEvaluation {
+  id: string;
+  item_id: string;
+  kind: "facts" | "faithfulness" | string;
+  attempt_index: number;
+  provider: string;
+  requested_model: string;
+  model: string;
+  dimensions: Record<string, ItemQualityDimension>;
+  aggregate_score: number;
+  minimum_score: number;
+  minimum_confidence: number;
+  quality_threshold: number;
+  confidence_threshold: number;
+  gate_policy_version: string;
+  decision: "accepted" | "escalated" | "error" | string;
+  escalation_reason?: string | null;
+  reason_detail?: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ItemFeedback {
   user_id: string;
   item_id: string;
@@ -180,11 +214,13 @@ export interface ItemDetail extends Item {
   facts_executions?: ItemLLMExecutionAttempt[];
   facts_check?: FactsCheck | null;
   facts_check_llm?: ItemSummaryLLM | null;
+  facts_quality_evaluation?: ItemQualityEvaluation | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
   summary_executions?: ItemLLMExecutionAttempt[];
   faithfulness?: SummaryFaithfulnessCheck | null;
   faithfulness_llm?: ItemSummaryLLM | null;
+  faithfulness_quality_evaluation?: ItemQualityEvaluation | null;
   feedback?: ItemFeedback | null;
   note?: ItemNote | null;
   highlights?: ItemHighlight[];

@@ -114,6 +114,8 @@ export interface UserSettings {
   cartesia_api_key_last4?: string | null;
   has_fish_api_key?: boolean;
   fish_api_key_last4?: string | null;
+  has_jev_api_key?: boolean;
+  jev_api_key_last4?: string | null;
   // llm_api_keys is provider-id keyed (from catalog) for data-driven UI. Flats preserved for compat.
   llm_api_keys?: Record<string, { has: boolean; last4?: string | null }>;
   ui_font_sans_key?: string;

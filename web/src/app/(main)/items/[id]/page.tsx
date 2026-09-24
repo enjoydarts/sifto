@@ -3,7 +3,7 @@
 import { type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { ItemLLMExecutionAttempt, NavigatorLLM } from "@/lib/api";
+import { ItemLLMExecutionAttempt, ItemQualityEvaluation, NavigatorLLM } from "@/lib/api";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
@@ -197,6 +197,44 @@ function DetailInfoBox({
         {title}
       </h3>
       {children}
+    </div>
+  );
+}
+
+function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQualityEvaluation | null; t: (key: string, fallback?: string) => string; locale: string }) {
+  if (!evaluation) return null;
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  const route = evaluation.decision === "accepted" ? "Jev" : "Jev → LLM";
+  return (
+    <div className="mt-4 rounded-[16px] border border-violet-200 bg-violet-50/60 p-3 text-xs text-[var(--color-editorial-ink-soft)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">{route}</span>
+        <span>{t(`itemDetail.jev.decision.${evaluation.decision}`, evaluation.decision)}</span>
+        <span>{evaluation.model}</span>
+        <span>{evaluation.gate_policy_version}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[var(--color-editorial-ink-faint)]">
+        <span>{t("itemDetail.jev.aggregate")}: {percent(evaluation.aggregate_score)} / {percent(evaluation.quality_threshold)}</span>
+        <span>{t("itemDetail.jev.minimumConfidence")}: {percent(evaluation.minimum_confidence)}</span>
+        <span>{evaluation.latency_ms} ms</span>
+        <span>{evaluation.input_tokens + evaluation.output_tokens} {t("itemDetail.jev.tokens")}</span>
+        <span>${evaluation.estimated_cost_usd.toFixed(8)}</span>
+        <span>{new Date(evaluation.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}</span>
+      </div>
+      {evaluation.escalation_reason ? (
+        <p className="mt-2 text-amber-800">{t("itemDetail.jev.escalationReason")}: {t(`itemDetail.jev.reason.${evaluation.escalation_reason}`, evaluation.escalation_reason)}</p>
+      ) : null}
+      {evaluation.reason_detail ? <p className="mt-1 break-words text-[var(--color-editorial-ink-faint)]">{evaluation.reason_detail}</p> : null}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {Object.entries(evaluation.dimensions).map(([name, dimension]) => (
+          <div key={name} className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
+            <div className="font-medium text-[var(--color-editorial-ink)]">{t(`itemDetail.jev.dimension.${name}`, name)}</div>
+            <div className="mt-1 text-[var(--color-editorial-ink-faint)]">
+              {t("itemDetail.jev.score")} {percent(dimension.score)} · {t("itemDetail.jev.confidence")} {percent(dimension.confidence)}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -523,7 +561,7 @@ export default function ItemDetailPage() {
 
         {detailTab === "summary" ? (
           <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
-            {(item.summary || item.faithfulness || (item.summary_executions?.length ?? 0) > 0) ? (
+            {(item.summary || item.faithfulness || item.faithfulness_quality_evaluation || (item.summary_executions?.length ?? 0) > 0) ? (
               <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
                 <div className="flex flex-wrap items-center gap-2">
                   {item.summary?.score != null && (
@@ -622,6 +660,7 @@ export default function ItemDetailPage() {
                     {item.faithfulness.short_comment && (
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment}</p>
                     )}
+                    <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
                 <ExecutionTimeline
@@ -639,7 +678,7 @@ export default function ItemDetailPage() {
 
         {detailTab === "facts" ? (
           <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
-            {(item.facts && item.facts.facts.length > 0) || item.facts_check || (item.facts_executions?.length ?? 0) > 0 ? (
+            {(item.facts && item.facts.facts.length > 0) || item.facts_check || item.facts_quality_evaluation || (item.facts_executions?.length ?? 0) > 0 ? (
               <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
                 <div className="flex flex-wrap items-center gap-2">
                   {item.facts_llm && (
@@ -686,6 +725,7 @@ export default function ItemDetailPage() {
                     {item.facts_check.short_comment && (
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment}</p>
                     )}
+                    <QualityEvaluationCard evaluation={item.facts_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
                 {item.facts && item.facts.facts.length > 0 ? (

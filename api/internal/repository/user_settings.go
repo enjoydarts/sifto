@@ -96,6 +96,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var fishAPIKeyEnc *string
 	var elevenLabsAPIKeyEnc *string
 	var cartesiaAPIKeyEnc *string
+	var jevAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -152,6 +153,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       elevenlabs_api_key_last4,
 		       cartesia_api_key_enc,
 		       cartesia_api_key_last4,
+		       jev_api_key_enc,
+		       jev_api_key_last4,
 		       aivis_user_dictionary_uuid,
 		       podcast_enabled,
 		       podcast_feed_slug,
@@ -263,6 +266,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ElevenLabsAPIKeyLast4,
 		&cartesiaAPIKeyEnc,
 		&v.CartesiaAPIKeyLast4,
+		&jevAPIKeyEnc,
+		&v.JevAPIKeyLast4,
 		&v.AivisUserDictionaryUUID,
 		&v.PodcastEnabled,
 		&v.PodcastFeedSlug,
@@ -346,6 +351,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasFishAudioAPIKey = fishAPIKeyEnc != nil && *fishAPIKeyEnc != ""
 	v.HasElevenLabsAPIKey = elevenLabsAPIKeyEnc != nil && *elevenLabsAPIKeyEnc != ""
 	v.HasCartesiaAPIKey = cartesiaAPIKeyEnc != nil && *cartesiaAPIKeyEnc != ""
+	v.HasJevAPIKey = jevAPIKeyEnc != nil && *jevAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -1134,6 +1140,21 @@ func (r *UserSettingsRepo) GetCartesiaAPIKeyEncrypted(ctx context.Context, userI
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetJevAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `SELECT jev_api_key_enc FROM user_settings WHERE user_id = $1`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || strings.TrimSpace(*v) == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetAzureSpeechAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -1673,6 +1694,20 @@ func (r *UserSettingsRepo) SetCartesiaAPIKey(ctx context.Context, userID, encryp
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetJevAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, jev_api_key_enc, jev_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET jev_api_key_enc = EXCLUDED.jev_api_key_enc,
+		    jev_api_key_last4 = EXCLUDED.jev_api_key_last4,
+		    updated_at = NOW()`, userID, encryptedKey, last4)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, aivis_user_dictionary_uuid)
@@ -2113,6 +2148,20 @@ func (r *UserSettingsRepo) ClearCartesiaAPIKey(ctx context.Context, userID strin
 		    updated_at = NOW()`,
 		userID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearJevAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, jev_api_key_enc, jev_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET jev_api_key_enc = NULL,
+		    jev_api_key_last4 = NULL,
+		    updated_at = NOW()`, userID)
 	if err != nil {
 		return nil, err
 	}

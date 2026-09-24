@@ -306,6 +306,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/elevenlabs-key", settingsH.DeleteElevenLabsAPIKey)
 				r.Post("/cartesia-key", settingsH.SetCartesiaAPIKey)
 				r.Delete("/cartesia-key", settingsH.DeleteCartesiaAPIKey)
+				r.Post("/jev-key", settingsH.SetJevAPIKey)
+				r.Delete("/jev-key", settingsH.DeleteJevAPIKey)
 				r.Get("/aivis-user-dictionaries", settingsH.GetAivisUserDictionaries)
 				r.Post("/aivis-user-dictionary", settingsH.SetAivisUserDictionary)
 				r.Delete("/aivis-user-dictionary", settingsH.DeleteAivisUserDictionary)

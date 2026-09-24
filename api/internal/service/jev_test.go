@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,21 @@ func passingJevDimensions() map[string]JevDimension {
 		"coverage":           {Score: 0.90, Confidence: 0.95},
 		"inference_control":  {Score: 0.90, Confidence: 0.94},
 		"specificity":        {Score: 0.90, Confidence: 0.93},
+	}
+}
+
+func TestJevClientRejectsAnswersWithUnexpectedDimensionNames(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"jev-20260915","answers":{"source_support":{"type":"score","score":4,"confidence":1},"contradiction_free":{"type":"score","score":4,"confidence":1},"coverage":{"type":"score","score":4,"confidence":1},"inference_control":{"type":"score","score":4,"confidence":1},"unexpected":{"type":"score","score":4,"confidence":1}},"usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	catalog := JevCatalog{DefaultModel: "jev-latest", Models: []JevModelConfig{{ID: "jev-latest", MatchPrefix: []string{"jev-"}, InputPerMTokUSD: 0.042, PricingSource: "test"}}}
+	client := NewJevClient(server.URL, server.Client(), catalog)
+	_, err := client.EvaluateFacts(context.Background(), "secret", "title", "body", []string{"fact"})
+	if err == nil || !strings.Contains(err.Error(), "missing Jev answer specificity") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

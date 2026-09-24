@@ -1160,6 +1160,13 @@ func resetItemForBulkJob(ctx context.Context, repo *repository.ItemRepo, job rep
 }
 
 func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, keyProvider *service.UserKeyProvider, cache service.JSONCache) (inngestgo.ServableFunction, error) {
+	jevCatalog, jevCatalogErr := service.LoadJevCatalog()
+	var jevClient *service.JevClient
+	if jevCatalogErr != nil {
+		log.Printf("Jev quality gate disabled: %v", jevCatalogErr)
+	} else {
+		jevClient = service.NewJevClientFromCatalog(jevCatalog)
+	}
 	deps := processItemDeps{
 		itemRepo:           repository.NewItemInngestRepo(db),
 		itemViewRepo:       repository.NewItemRepo(db),
@@ -1171,8 +1178,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		pushLogRepo:        repository.NewPushNotificationLogRepo(db),
 		notificationRepo:   repository.NewNotificationPriorityRepo(db),
 		readingGoalRepo:    repository.NewReadingGoalRepo(db),
+		qualityRepo:        repository.NewItemQualityEvaluationRepo(db),
 		promptResolver:     service.NewPromptResolver(repository.NewPromptTemplateRepo(db)),
 		worker:             worker,
+		jev:                jevClient,
+		jevCatalog:         jevCatalog,
 		openAI:             openAI,
 		oneSignal:          oneSignal,
 		publisher:          mustEventPublisher(),

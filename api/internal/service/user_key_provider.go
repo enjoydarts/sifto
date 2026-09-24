@@ -69,6 +69,7 @@ func (p *UserKeyProvider) registerLoaders() {
 		}
 		// else: not registered (no method yet)
 	}
+	p.loaders["jev"] = p.settingsRepo.GetJevAPIKeyEncrypted
 }
 
 func (p *UserKeyProvider) GetAPIKey(ctx context.Context, userID, provider string) (*string, error) {

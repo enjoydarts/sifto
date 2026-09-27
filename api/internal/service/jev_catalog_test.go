@@ -43,11 +43,49 @@ func TestLoadJevCatalogIncludesReplaceablePricingAndPolicy(t *testing.T) {
 	if catalog.DefaultModel != "jev-latest" {
 		t.Fatalf("DefaultModel = %q", catalog.DefaultModel)
 	}
-	if catalog.GatePolicy.Version != "jev-quality-gate-v1" {
+	if catalog.GatePolicy.Version != "jev-quality-gate-v2" {
 		t.Fatalf("policy version = %q", catalog.GatePolicy.Version)
 	}
 	pricing, ok := catalog.ResolvePricing("jev-latest", "jev-latest")
 	if !ok || pricing.InputPerMTokUSD != 0.042 || pricing.OutputPerMTokUSD != 0 {
 		t.Fatalf("pricing = %#v, %v", pricing, ok)
+	}
+}
+
+func TestJevCatalogPolicyAcceptsConsistentMostlyCompliantScores(t *testing.T) {
+	catalog, err := LoadJevCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions := map[string]JevDimension{
+		"source_support":     {Score: 0.75, RawScore: 3, Confidence: 0.80},
+		"contradiction_free": {Score: 0.75, RawScore: 3, Confidence: 0.80},
+		"coverage":           {Score: 0.75, RawScore: 3, Confidence: 0.80},
+		"inference_control":  {Score: 0.75, RawScore: 3, Confidence: 0.80},
+		"specificity":        {Score: 0.75, RawScore: 3, Confidence: 0.80},
+	}
+
+	got := EvaluateJevGate(dimensions, []string{"source_support", "contradiction_free"}, catalog.GatePolicy)
+	if got.Decision != JevDecisionAccepted {
+		t.Fatalf("mostly compliant Jev evaluation should be accepted: %#v", got)
+	}
+}
+
+func TestJevCatalogPolicyEscalatesMaterialDimensionProblem(t *testing.T) {
+	catalog, err := LoadJevCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions := map[string]JevDimension{
+		"source_support":     {Score: 0.50, RawScore: 2, Confidence: 0.90},
+		"contradiction_free": {Score: 1.00, RawScore: 4, Confidence: 0.90},
+		"coverage":           {Score: 1.00, RawScore: 4, Confidence: 0.90},
+		"inference_control":  {Score: 1.00, RawScore: 4, Confidence: 0.90},
+		"specificity":        {Score: 1.00, RawScore: 4, Confidence: 0.90},
+	}
+
+	got := EvaluateJevGate(dimensions, []string{"source_support", "contradiction_free"}, catalog.GatePolicy)
+	if got.Decision != JevDecisionEscalated || got.EscalationReason != JevEscalationCriticalDimensionLow {
+		t.Fatalf("material Jev problem should be escalated: %#v", got)
 	}
 }

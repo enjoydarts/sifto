@@ -43,7 +43,7 @@ func TestLoadJevCatalogIncludesReplaceablePricingAndPolicy(t *testing.T) {
 	if catalog.DefaultModel != "jev-latest" {
 		t.Fatalf("DefaultModel = %q", catalog.DefaultModel)
 	}
-	if catalog.GatePolicy.Version != "jev-quality-gate-v2" {
+	if catalog.GatePolicy.Version != "jev-quality-gate-v3" {
 		t.Fatalf("policy version = %q", catalog.GatePolicy.Version)
 	}
 	pricing, ok := catalog.ResolvePricing("jev-latest", "jev-latest")
@@ -68,6 +68,28 @@ func TestJevCatalogPolicyAcceptsConsistentMostlyCompliantScores(t *testing.T) {
 	got := EvaluateJevGate(dimensions, []string{"source_support", "contradiction_free"}, catalog.GatePolicy)
 	if got.Decision != JevDecisionAccepted {
 		t.Fatalf("mostly compliant Jev evaluation should be accepted: %#v", got)
+	}
+}
+
+func TestJevCatalogPolicyDoesNotEscalateQualifiedScoresForUncalibratedConfidence(t *testing.T) {
+	catalog, err := LoadJevCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions := map[string]JevDimension{
+		"facts_support":           {Score: 0.75, RawScore: 3, Confidence: 0.20},
+		"contradiction_free":      {Score: 0.75, RawScore: 3, Confidence: 0.25},
+		"coverage":                {Score: 0.75, RawScore: 3, Confidence: 0.30},
+		"inference_control":       {Score: 0.75, RawScore: 3, Confidence: 0.35},
+		"entity_numeric_accuracy": {Score: 0.75, RawScore: 3, Confidence: 0.40},
+	}
+
+	got := EvaluateJevGate(dimensions, []string{"facts_support", "contradiction_free"}, catalog.GatePolicy)
+	if got.Decision != JevDecisionAccepted {
+		t.Fatalf("qualified summary scores should not be rejected by uncalibrated confidence: %#v", got)
+	}
+	if got.MinimumConfidence != 0.20 {
+		t.Fatalf("minimum confidence should remain observable: %#v", got)
 	}
 }
 

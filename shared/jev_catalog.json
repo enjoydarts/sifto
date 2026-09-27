@@ -12,10 +12,10 @@
     }
   ],
   "gate_policy": {
-    "version": "jev-quality-gate-v2",
+    "version": "jev-quality-gate-v3",
     "aggregate_threshold": 0.75,
     "minimum_dimension_score": 0.75,
-    "minimum_confidence": 0.7,
+    "minimum_confidence": 0.0,
     "critical_dimension_score": 0.75
   }
 }

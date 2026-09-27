@@ -18,6 +18,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   deepinfra: "DeepInfra",
   poe: "Poe",
   siliconflow: "SiliconFlow",
+  jev: "Jev",
 };
 
 export function normalizeProvider(provider: string): string {

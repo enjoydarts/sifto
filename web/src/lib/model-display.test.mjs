@@ -22,6 +22,10 @@ test("providerLabel formats DeepInfra consistently", () => {
   assert.equal(providerLabel("deepinfra"), "DeepInfra");
 });
 
+test("providerLabel formats Jev with branded casing", () => {
+  assert.equal(providerLabel("jev"), "Jev");
+});
+
 test("formatModelDisplayName strips Featherless alias prefix", () => {
   assert.equal(
     formatModelDisplayName("featherless::Qwen/Qwen3.5-9B"),

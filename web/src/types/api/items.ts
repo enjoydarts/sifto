@@ -153,6 +153,10 @@ export interface ItemQualityDimension {
   probabilities?: Record<string, number>;
 }
 
+export interface ItemQualitySignal {
+  probability: number;
+}
+
 export interface ItemQualityEvaluation {
   id: string;
   item_id: string;
@@ -162,6 +166,8 @@ export interface ItemQualityEvaluation {
   requested_model: string;
   model: string;
   dimensions: Record<string, ItemQualityDimension>;
+  signals: Record<string, ItemQualitySignal>;
+  signal_thresholds: Record<string, number>;
   aggregate_score: number;
   minimum_score: number;
   minimum_confidence: number;

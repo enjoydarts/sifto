@@ -40,3 +40,10 @@ func TestClassifyJevEscalationUsesStableEnums(t *testing.T) {
 		t.Fatalf("schema reason = %q", got)
 	}
 }
+
+func TestJevStepNameIncludesSanitizedPolicyVersion(t *testing.T) {
+	got := jevStepName("check-facts", " jev-quality-gate/v4 ", 1)
+	if got != "check-facts-jev-quality-gate-v4-2" {
+		t.Fatalf("jevStepName() = %q", got)
+	}
+}

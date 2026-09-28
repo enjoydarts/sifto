@@ -672,6 +672,10 @@ type ItemQualityDimension struct {
 	Probabilities map[string]float64 `json:"probabilities,omitempty"`
 }
 
+type ItemQualitySignal struct {
+	Probability float64 `json:"probability"`
+}
+
 type ItemQualityEvaluation struct {
 	ID                  string                          `json:"id"`
 	ItemID              string                          `json:"item_id"`
@@ -681,6 +685,8 @@ type ItemQualityEvaluation struct {
 	RequestedModel      string                          `json:"requested_model"`
 	Model               string                          `json:"model"`
 	Dimensions          map[string]ItemQualityDimension `json:"dimensions"`
+	Signals             map[string]ItemQualitySignal    `json:"signals"`
+	SignalThresholds    map[string]float64              `json:"signal_thresholds"`
 	AggregateScore      float64                         `json:"aggregate_score"`
 	MinimumScore        float64                         `json:"minimum_score"`
 	MinimumConfidence   float64                         `json:"minimum_confidence"`

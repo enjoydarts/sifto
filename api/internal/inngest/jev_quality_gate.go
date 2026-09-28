@@ -34,7 +34,7 @@ type jevPrecheckConfig struct {
 
 func executeJevFactsPrecheck(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, content string, facts []string) bool {
 	return executeJevPrecheck(ctx, deps, jevPrecheckConfig{
-		StepName: fmt.Sprintf("check-facts-jev-v1-%d", attempt+1), Kind: "facts", Purpose: "facts_check_precheck",
+		StepName: jevStepName("check-facts", deps.jevCatalog.GatePolicy.Version, attempt), Kind: "facts", Purpose: "facts_check_precheck",
 		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
 		Critical: []string{"source_support", "contradiction_free"},
 		Evaluate: func(callCtx context.Context, key string) (*service.JevEvaluation, error) {
@@ -45,7 +45,7 @@ func executeJevFactsPrecheck(ctx context.Context, deps processItemDeps, data pro
 
 func executeJevFaithfulnessPrecheck(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, facts []string, summary string) bool {
 	return executeJevPrecheck(ctx, deps, jevPrecheckConfig{
-		StepName: fmt.Sprintf("check-summary-faithfulness-jev-v1-%d", attempt+1), Kind: "faithfulness", Purpose: "faithfulness_check_precheck",
+		StepName: jevStepName("check-summary-faithfulness", deps.jevCatalog.GatePolicy.Version, attempt), Kind: "faithfulness", Purpose: "faithfulness_check_precheck",
 		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
 		Critical: []string{"facts_support", "contradiction_free"},
 		Evaluate: func(callCtx context.Context, key string) (*service.JevEvaluation, error) {
@@ -74,7 +74,7 @@ func executeJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 		if evaluation == nil {
 			return jevErrorStepResult(service.JevEscalationSchemaError, errors.New("Jev returned no evaluation")), nil
 		}
-		gate := service.EvaluateJevGate(evaluation.Dimensions, config.Critical, deps.jevCatalog.GatePolicy)
+		gate := service.EvaluateJevGate(evaluation.Dimensions, evaluation.Signals, config.Critical, deps.jevCatalog.GatePolicy)
 		return &jevPrecheckStepResult{Evaluation: evaluation, Gate: gate, EscalationReason: string(gate.EscalationReason)}, nil
 	})
 	if err != nil {
@@ -86,6 +86,19 @@ func executeJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 	}
 	persistJevPrecheck(ctx, deps, config, result)
 	return result.Gate.Decision == service.JevDecisionAccepted
+}
+
+func jevStepName(prefix, policyVersion string, attempt int) string {
+	version := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			return r
+		}
+		return '-'
+	}, strings.TrimSpace(policyVersion))
+	if version == "" {
+		version = "unversioned"
+	}
+	return fmt.Sprintf("%s-%s-%d", prefix, version, attempt+1)
 }
 
 func jevErrorStepResult(reason service.JevEscalationReason, err error) *jevPrecheckStepResult {
@@ -114,7 +127,7 @@ func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 	input := repository.ItemQualityEvaluationInput{
 		ItemID: ptrStringValue(config.ItemID), Kind: config.Kind, AttemptIndex: config.Attempt, Provider: "jev",
 		RequestedModel: deps.jevCatalog.DefaultModel, Model: deps.jevCatalog.DefaultModel,
-		Dimensions:       map[string]service.JevDimension{},
+		Dimensions: map[string]service.JevDimension{}, Signals: map[string]service.JevSignal{}, SignalThresholds: policy.SignalThresholds,
 		QualityThreshold: policy.AggregateThreshold, ConfidenceThreshold: policy.MinimumConfidence,
 		GatePolicyVersion: policy.Version, Decision: string(result.Gate.Decision),
 	}
@@ -125,7 +138,7 @@ func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 		input.ReasonDetail = &result.ReasonDetail
 	}
 	if evaluation := result.Evaluation; evaluation != nil {
-		input.RequestedModel, input.Model, input.Dimensions = evaluation.RequestedModel, evaluation.Model, evaluation.Dimensions
+		input.RequestedModel, input.Model, input.Dimensions, input.Signals = evaluation.RequestedModel, evaluation.Model, evaluation.Dimensions, evaluation.Signals
 		input.AggregateScore, input.MinimumScore, input.MinimumConfidence = result.Gate.AggregateScore, result.Gate.MinimumScore, result.Gate.MinimumConfidence
 		input.InputTokens, input.OutputTokens, input.EstimatedCostUSD, input.LatencyMS = evaluation.Usage.InputTokens, evaluation.Usage.OutputTokens, evaluation.Usage.EstimatedCostUSD, evaluation.LatencyMS
 		usage := &service.LLMUsage{Provider: "jev", Model: evaluation.Model, RequestedModel: evaluation.RequestedModel, ResolvedModel: evaluation.Model, PricingSource: evaluation.Usage.PricingSource, InputTokens: evaluation.Usage.InputTokens, OutputTokens: evaluation.Usage.OutputTokens, EstimatedCostUSD: evaluation.Usage.EstimatedCostUSD}

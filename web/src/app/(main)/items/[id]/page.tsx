@@ -235,6 +235,26 @@ function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQua
           </div>
         ))}
       </div>
+      {Object.keys(evaluation.signals ?? {}).length > 0 ? (
+        <div className="mt-3">
+          <div className="mb-2 font-medium text-[var(--color-editorial-ink)]">{t("itemDetail.jev.criticalSignals")}</div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {Object.entries(evaluation.signals).map(([name, signal]) => {
+              const threshold = evaluation.signal_thresholds?.[name];
+              const exceedsThreshold = typeof threshold === "number" && signal.probability >= threshold;
+              return (
+                <div key={name} className={`rounded-xl border bg-white/80 px-3 py-2 ${exceedsThreshold ? "border-amber-300 text-amber-900" : "border-violet-100"}`}>
+                  <div className="font-medium">{t(`itemDetail.jev.signal.${name}`, name)}</div>
+                  <div className="mt-1 text-[var(--color-editorial-ink-faint)]">
+                    {t("itemDetail.jev.probability")} {percent(signal.probability)}
+                    {typeof threshold === "number" ? ` / ${t("itemDetail.jev.threshold")} ${percent(threshold)}` : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

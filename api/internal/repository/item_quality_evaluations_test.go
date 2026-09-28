@@ -40,8 +40,10 @@ func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	repo := NewItemQualityEvaluationRepo(pool)
 	base := ItemQualityEvaluationInput{
 		ItemID: itemID, Kind: "facts", Provider: "jev", RequestedModel: "jev-latest", Model: "jev-20260915",
-		Dimensions:     map[string]map[string]float64{"source_support": {"score": 0.95, "raw_score": 3.8, "confidence": 0.96}},
-		AggregateScore: 0.95, MinimumScore: 0.95, MinimumConfidence: 0.96,
+		Dimensions:       map[string]map[string]float64{"source_support": {"score": 0.95, "raw_score": 3.8, "confidence": 0.96}},
+		Signals:          map[string]map[string]float64{"has_unsupported_fact": {"probability": 0.02}},
+		SignalThresholds: map[string]float64{"has_unsupported_fact": 0.10},
+		AggregateScore:   0.95, MinimumScore: 0.95, MinimumConfidence: 0.96,
 		QualityThreshold: 0.9, ConfidenceThreshold: 0.9, GatePolicyVersion: "v1", Decision: "accepted",
 		InputTokens: 10, OutputTokens: 1, EstimatedCostUSD: 0.00000042, LatencyMS: 80,
 	}
@@ -65,5 +67,8 @@ func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	}
 	if got.Model != "jev-20260915" || got.GatePolicyVersion != "v1" || len(got.Dimensions) != 1 {
 		t.Fatalf("persisted metadata = %#v", got)
+	}
+	if got.Signals["has_unsupported_fact"].Probability != 0.02 || got.SignalThresholds["has_unsupported_fact"] != 0.10 {
+		t.Fatalf("persisted signals = %#v thresholds = %#v", got.Signals, got.SignalThresholds)
 	}
 }

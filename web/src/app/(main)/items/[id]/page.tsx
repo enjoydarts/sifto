@@ -202,8 +202,8 @@ function DetailInfoBox({
 }
 
 function jevFlaggedDimensions(evaluation: ItemQualityEvaluation): Array<[string, number]> {
-  // Historical v4 evaluations store the policy version but not the per-dimension thresholds.
-  if (evaluation.gate_policy_version !== "jev-quality-gate-v4") return [];
+  // v4 and v5 evaluations store the policy version but not the per-dimension thresholds.
+  if (evaluation.gate_policy_version !== "jev-quality-gate-v4" && evaluation.gate_policy_version !== "jev-quality-gate-v5") return [];
   const reason = evaluation.escalation_reason;
   const critical = evaluation.kind === "facts"
     ? new Set(["source_support", "contradiction_free"])

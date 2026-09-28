@@ -38,6 +38,7 @@ type JevGatePolicy struct {
 	MinimumDimensionScore  float64            `json:"minimum_dimension_score"`
 	MinimumConfidence      float64            `json:"minimum_confidence"`
 	ConfidenceScoreMargin  float64            `json:"confidence_score_margin"`
+	MinPassingProbability  float64            `json:"min_passing_probability"`
 	CriticalDimensionScore float64            `json:"critical_dimension_score"`
 	SignalThresholds       map[string]float64 `json:"signal_thresholds"`
 }
@@ -100,7 +101,7 @@ func EvaluateJevGate(dimensions map[string]JevDimension, signals map[string]JevS
 		if _, ok := criticalSet[name]; ok && dimension.Score < policy.CriticalDimensionScore {
 			criticalLow = true
 		}
-		if dimension.Confidence < policy.MinimumConfidence && dimension.Score < policy.MinimumDimensionScore+policy.ConfidenceScoreMargin {
+		if dimension.Confidence < policy.MinimumConfidence && dimension.Score < policy.MinimumDimensionScore+policy.ConfidenceScoreMargin && !passingRubricProbabilityAtLeast(dimension.Probabilities, policy.MinPassingProbability) {
 			lowConfidenceNearBoundary = true
 		}
 	}
@@ -137,6 +138,22 @@ func EvaluateJevGate(dimensions map[string]JevDimension, signals map[string]JevS
 		result.Decision = JevDecisionAccepted
 	}
 	return result
+}
+
+func passingRubricProbabilityAtLeast(probabilities map[string]float64, threshold float64) bool {
+	if threshold <= 0 {
+		return false
+	}
+	passThree, hasThree := probabilities["3"]
+	passFour, hasFour := probabilities["4"]
+	if !hasThree || !hasFour || !validJevProbabilities(probabilities) {
+		return false
+	}
+	total := 0.0
+	for _, probability := range probabilities {
+		total += probability
+	}
+	return total >= 0.95 && total <= 1.05 && passThree+passFour >= threshold
 }
 
 type JevClient struct {

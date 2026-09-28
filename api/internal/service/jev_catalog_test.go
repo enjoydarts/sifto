@@ -43,10 +43,10 @@ func TestLoadJevCatalogIncludesReplaceablePricingAndPolicy(t *testing.T) {
 	if catalog.DefaultModel != "jev-latest" {
 		t.Fatalf("DefaultModel = %q", catalog.DefaultModel)
 	}
-	if catalog.GatePolicy.Version != "jev-quality-gate-v4" {
+	if catalog.GatePolicy.Version != "jev-quality-gate-v5" {
 		t.Fatalf("policy version = %q", catalog.GatePolicy.Version)
 	}
-	if catalog.GatePolicy.MinimumConfidence != 0.5 || catalog.GatePolicy.ConfidenceScoreMargin != 0.1 || catalog.GatePolicy.SignalThresholds["has_contradiction"] != 0.5 {
+	if catalog.GatePolicy.MinimumConfidence != 0.5 || catalog.GatePolicy.ConfidenceScoreMargin != 0.1 || catalog.GatePolicy.MinPassingProbability != 0.85 || catalog.GatePolicy.SignalThresholds["has_contradiction"] != 0.5 {
 		t.Fatalf("policy = %#v", catalog.GatePolicy)
 	}
 	pricing, ok := catalog.ResolvePricing("jev-latest", "jev-latest")
@@ -93,6 +93,25 @@ func TestJevCatalogPolicyUsesConfidenceOnlyNearPassingBoundary(t *testing.T) {
 	}
 	if got.MinimumConfidence != 0.20 {
 		t.Fatalf("minimum confidence should remain observable: %#v", got)
+	}
+}
+
+func TestJevCatalogPolicyAcceptsLowConfidenceWhenPassingRubricLevelsAreLikely(t *testing.T) {
+	catalog, err := LoadJevCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions := map[string]JevDimension{
+		"source_support":     {Score: 0.95, Confidence: 0.90},
+		"contradiction_free": {Score: 0.95, Confidence: 0.90},
+		"coverage":           {Score: 0.95, Confidence: 0.90},
+		"inference_control":  {Score: 0.82, Confidence: 0.42, Probabilities: map[string]float64{"0": 0.01, "1": 0.01, "2": 0.12, "3": 0.38, "4": 0.48}},
+		"specificity":        {Score: 0.95, Confidence: 0.90},
+	}
+
+	got := EvaluateJevGate(dimensions, map[string]JevSignal{"has_unsupported_fact": {Probability: 0.01}, "has_contradiction": {Probability: 0.01}}, []string{"source_support", "contradiction_free"}, catalog.GatePolicy)
+	if got.Decision != JevDecisionAccepted {
+		t.Fatalf("passing rubric levels have 86%% probability despite low confidence in the exact score: %#v", got)
 	}
 }
 

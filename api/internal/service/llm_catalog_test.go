@@ -118,6 +118,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("claude-sonnet-5"); got == nil {
 		t.Fatal("claude-sonnet-5 not found in catalog")
 	}
+	if got := findModelCatalog("claude-sonnet-5-5"); got == nil {
+		t.Fatal("claude-sonnet-5-5 not found in catalog")
+	}
 	if got := findModelCatalog("claude-fable-5"); got == nil {
 		t.Fatal("claude-fable-5 not found in catalog")
 	}
@@ -325,6 +328,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "claude-opus-5", provider: "anthropic"},
 		{model: "claude-opus-5-5", provider: "anthropic"},
 		{model: "claude-sonnet-5", provider: "anthropic"},
+		{model: "claude-sonnet-5-5", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-3.8-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
@@ -572,16 +576,16 @@ func TestLLMCatalogClaudeSonnet5Pricing(t *testing.T) {
 	if item.Pricing == nil {
 		t.Fatal("claude-sonnet-5 has nil pricing")
 	}
-	if got, want := item.Pricing.InputPerMTokUSD, 3.0; got != want {
+	if got, want := item.Pricing.InputPerMTokUSD, 2.0; got != want {
 		t.Fatalf("claude-sonnet-5 input_per_mtok_usd = %v, want %v", got, want)
 	}
-	if got, want := item.Pricing.OutputPerMTokUSD, 15.0; got != want {
+	if got, want := item.Pricing.OutputPerMTokUSD, 10.0; got != want {
 		t.Fatalf("claude-sonnet-5 output_per_mtok_usd = %v, want %v", got, want)
 	}
-	if got, want := item.Pricing.CacheWritePerMTokUSD, 3.75; got != want {
+	if got, want := item.Pricing.CacheWritePerMTokUSD, 2.5; got != want {
 		t.Fatalf("claude-sonnet-5 cache_write_per_mtok_usd = %v, want %v", got, want)
 	}
-	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.3; got != want {
+	if got, want := item.Pricing.CacheReadPerMTokUSD, 0.2; got != want {
 		t.Fatalf("claude-sonnet-5 cache_read_per_mtok_usd = %v, want %v", got, want)
 	}
 }
@@ -619,6 +623,7 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 		{model: "gpt-6-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
 		{model: "gpt-6-luna", input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01},
 		{model: "claude-opus-5-5", input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2},
+		{model: "claude-sonnet-5-5", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
 	}
 
 	for _, tt := range tests {

@@ -1407,6 +1407,41 @@
       }
     },
     {
+      "id": "claude-sonnet-5-5",
+      "provider": "anthropic",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "Anthropic の最新 Sonnet。要約・Ask・ダイジェスト向けの速度と品質のバランスが良い候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_09",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 10.0,
+        "cache_write_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.2
+      }
+    },
+    {
       "id": "claude-sonnet-5",
       "provider": "anthropic",
       "available_purposes": [
@@ -1433,11 +1468,11 @@
         "supports_cache_write_pricing": true
       },
       "pricing": {
-        "pricing_source": "anthropic_static_2026_07",
-        "input_per_mtok_usd": 3.0,
-        "output_per_mtok_usd": 15.0,
-        "cache_write_per_mtok_usd": 3.75,
-        "cache_read_per_mtok_usd": 0.3
+        "pricing_source": "anthropic_static_2026_09",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 10.0,
+        "cache_write_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.2
       }
     },
     {

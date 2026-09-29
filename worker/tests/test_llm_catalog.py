@@ -6,6 +6,7 @@ from app.services.llm_catalog import load_llm_catalog, model_pricing, provider_f
 REPRESENTATIVE_PROVIDER_MODELS = (
     ("anthropic", "claude-haiku-4-5"),
     ("anthropic", "claude-sonnet-5"),
+    ("anthropic", "claude-sonnet-5-5"),
     ("anthropic", "claude-fable-5"),
     ("anthropic", "claude-fable-5-1"),
     ("anthropic", "claude-opus-5"),

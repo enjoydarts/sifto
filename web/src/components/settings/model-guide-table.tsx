@@ -81,7 +81,7 @@ export default function ModelGuideTable({
               {entry.best_for ? t(`settings.modelGuide.bestFor.${entry.best_for}`) : "-"}
             </td>
             <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-xs leading-5 text-zinc-600">
-              {entry.comment ?? "-"}
+              {t(`settings.modelGuide.comments.${entry.id}`, entry.comment ?? "-")}
             </td>
           </tr>
         ))}

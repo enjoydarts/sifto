@@ -875,6 +875,8 @@ export const jaDict: Dict = {
   "settings.modelGuide.highlights.long-context": "長文向け",
   "settings.modelGuide.highlights.multimodal": "マルチモーダル",
   "settings.modelGuide.highlights.experimental": "実験枠",
+  "settings.modelGuide.highlights.latest": "最新",
+  "settings.modelGuide.comments.claude-sonnet-5-5": "Anthropic の最新 Sonnet。要約・Ask・ダイジェスト向けの速度と品質のバランスが良い候補。",
   "settings.section.llm": "LLM",
   "settings.section.llmDescription": "プロバイダーアクセス、用途別モデル、更新通知をまとめて管理します。",
   "settings.section.goals": "読書ゴール",

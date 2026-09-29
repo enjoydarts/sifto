@@ -19,7 +19,9 @@ class TrafilaturaServiceTests(unittest.TestCase):
         mocked_extract.assert_called_once_with("https://example.com/report.pdf")
 
     def test_extract_body_propagates_refetch_failure(self):
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
+        with patch.dict("os.environ", {"ALLOW_DEV_EXTRACT_PLACEHOLDER": "false"}), patch(
+            "app.services.trafilatura_service.trafilatura.fetch_url", return_value=None
+        ), patch(
             "app.services.trafilatura_service.httpx.get", side_effect=TimeoutError("refetch timed out")
         ):
             with self.assertRaisesRegex(TimeoutError, "refetch timed out"):

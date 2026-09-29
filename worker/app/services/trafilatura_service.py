@@ -227,6 +227,7 @@ def is_pdf_response(url: str, content_type: str | None, content: bytes | None) -
 
 
 def extract_body(url: str) -> dict | None:
+    refetch_failed = False
     try:
         url = validate_public_http_url(url)
         if url.strip().lower().split("?", 1)[0].endswith(".pdf"):
@@ -249,6 +250,7 @@ def extract_body(url: str) -> dict | None:
                         "published_at": None,
                         "image_url": None,
                     }
+                refetch_failed = True
                 raise
 
         try:
@@ -297,6 +299,8 @@ def extract_body(url: str) -> dict | None:
             "image_url": _extract_image_url(downloaded, url),
         }
     except Exception:
+        if refetch_failed:
+            raise
         _log.exception("extract_body unexpected failure url=%s", url)
         if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
             return {

@@ -1226,18 +1226,30 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
 				}
 			}
-			if userIDPtr != nil && *userIDPtr != "" {
+			// Memoize the initial state: later steps replay this function after the
+			// summary has already changed the item status to "summarized".
+			processingDecision, err := step.Run(ctx, "check-processing-state", func(ctx context.Context) (string, error) {
+				if userIDPtr == nil || *userIDPtr == "" {
+					return "continue", nil
+				}
 				currentItem, err := deps.itemViewRepo.GetForRetry(ctx, itemID, *userIDPtr)
 				switch {
 				case errors.Is(err, repository.ErrConflict), errors.Is(err, repository.ErrNotFound):
-					log.Printf("process-item skip unavailable item item_id=%s", itemID)
-					return map[string]any{"item_id": itemID, "status": "skipped", "reason": "item unavailable"}, nil
+					return "unavailable", nil
 				case err != nil:
-					return nil, fmt.Errorf("load item processing state: %w", err)
+					return "", fmt.Errorf("load item processing state: %w", err)
 				case processItemStatusIsTerminal(currentItem.Status):
-					log.Printf("process-item skip terminal item item_id=%s status=%s", itemID, currentItem.Status)
-					return map[string]any{"item_id": itemID, "status": "skipped", "reason": "already processed"}, nil
+					return "terminal", nil
+				default:
+					return "continue", nil
 				}
+			})
+			if err != nil {
+				return nil, fmt.Errorf("check item processing state: %w", err)
+			}
+			if processingDecision != "continue" {
+				log.Printf("process-item skip item item_id=%s reason=%s", itemID, processingDecision)
+				return map[string]any{"item_id": itemID, "status": "skipped", "reason": processingDecision}, nil
 			}
 			var userModelSettings *model.UserSettings
 			if userIDPtr != nil && *userIDPtr != "" {
@@ -1246,7 +1258,6 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			log.Printf("process-item start item_id=%s url=%s trigger_id=%s reason=%s", itemID, url, strings.TrimSpace(data.TriggerID), strings.TrimSpace(data.Reason))
 
 			var extracted *service.ExtractBodyResponse
-			var err error
 			for attempt := 0; attempt < 3; attempt++ {
 				// Keep the v2 step IDs distinct from the legacy response shape so
 				// in-flight runs can migrate without decoding old step state into

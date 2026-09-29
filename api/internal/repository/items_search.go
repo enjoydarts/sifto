@@ -512,6 +512,10 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $3::int)
+			  AND EXISTS (
+			    SELECT 1 FROM item_embeddings ie
+			    WHERE ie.item_id = i.id AND ie.dimensions = (SELECT dims FROM q)
+			  )
 	`
 	args := []any{userID, queryEmbedding, days, queryTerms}
 	if unreadOnly {

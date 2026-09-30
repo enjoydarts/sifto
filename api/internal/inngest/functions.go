@@ -1370,9 +1370,15 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 				return nil, fmt.Errorf("get embedding candidate: %w", err)
 			}
 			userID := candidate.UserID
-			userOpenAIKey, err := loadUserAPIKey(ctx, keyProvider, &userID, "openai")
+			userOpenAIKey, err := keyProvider.GetAPIKey(ctx, userID, "openai")
 			if err != nil {
 				return nil, err
+			}
+			if userOpenAIKey == nil || strings.TrimSpace(*userOpenAIKey) == "" {
+				return map[string]any{
+					"item_id": data.ItemID,
+					"status":  "skipped_missing_openai_key",
+				}, nil
 			}
 			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, userID)
 

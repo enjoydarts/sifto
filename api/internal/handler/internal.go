@@ -442,9 +442,10 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 	}
 
 	var body struct {
-		UserID *string `json:"user_id"`
-		Limit  int     `json:"limit"`
-		DryRun bool    `json:"dry_run"`
+		UserID       *string `json:"user_id"`
+		BeforeItemID *string `json:"before_item_id"`
+		Limit        int     `json:"limit"`
+		DryRun       bool    `json:"dry_run"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.Limit <= 0 {
@@ -455,7 +456,7 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 		return
 	}
 
-	targets, err := h.itemRepo.ListEmbeddingBackfillTargets(r.Context(), body.UserID, body.Limit)
+	targets, err := h.itemRepo.ListEmbeddingBackfillTargets(r.Context(), body.UserID, body.BeforeItemID, body.Limit)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("list embedding backfill targets: %v", err), http.StatusInternalServerError)
 		return
@@ -490,6 +491,11 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 			"url":       t.URL,
 		})
 	}
+	var nextCursor *string
+	if len(targets) > 0 {
+		lastID := targets[len(targets)-1].ItemID
+		nextCursor = &lastID
+	}
 
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
@@ -500,6 +506,7 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 		"matched":            len(targets),
 		"queued_count":       queued,
 		"failed_count":       failed,
+		"next_cursor":        nextCursor,
 		"send_error_samples": sendErrorSamples,
 		"targets":            preview,
 	})

@@ -247,7 +247,7 @@ func (r *ItemInngestRepo) GetEmbeddingCandidate(ctx context.Context, itemID stri
 	return &v, nil
 }
 
-func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, userID *string, limit int) ([]ItemEmbeddingBackfillTarget, error) {
+func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, userID, beforeItemID *string, limit int) ([]ItemEmbeddingBackfillTarget, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -266,10 +266,17 @@ func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, user
 	args := []any{}
 	if userID != nil && *userID != "" {
 		args = append(args, *userID)
-		query += ` AND src.user_id = $1`
+		query += ` AND src.user_id = $` + strconv.Itoa(len(args))
+	}
+	if beforeItemID != nil && *beforeItemID != "" {
+		args = append(args, *beforeItemID)
+		query += ` AND (sm.summarized_at, i.id) < (
+			SELECT cursor_sm.summarized_at, cursor_sm.item_id
+			FROM item_summaries cursor_sm
+			WHERE cursor_sm.item_id = $` + strconv.Itoa(len(args)) + `)`
 	}
 	args = append(args, limit)
-	query += ` ORDER BY sm.summarized_at DESC LIMIT $` + strconv.Itoa(len(args))
+	query += ` ORDER BY sm.summarized_at DESC, i.id DESC LIMIT $` + strconv.Itoa(len(args))
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {

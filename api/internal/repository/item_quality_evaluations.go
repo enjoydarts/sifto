@@ -56,7 +56,7 @@ func (r *ItemQualityEvaluationRepo) Upsert(ctx context.Context, in ItemQualityEv
 			gate_policy_version, decision, escalation_reason, reason_detail, input_tokens, output_tokens,
 			estimated_cost_usd, latency_ms
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-		ON CONFLICT (item_id, kind, attempt_index) DO UPDATE SET
+		ON CONFLICT (item_id, kind, attempt_index, provider) DO UPDATE SET
 			provider=EXCLUDED.provider, requested_model=EXCLUDED.requested_model, model=EXCLUDED.model,
 			dimensions_json=EXCLUDED.dimensions_json, signals_json=EXCLUDED.signals_json,
 			signal_thresholds_json=EXCLUDED.signal_thresholds_json, aggregate_score=EXCLUDED.aggregate_score,
@@ -74,6 +74,10 @@ func (r *ItemQualityEvaluationRepo) Upsert(ctx context.Context, in ItemQualityEv
 }
 
 func (r *ItemQualityEvaluationRepo) LoadLatestByKind(ctx context.Context, itemID, kind string) (*model.ItemQualityEvaluation, error) {
+	return r.LoadLatestByKindAndProvider(ctx, itemID, kind, "jev")
+}
+
+func (r *ItemQualityEvaluationRepo) LoadLatestByKindAndProvider(ctx context.Context, itemID, kind, provider string) (*model.ItemQualityEvaluation, error) {
 	var out model.ItemQualityEvaluation
 	var dimensions, signals, signalThresholds []byte
 	err := r.db.QueryRow(ctx, `
@@ -81,8 +85,8 @@ func (r *ItemQualityEvaluationRepo) LoadLatestByKind(ctx context.Context, itemID
 		       aggregate_score, minimum_score, minimum_confidence, quality_threshold, confidence_threshold,
 		       gate_policy_version, decision, escalation_reason, reason_detail, input_tokens, output_tokens,
 		       estimated_cost_usd, latency_ms, created_at, updated_at
-		FROM item_quality_evaluations WHERE item_id=$1 AND kind=$2
-		ORDER BY attempt_index DESC, created_at DESC LIMIT 1`, itemID, kind).Scan(
+		FROM item_quality_evaluations WHERE item_id=$1 AND kind=$2 AND provider=$3
+		ORDER BY attempt_index DESC, created_at DESC LIMIT 1`, itemID, kind, provider).Scan(
 		&out.ID, &out.ItemID, &out.Kind, &out.AttemptIndex, &out.Provider, &out.RequestedModel, &out.Model, &dimensions, &signals, &signalThresholds,
 		&out.AggregateScore, &out.MinimumScore, &out.MinimumConfidence, &out.QualityThreshold, &out.ConfidenceThreshold,
 		&out.GatePolicyVersion, &out.Decision, &out.EscalationReason, &out.ReasonDetail, &out.InputTokens, &out.OutputTokens,

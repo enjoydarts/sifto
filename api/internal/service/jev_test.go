@@ -41,6 +41,40 @@ func TestJevClientRejectsAnswersWithUnexpectedDimensionNames(t *testing.T) {
 	}
 }
 
+func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/decisions/v1/systemone" || r.Header.Get("Authorization") != "Bearer liquid_test" {
+			t.Errorf("request path=%q authorization=%q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		var payload struct {
+			Model     string         `json:"model"`
+			Questions map[string]any `json:"questions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if payload.Model != "d1:free" || len(payload.Questions) != 7 {
+			t.Errorf("payload=%#v", payload)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"d1:free","answers":{"source_support":{"type":"score","score":4,"confidence":1},"contradiction_free":{"type":"score","score":4,"confidence":1},"coverage":{"type":"score","score":4,"confidence":1},"inference_control":{"type":"score","score":4,"confidence":1},"specificity":{"type":"score","score":4,"confidence":1},"has_unsupported_fact":{"type":"noul","noul":0},"has_contradiction":{"type":"noul","noul":0}},"usage":{"input_tokens":20,"output_tokens":0}}`))
+	}))
+	defer server.Close()
+	catalog, err := LoadD1Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewD1ClientFromCatalog(catalog)
+	client.baseURL = server.URL
+	evaluation, err := client.EvaluateFacts(context.Background(), "liquid_test", "title", "body", []string{"fact"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evaluation.Model != "d1:free" || evaluation.Usage.InputTokens != 20 || evaluation.Usage.EstimatedCostUSD != 0 {
+		t.Fatalf("evaluation=%#v", evaluation)
+	}
+}
+
 func TestEvaluateJevGateAcceptsOnlyAllThresholds(t *testing.T) {
 	policy := JevGatePolicy{Version: "v1", AggregateThreshold: 0.90, MinimumDimensionScore: 0.80, MinimumConfidence: 0.50, ConfidenceScoreMargin: 0.10, CriticalDimensionScore: 0.90, SignalThresholds: map[string]float64{"has_unsupported_fact": 0.10, "has_contradiction": 0.05}}
 	result := EvaluateJevGate(passingJevDimensions(), passingJevSignals(), []string{"source_support", "contradiction_free"}, policy)

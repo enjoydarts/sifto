@@ -1341,6 +1341,20 @@ func (h *SettingsHandler) DeleteJevAPIKey(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (h *SettingsHandler) SetD1APIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "d1", map[string]func(*model.UserSettings) any{
+		"has_d1_api_key": func(s *model.UserSettings) any { return s.HasD1APIKey },
+		"d1_api_key_last4": func(s *model.UserSettings) any { return s.D1APIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteD1APIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "d1", map[string]func(*model.UserSettings) any{
+		"has_d1_api_key": func(s *model.UserSettings) any { return s.HasD1APIKey },
+		"d1_api_key_last4": func(s *model.UserSettings) any { return s.D1APIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) DeleteCartesiaAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.deleteAPIKey(w, r, "cartesia", map[string]func(*model.UserSettings) any{
 		"has_cartesia_api_key":   func(s *model.UserSettings) any { return s.HasCartesiaAPIKey },

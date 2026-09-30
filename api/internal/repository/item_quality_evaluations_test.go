@@ -71,4 +71,22 @@ func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	if got.Signals["has_unsupported_fact"].Probability != 0.02 || got.SignalThresholds["has_unsupported_fact"] != 0.10 {
 		t.Fatalf("persisted signals = %#v thresholds = %#v", got.Signals, got.SignalThresholds)
 	}
+	d1 := base
+	d1.Provider = "d1"
+	d1.RequestedModel = "d1:free"
+	d1.Model = "d1:free"
+	d1.GatePolicyVersion = "d1-shadow-v1"
+	d1.Decision = "accepted"
+	d1.EscalationReason = nil
+	if err := repo.Upsert(ctx, d1); err != nil {
+		t.Fatalf("D1 Upsert() error = %v", err)
+	}
+	jevAgain, err := repo.LoadLatestByKind(ctx, itemID, "facts")
+	if err != nil || jevAgain == nil || jevAgain.Provider != "jev" || jevAgain.Decision != "escalated" {
+		t.Fatalf("Jev after D1 = %#v, %v", jevAgain, err)
+	}
+	d1Got, err := repo.LoadLatestByKindAndProvider(ctx, itemID, "facts", "d1")
+	if err != nil || d1Got == nil || d1Got.Model != "d1:free" || d1Got.Decision != "accepted" {
+		t.Fatalf("D1 evaluation = %#v, %v", d1Got, err)
+	}
 }

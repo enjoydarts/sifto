@@ -21,6 +21,9 @@ type jevPrecheckStepResult struct {
 }
 
 type jevPrecheckConfig struct {
+	Provider string
+	Catalog  service.JevCatalog
+	Client   *service.JevClient
 	StepName string
 	Kind     string
 	Purpose  string
@@ -34,6 +37,7 @@ type jevPrecheckConfig struct {
 
 func executeJevFactsPrecheck(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, content string, facts []string) bool {
 	return executeJevPrecheck(ctx, deps, jevPrecheckConfig{
+		Provider: "jev", Catalog: deps.jevCatalog, Client: deps.jev,
 		StepName: jevStepName("check-facts", deps.jevCatalog.GatePolicy.Version, attempt), Kind: "facts", Purpose: "facts_check_precheck",
 		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
 		Critical: []string{"source_support", "contradiction_free"},
@@ -45,6 +49,7 @@ func executeJevFactsPrecheck(ctx context.Context, deps processItemDeps, data pro
 
 func executeJevFaithfulnessPrecheck(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, facts []string, summary string) bool {
 	return executeJevPrecheck(ctx, deps, jevPrecheckConfig{
+		Provider: "jev", Catalog: deps.jevCatalog, Client: deps.jev,
 		StepName: jevStepName("check-summary-faithfulness", deps.jevCatalog.GatePolicy.Version, attempt), Kind: "faithfulness", Purpose: "faithfulness_check_precheck",
 		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
 		Critical: []string{"facts_support", "contradiction_free"},
@@ -54,12 +59,42 @@ func executeJevFaithfulnessPrecheck(ctx context.Context, deps processItemDeps, d
 	})
 }
 
+func executeD1FactsShadow(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, content string, facts []string) {
+	if deps.d1 == nil {
+		return
+	}
+	_ = executeJevPrecheck(ctx, deps, jevPrecheckConfig{
+		Provider: "d1", Catalog: deps.d1Catalog, Client: deps.d1,
+		StepName: jevStepName("check-facts-d1", deps.d1Catalog.GatePolicy.Version, attempt), Kind: "facts", Purpose: "facts_check_precheck",
+		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
+		Critical: []string{"source_support", "contradiction_free"},
+		Evaluate: func(callCtx context.Context, key string) (*service.JevEvaluation, error) {
+			return deps.d1.EvaluateFacts(callCtx, key, ptrStringValue(title), content, facts)
+		},
+	})
+}
+
+func executeD1FaithfulnessShadow(ctx context.Context, deps processItemDeps, data processItemEventData, itemID string, userID *string, attempt int, title *string, facts []string, summary string) {
+	if deps.d1 == nil {
+		return
+	}
+	_ = executeJevPrecheck(ctx, deps, jevPrecheckConfig{
+		Provider: "d1", Catalog: deps.d1Catalog, Client: deps.d1,
+		StepName: jevStepName("check-summary-faithfulness-d1", deps.d1Catalog.GatePolicy.Version, attempt), Kind: "faithfulness", Purpose: "faithfulness_check_precheck",
+		Attempt: attempt, UserID: userID, SourceID: &data.SourceID, ItemID: &itemID,
+		Critical: []string{"facts_support", "contradiction_free"},
+		Evaluate: func(callCtx context.Context, key string) (*service.JevEvaluation, error) {
+			return deps.d1.EvaluateFaithfulness(callCtx, key, ptrStringValue(title), facts, summary)
+		},
+	})
+}
+
 func executeJevPrecheck(ctx context.Context, deps processItemDeps, config jevPrecheckConfig) bool {
-	if deps.jev == nil || deps.keyProvider == nil || config.UserID == nil || strings.TrimSpace(*config.UserID) == "" {
+	if config.Client == nil || deps.keyProvider == nil || config.UserID == nil || strings.TrimSpace(*config.UserID) == "" {
 		return false
 	}
 	result, err := step.Run(ctx, config.StepName, func(stepCtx context.Context) (*jevPrecheckStepResult, error) {
-		key, keyErr := deps.keyProvider.GetAPIKey(stepCtx, *config.UserID, "jev")
+		key, keyErr := deps.keyProvider.GetAPIKey(stepCtx, *config.UserID, config.Provider)
 		if keyErr != nil {
 			return jevErrorStepResult(service.JevEscalationConfigurationError, keyErr), nil
 		}
@@ -72,13 +107,13 @@ func executeJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 			return jevErrorStepResult(reason, evalErr), nil
 		}
 		if evaluation == nil {
-			return jevErrorStepResult(service.JevEscalationSchemaError, errors.New("Jev returned no evaluation")), nil
+			return jevErrorStepResult(service.JevEscalationSchemaError, fmt.Errorf("%s returned no evaluation", config.Provider)), nil
 		}
-		gate := service.EvaluateJevGate(evaluation.Dimensions, evaluation.Signals, config.Critical, deps.jevCatalog.GatePolicy)
+		gate := service.EvaluateJevGate(evaluation.Dimensions, evaluation.Signals, config.Critical, config.Catalog.GatePolicy)
 		return &jevPrecheckStepResult{Evaluation: evaluation, Gate: gate, EscalationReason: string(gate.EscalationReason)}, nil
 	})
 	if err != nil {
-		log.Printf("Jev precheck step failed open item_id=%s kind=%s err=%v", ptrStringValue(config.ItemID), config.Kind, err)
+		log.Printf("%s precheck step failed open item_id=%s kind=%s err=%v", config.Provider, ptrStringValue(config.ItemID), config.Kind, err)
 		return false
 	}
 	if result == nil || result.Skipped {
@@ -116,17 +151,17 @@ func classifyJevEscalation(err error) service.JevEscalationReason {
 	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timeout") || strings.Contains(strings.ToLower(err.Error()), "deadline") {
 		return service.JevEscalationTimeout
 	}
-	if strings.Contains(err.Error(), "HTTP status=") || strings.HasPrefix(err.Error(), "Jev request:") {
+	if strings.Contains(err.Error(), "HTTP status=") || strings.HasPrefix(err.Error(), "Jev request:") || strings.HasPrefix(err.Error(), "D1 request:") {
 		return service.JevEscalationHTTPError
 	}
 	return service.JevEscalationSchemaError
 }
 
 func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPrecheckConfig, result *jevPrecheckStepResult) {
-	policy := deps.jevCatalog.GatePolicy
+	policy := config.Catalog.GatePolicy
 	input := repository.ItemQualityEvaluationInput{
-		ItemID: ptrStringValue(config.ItemID), Kind: config.Kind, AttemptIndex: config.Attempt, Provider: "jev",
-		RequestedModel: deps.jevCatalog.DefaultModel, Model: deps.jevCatalog.DefaultModel,
+		ItemID: ptrStringValue(config.ItemID), Kind: config.Kind, AttemptIndex: config.Attempt, Provider: config.Provider,
+		RequestedModel: config.Catalog.DefaultModel, Model: config.Catalog.DefaultModel,
 		Dimensions: map[string]service.JevDimension{}, Signals: map[string]service.JevSignal{}, SignalThresholds: policy.SignalThresholds,
 		QualityThreshold: policy.AggregateThreshold, ConfidenceThreshold: policy.MinimumConfidence,
 		GatePolicyVersion: policy.Version, Decision: string(result.Gate.Decision),
@@ -141,13 +176,13 @@ func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 		input.RequestedModel, input.Model, input.Dimensions, input.Signals = evaluation.RequestedModel, evaluation.Model, evaluation.Dimensions, evaluation.Signals
 		input.AggregateScore, input.MinimumScore, input.MinimumConfidence = result.Gate.AggregateScore, result.Gate.MinimumScore, result.Gate.MinimumConfidence
 		input.InputTokens, input.OutputTokens, input.EstimatedCostUSD, input.LatencyMS = evaluation.Usage.InputTokens, evaluation.Usage.OutputTokens, evaluation.Usage.EstimatedCostUSD, evaluation.LatencyMS
-		usage := &service.LLMUsage{Provider: "jev", Model: evaluation.Model, RequestedModel: evaluation.RequestedModel, ResolvedModel: evaluation.Model, PricingSource: evaluation.Usage.PricingSource, InputTokens: evaluation.Usage.InputTokens, OutputTokens: evaluation.Usage.OutputTokens, EstimatedCostUSD: evaluation.Usage.EstimatedCostUSD}
+		usage := &service.LLMUsage{Provider: config.Provider, Model: evaluation.Model, RequestedModel: evaluation.RequestedModel, ResolvedModel: evaluation.Model, PricingSource: evaluation.Usage.PricingSource, InputTokens: evaluation.Usage.InputTokens, OutputTokens: evaluation.Usage.OutputTokens, EstimatedCostUSD: evaluation.Usage.EstimatedCostUSD}
 		recordLLMUsage(ctx, deps.llmUsageRepo, config.Purpose, usage, config.UserID, config.SourceID, config.ItemID, nil, nil)
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, config.Purpose, usage, config.Attempt, config.UserID, config.SourceID, config.ItemID, nil, nil)
 	}
 	if deps.qualityRepo != nil {
 		if err := deps.qualityRepo.Upsert(ctx, input); err != nil {
-			log.Printf("persist Jev evaluation item_id=%s kind=%s: %v", input.ItemID, input.Kind, err)
+			log.Printf("persist %s evaluation item_id=%s kind=%s: %v", config.Provider, input.ItemID, input.Kind, err)
 		}
 	}
 }

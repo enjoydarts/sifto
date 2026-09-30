@@ -203,7 +203,7 @@ function DetailInfoBox({
 
 function jevFlaggedDimensions(evaluation: ItemQualityEvaluation): Array<[string, number]> {
   // v4 and v5 evaluations store the policy version but not the per-dimension thresholds.
-  if (evaluation.gate_policy_version !== "jev-quality-gate-v4" && evaluation.gate_policy_version !== "jev-quality-gate-v5") return [];
+  if (evaluation.gate_policy_version !== "jev-quality-gate-v4" && evaluation.gate_policy_version !== "jev-quality-gate-v5" && evaluation.gate_policy_version !== "d1-shadow-v1") return [];
   const reason = evaluation.escalation_reason;
   const critical = evaluation.kind === "facts"
     ? new Set(["source_support", "contradiction_free"])
@@ -221,8 +221,9 @@ function jevFlaggedDimensions(evaluation: ItemQualityEvaluation): Array<[string,
 
 function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQualityEvaluation | null; t: (key: string, fallback?: string) => string; locale: string }) {
   if (!evaluation) return null;
+  const isD1 = evaluation.provider === "d1";
   const percent = (value: number) => `${Math.round(value * 100)}%`;
-  const route = evaluation.decision === "accepted" ? t("itemDetail.jev.route.accepted") : t("itemDetail.jev.route.escalated");
+  const route = isD1 ? t("itemDetail.d1.shadow") : evaluation.decision === "accepted" ? t("itemDetail.jev.route.accepted") : t("itemDetail.jev.route.escalated");
   const hasScores = evaluation.decision !== "error";
   const listSeparator = locale === "ja" ? "、" : ", ";
   const flaggedDimensions = jevFlaggedDimensions(evaluation);
@@ -234,7 +235,7 @@ function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQua
     <div className="mt-4 rounded-[16px] border border-violet-200 bg-violet-50/60 p-3 text-xs text-[var(--color-editorial-ink-soft)]">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">{route}</span>
-        <span className="font-medium text-[var(--color-editorial-ink)]">{t(`itemDetail.jev.decision.${evaluation.decision}`, evaluation.decision)}</span>
+        <span className="font-medium text-[var(--color-editorial-ink)]">{t(`${isD1 ? "itemDetail.d1" : "itemDetail.jev"}.decision.${evaluation.decision}`, evaluation.decision)}</span>
         <span>{evaluation.model}</span>
         <span>{evaluation.gate_policy_version}</span>
       </div>
@@ -247,7 +248,7 @@ function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQua
         <span>{new Date(evaluation.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}</span>
       </div>
       {evaluation.escalation_reason ? (
-        <p className="mt-2 text-amber-800">{t("itemDetail.jev.escalationReason")}: {t(`itemDetail.jev.reason.${evaluation.escalation_reason}`, evaluation.escalation_reason)}</p>
+        <p className="mt-2 text-amber-800">{t("itemDetail.jev.escalationReason")}: {t(`itemDetail.${isD1 ? "d1" : "jev"}.reason.${evaluation.escalation_reason}`, t(`itemDetail.jev.reason.${evaluation.escalation_reason}`, evaluation.escalation_reason))}</p>
       ) : null}
       {flaggedDimensions.length > 0 ? (
         <p className="mt-1 text-amber-900">
@@ -616,7 +617,7 @@ export default function ItemDetailPage() {
 
         {detailTab === "summary" ? (
           <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
-            {(item.summary || item.faithfulness || item.faithfulness_quality_evaluation || (item.summary_executions?.length ?? 0) > 0) ? (
+            {(item.summary || item.faithfulness || item.faithfulness_quality_evaluation || item.faithfulness_d1_quality_evaluation || (item.summary_executions?.length ?? 0) > 0) ? (
               <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
                 <div className="flex flex-wrap items-center gap-2">
                   {item.summary?.score != null && (
@@ -716,6 +717,7 @@ export default function ItemDetailPage() {
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
                     )}
                     <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} t={t} locale={locale} />
+                    <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
                 <ExecutionTimeline
@@ -733,7 +735,7 @@ export default function ItemDetailPage() {
 
         {detailTab === "facts" ? (
           <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
-            {(item.facts && item.facts.facts.length > 0) || item.facts_check || item.facts_quality_evaluation || (item.facts_executions?.length ?? 0) > 0 ? (
+            {(item.facts && item.facts.facts.length > 0) || item.facts_check || item.facts_quality_evaluation || item.facts_d1_quality_evaluation || (item.facts_executions?.length ?? 0) > 0 ? (
               <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
                 <div className="flex flex-wrap items-center gap-2">
                   {item.facts_llm && (
@@ -781,6 +783,7 @@ export default function ItemDetailPage() {
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
                     )}
                     <QualityEvaluationCard evaluation={item.facts_quality_evaluation} t={t} locale={locale} />
+                    <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
                 {item.facts && item.facts.facts.length > 0 ? (

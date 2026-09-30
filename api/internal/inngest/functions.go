@@ -1167,6 +1167,13 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 	} else {
 		jevClient = service.NewJevClientFromCatalog(jevCatalog)
 	}
+	d1Catalog, d1CatalogErr := service.LoadD1Catalog()
+	var d1Client *service.JevClient
+	if d1CatalogErr != nil {
+		log.Printf("D1 shadow evaluation disabled: %v", d1CatalogErr)
+	} else {
+		d1Client = service.NewD1ClientFromCatalog(d1Catalog)
+	}
 	deps := processItemDeps{
 		itemRepo:           repository.NewItemInngestRepo(db),
 		itemViewRepo:       repository.NewItemRepo(db),
@@ -1183,6 +1190,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		worker:             worker,
 		jev:                jevClient,
 		jevCatalog:         jevCatalog,
+		d1:                 d1Client,
+		d1Catalog:          d1Catalog,
 		openAI:             openAI,
 		oneSignal:          oneSignal,
 		publisher:          mustEventPublisher(),

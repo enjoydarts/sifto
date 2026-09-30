@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "default_model": "d1:free",
+  "models": [{"id": "d1:free", "match_exact": ["d1:free"], "match_prefix": [], "pricing_source": "liquid_d1_free_2026_09", "input_per_mtok_usd": 0, "output_per_mtok_usd": 0}],
+  "gate_policy": {
+    "version": "d1-shadow-v1",
+    "aggregate_threshold": 0.75,
+    "minimum_dimension_score": 0.75,
+    "minimum_confidence": 0.5,
+    "confidence_score_margin": 0.1,
+    "min_passing_probability": 0.85,
+    "critical_dimension_score": 0.75,
+    "signal_thresholds": {"has_unsupported_fact": 0.5, "has_unsupported_claim": 0.5, "has_contradiction": 0.5, "has_entity_numeric_mismatch": 0.5}
+  }
+}

@@ -25,16 +25,46 @@ type JevModelConfig struct {
 }
 
 func LoadJevCatalog() (JevCatalog, error) {
-	data, err := os.ReadFile(jevCatalogPath())
+	return loadDecisionCatalog(jevCatalogPath())
+}
+
+func LoadD1Catalog() (JevCatalog, error) {
+	return loadDecisionCatalog(d1CatalogPath())
+}
+
+func d1CatalogPath() string {
+	if value := strings.TrimSpace(os.Getenv("D1_CATALOG_PATH")); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(os.Getenv("LLM_CATALOG_PATH")); value != "" {
+		return filepath.Join(filepath.Dir(value), "d1_catalog.json")
+	}
+	candidates := []string{
+		"/shared/d1_catalog.json",
+		filepath.Join("shared", "d1_catalog.json"),
+		filepath.Join("..", "shared", "d1_catalog.json"),
+		filepath.Join("..", "..", "shared", "d1_catalog.json"),
+		filepath.Join("..", "..", "..", "shared", "d1_catalog.json"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return candidates[0]
+}
+
+func loadDecisionCatalog(path string) (JevCatalog, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return JevCatalog{}, fmt.Errorf("read Jev catalog: %w", err)
+		return JevCatalog{}, fmt.Errorf("read decision catalog %s: %w", path, err)
 	}
 	var catalog JevCatalog
 	if err := json.Unmarshal(data, &catalog); err != nil {
-		return JevCatalog{}, fmt.Errorf("decode Jev catalog: %w", err)
+		return JevCatalog{}, fmt.Errorf("decode decision catalog %s: %w", path, err)
 	}
 	if strings.TrimSpace(catalog.DefaultModel) == "" || len(catalog.Models) == 0 || strings.TrimSpace(catalog.GatePolicy.Version) == "" {
-		return JevCatalog{}, fmt.Errorf("invalid Jev catalog")
+		return JevCatalog{}, fmt.Errorf("invalid decision catalog %s", path)
 	}
 	return catalog, nil
 }

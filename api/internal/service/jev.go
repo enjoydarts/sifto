@@ -157,16 +157,25 @@ func passingRubricProbabilityAtLeast(probabilities map[string]float64, threshold
 }
 
 type JevClient struct {
-	baseURL string
-	http    *http.Client
-	catalog JevCatalog
+	baseURL      string
+	endpointPath string
+	providerName string
+	http         *http.Client
+	catalog      JevCatalog
 }
 
 func NewJevClient(baseURL string, client *http.Client, catalog JevCatalog) *JevClient {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &JevClient{baseURL: strings.TrimRight(baseURL, "/"), http: client, catalog: catalog}
+	return &JevClient{baseURL: strings.TrimRight(baseURL, "/"), endpointPath: "/v1/systemone", providerName: "Jev", http: client, catalog: catalog}
+}
+
+func NewD1ClientFromCatalog(catalog JevCatalog) *JevClient {
+	client := NewJevClient("https://api.liquid.ai", &http.Client{Timeout: 10 * time.Second}, catalog)
+	client.endpointPath = "/decisions/v1/systemone"
+	client.providerName = "D1"
+	return client
 }
 
 func NewJevClientFromCatalog(catalog JevCatalog) *JevClient {
@@ -189,7 +198,7 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/systemone", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+c.endpointPath, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -198,11 +207,11 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	started := time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Jev request: %w", err)
+		return nil, fmt.Errorf("%s request: %w", c.providerName, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("Jev HTTP status=%d", resp.StatusCode)
+		return nil, fmt.Errorf("%s HTTP status=%d", c.providerName, resp.StatusCode)
 	}
 	var decoded struct {
 		Model   string                     `json:"model"`
@@ -213,14 +222,14 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, fmt.Errorf("decode Jev response: %w", err)
+		return nil, fmt.Errorf("decode %s response: %w", c.providerName, err)
 	}
 	if strings.TrimSpace(decoded.Model) == "" || len(decoded.Answers) != len(questions) {
-		return nil, fmt.Errorf("invalid Jev response")
+		return nil, fmt.Errorf("invalid %s response", c.providerName)
 	}
 	for name := range questions {
 		if _, ok := decoded.Answers[name]; !ok {
-			return nil, fmt.Errorf("missing Jev answer %s", name)
+			return nil, fmt.Errorf("missing %s answer %s", c.providerName, name)
 		}
 	}
 	dimensions := make(map[string]JevDimension)
@@ -228,7 +237,7 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	for name, raw := range decoded.Answers {
 		question, ok := questions[name].(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid Jev question %s", name)
+			return nil, fmt.Errorf("invalid %s question %s", c.providerName, name)
 		}
 		var answer struct {
 			Type          string             `json:"type"`
@@ -239,26 +248,26 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 			Noul          float64            `json:"noul"`
 		}
 		if err := json.Unmarshal(raw, &answer); err != nil {
-			return nil, fmt.Errorf("decode Jev answer %s: %w", name, err)
+			return nil, fmt.Errorf("decode %s answer %s: %w", c.providerName, name, err)
 		}
 		switch question["type"] {
 		case "score":
 			if answer.Type != "score" || answer.Score < 0 || answer.Score > 4 || answer.Confidence < 0 || answer.Confidence > 1 || !validJevProbabilities(answer.Probabilities) {
-				return nil, fmt.Errorf("invalid Jev score answer %s", name)
+				return nil, fmt.Errorf("invalid %s score answer %s", c.providerName, name)
 			}
 			dimensions[name] = JevDimension{Score: answer.Score / 4, RawScore: answer.Score, Confidence: answer.Confidence, Legend: answer.Legend, Probabilities: answer.Probabilities}
 		case "noul":
 			if answer.Type != "noul" || answer.Noul < 0 || answer.Noul > 1 {
-				return nil, fmt.Errorf("invalid Jev noul answer %s", name)
+				return nil, fmt.Errorf("invalid %s noul answer %s", c.providerName, name)
 			}
 			signals[name] = JevSignal{Probability: answer.Noul}
 		default:
-			return nil, fmt.Errorf("unsupported Jev question type for %s", name)
+			return nil, fmt.Errorf("unsupported %s question type for %s", c.providerName, name)
 		}
 	}
 	pricing, ok := c.catalog.ResolvePricing(decoded.Model, requestedModel)
 	if !ok {
-		return nil, fmt.Errorf("Jev pricing not configured for model %s", decoded.Model)
+		return nil, fmt.Errorf("%s pricing not configured for model %s", c.providerName, decoded.Model)
 	}
 	cost := float64(decoded.Usage.InputTokens)*pricing.InputPerMTokUSD/1_000_000 + float64(decoded.Usage.OutputTokens)*pricing.OutputPerMTokUSD/1_000_000
 	return &JevEvaluation{RequestedModel: requestedModel, Model: decoded.Model, Dimensions: dimensions, Signals: signals, Usage: JevUsage{InputTokens: decoded.Usage.InputTokens, OutputTokens: decoded.Usage.OutputTokens, EstimatedCostUSD: cost, PricingSource: pricing.PricingSource}, LatencyMS: time.Since(started).Milliseconds()}, nil

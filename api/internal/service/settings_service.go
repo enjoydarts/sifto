@@ -90,6 +90,8 @@ type SettingsGetPayload struct {
 	FeatherlessAPIKeyLast4         *string `json:"featherless_api_key_last4,omitempty"`
 	HasJevAPIKey                   bool    `json:"has_jev_api_key"`
 	JevAPIKeyLast4                 *string `json:"jev_api_key_last4,omitempty"`
+	HasD1APIKey                    bool    `json:"has_d1_api_key"`
+	D1APIKeyLast4                  *string `json:"d1_api_key_last4,omitempty"`
 
 	// TTS and other non-LLM keys
 	HasAzureSpeechAPIKey    bool    `json:"has_azure_speech_api_key"`
@@ -468,7 +470,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		UserID: settings.UserID,
 		// LLMAPIKeys is the primary catalog-driven map. Legacy flat fields are populated below
 		// via sync for existing frontend consumers.
-		LLMAPIKeys:              buildLLMAPIKeyStatus(settings, append(GetLLMProviders(), "jev")),
+		LLMAPIKeys:              buildLLMAPIKeyStatus(settings, append(GetLLMProviders(), "jev", "d1")),
 		HasAzureSpeechAPIKey:    settings.HasAzureSpeechAPIKey,
 		AzureSpeechAPIKeyLast4:  settings.AzureSpeechAPIKeyLast4,
 		AzureSpeechRegion:       settings.AzureSpeechRegion,
@@ -1384,6 +1386,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetCartesiaAPIKey(ctx, userID, enc, last4)
 	case "jev":
 		return s.repo.SetJevAPIKey(ctx, userID, enc, last4)
+	case "d1":
+		return s.repo.SetD1APIKey(ctx, userID, enc, last4)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
@@ -1445,6 +1449,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearCartesiaAPIKey(ctx, userID)
 	case "jev":
 		return s.repo.ClearJevAPIKey(ctx, userID)
+	case "d1":
+		return s.repo.ClearD1APIKey(ctx, userID)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}

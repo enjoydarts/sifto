@@ -46,6 +46,8 @@ type processItemDeps struct {
 	worker             *service.WorkerClient
 	jev                *service.JevClient
 	jevCatalog         service.JevCatalog
+	d1                 *service.JevClient
+	d1Catalog          service.JevCatalog
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
 	publisher          *service.EventPublisher
@@ -563,6 +565,7 @@ func extractAndPersistFacts(
 		}
 		var factsCheck *service.FactsCheckResponse
 		var shouldRetry bool
+		executeD1FactsShadow(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts)
 		if executeJevFactsPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts) {
 			factsCheck = &service.FactsCheckResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
 		} else {
@@ -781,6 +784,7 @@ func summarizeAndPersistItem(
 		}
 		var faithfulness *service.SummaryFaithfulnessResponse
 		var shouldRetry bool
+		executeD1FaithfulnessShadow(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary)
 		if executeJevFaithfulnessPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary) {
 			faithfulness = &service.SummaryFaithfulnessResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
 		} else {

@@ -78,6 +78,8 @@ type UserSettings struct {
 	HasCartesiaAPIKey                bool       `json:"has_cartesia_api_key"`
 	JevAPIKeyLast4                   *string    `json:"jev_api_key_last4,omitempty"`
 	HasJevAPIKey                     bool       `json:"has_jev_api_key"`
+	D1APIKeyLast4                    *string    `json:"d1_api_key_last4,omitempty"`
+	HasD1APIKey                      bool       `json:"has_d1_api_key"`
 	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
 	PodcastEnabled                   bool       `json:"podcast_enabled"`
 	PodcastFeedSlug                  *string    `json:"podcast_feed_slug,omitempty"`
@@ -647,21 +649,23 @@ type PersonalScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	Facts               *ItemFacts                `json:"facts,omitempty"`
-	FactsLLM            *ItemSummaryLLM           `json:"facts_llm,omitempty"`
-	FactsExecutions     []ItemLLMExecutionAttempt `json:"facts_executions,omitempty"`
-	FactsCheck          *FactsCheck               `json:"facts_check,omitempty"`
-	FactsCheckLLM       *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
-	FactsQuality        *ItemQualityEvaluation    `json:"facts_quality_evaluation,omitempty"`
-	Summary             *ItemSummary              `json:"summary,omitempty"`
-	SummaryLLM          *ItemSummaryLLM           `json:"summary_llm,omitempty"`
-	SummaryExecutions   []ItemLLMExecutionAttempt `json:"summary_executions,omitempty"`
-	Faithfulness        *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
-	FaithfulnessLLM     *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
-	FaithfulnessQuality *ItemQualityEvaluation    `json:"faithfulness_quality_evaluation,omitempty"`
-	Feedback            *ItemFeedback             `json:"feedback,omitempty"`
-	Note                *ItemNote                 `json:"note,omitempty"`
-	Highlights          []ItemHighlight           `json:"highlights,omitempty"`
+	Facts                 *ItemFacts                `json:"facts,omitempty"`
+	FactsLLM              *ItemSummaryLLM           `json:"facts_llm,omitempty"`
+	FactsExecutions       []ItemLLMExecutionAttempt `json:"facts_executions,omitempty"`
+	FactsCheck            *FactsCheck               `json:"facts_check,omitempty"`
+	FactsCheckLLM         *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
+	FactsQuality          *ItemQualityEvaluation    `json:"facts_quality_evaluation,omitempty"`
+	FactsD1Quality        *ItemQualityEvaluation    `json:"facts_d1_quality_evaluation,omitempty"`
+	Summary               *ItemSummary              `json:"summary,omitempty"`
+	SummaryLLM            *ItemSummaryLLM           `json:"summary_llm,omitempty"`
+	SummaryExecutions     []ItemLLMExecutionAttempt `json:"summary_executions,omitempty"`
+	Faithfulness          *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
+	FaithfulnessLLM       *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
+	FaithfulnessQuality   *ItemQualityEvaluation    `json:"faithfulness_quality_evaluation,omitempty"`
+	FaithfulnessD1Quality *ItemQualityEvaluation    `json:"faithfulness_d1_quality_evaluation,omitempty"`
+	Feedback              *ItemFeedback             `json:"feedback,omitempty"`
+	Note                  *ItemNote                 `json:"note,omitempty"`
+	Highlights            []ItemHighlight           `json:"highlights,omitempty"`
 }
 
 type ItemQualityDimension struct {

@@ -221,12 +221,14 @@ export interface ItemDetail extends Item {
   facts_check?: FactsCheck | null;
   facts_check_llm?: ItemSummaryLLM | null;
   facts_quality_evaluation?: ItemQualityEvaluation | null;
+  facts_d1_quality_evaluation?: ItemQualityEvaluation | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
   summary_executions?: ItemLLMExecutionAttempt[];
   faithfulness?: SummaryFaithfulnessCheck | null;
   faithfulness_llm?: ItemSummaryLLM | null;
   faithfulness_quality_evaluation?: ItemQualityEvaluation | null;
+  faithfulness_d1_quality_evaluation?: ItemQualityEvaluation | null;
   feedback?: ItemFeedback | null;
   note?: ItemNote | null;
   highlights?: ItemHighlight[];

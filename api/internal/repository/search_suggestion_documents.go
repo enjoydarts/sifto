@@ -7,11 +7,16 @@ import (
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/topiccatalog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type SearchSuggestionDocumentRepo struct{ db *pgxpool.Pool }
+
+// The shared catalog currently has 48 topics. Keep a hard upper bound if it
+// grows, so refreshing suggestions cannot become an unbounded index job.
+const maxSearchSuggestionTopicsPerUser = 100
 
 func NewSearchSuggestionDocumentRepo(db *pgxpool.Pool) *SearchSuggestionDocumentRepo {
 	return &SearchSuggestionDocumentRepo{db: db}
@@ -80,6 +85,30 @@ func (r *SearchSuggestionDocumentRepo) ListSourcePage(ctx context.Context, offse
 
 func (r *SearchSuggestionDocumentRepo) ListTopicsByUser(ctx context.Context, userID string) ([]model.SearchSuggestionDocument, error) {
 	return r.loadTopics(ctx, `AND s.user_id = $1`, `ORDER BY user_id, topic_key`, userID)
+}
+
+func (r *SearchSuggestionDocumentRepo) ListTopicUserIDs(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT s.user_id::text
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE i.status = 'summarized' AND i.deleted_at IS NULL
+		ORDER BY 1
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	userIDs := []string{}
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, userID)
+	}
+	return userIDs, rows.Err()
 }
 
 func (r *SearchSuggestionDocumentRepo) ListTopicPage(ctx context.Context, offset, limit int) ([]model.SearchSuggestionDocument, error) {
@@ -188,22 +217,47 @@ func (r *SearchSuggestionDocumentRepo) loadSources(ctx context.Context, whereCla
 }
 
 func (r *SearchSuggestionDocumentRepo) loadTopics(ctx context.Context, whereClause, orderClause string, args ...any) ([]model.SearchSuggestionDocument, error) {
+	topicMapJSON, genreMapJSON, err := topiccatalog.MappingsJSON()
+	if err != nil {
+		return nil, err
+	}
+	topicMapArg := itoa(len(args) + 1)
+	genreMapArg := itoa(len(args) + 2)
+	args = append(args, topicMapJSON, genreMapJSON)
 	rows, err := r.db.Query(ctx, `
-		WITH topic_rows AS (
-			SELECT s.user_id::text AS user_id,
-			       LOWER(regexp_replace(BTRIM(t.topic), '\s+', ' ', 'g')) AS topic_key,
-			       MIN(BTRIM(t.topic)) AS label,
-			       COUNT(DISTINCT i.id)::int AS article_count,
-			       MAX(i.updated_at) AS updated_at
+		WITH topic_map AS (
+			SELECT key, value AS canonical FROM jsonb_each_text($`+topicMapArg+`::jsonb)
+		), genre_map AS (
+			SELECT key, value AS canonical FROM jsonb_each_text($`+genreMapArg+`::jsonb)
+		), article_rows AS (
+			SELECT i.id AS item_id, s.user_id::text AS user_id,
+			       sm.topics, sm.genre, i.updated_at
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
 			JOIN item_summaries sm ON sm.item_id = i.id
-			CROSS JOIN LATERAL unnest(sm.topics) AS t(topic)
 			WHERE i.status = 'summarized'
 			  AND i.deleted_at IS NULL
-			  AND NULLIF(BTRIM(t.topic), '') IS NOT NULL
 			`+whereClause+`
-			GROUP BY s.user_id, LOWER(regexp_replace(BTRIM(t.topic), '\s+', ' ', 'g'))
+		), topic_items AS (
+			SELECT a.item_id, a.user_id, m.canonical AS label, a.updated_at
+			FROM article_rows a
+			CROSS JOIN LATERAL unnest(a.topics) AS t(topic)
+			JOIN topic_map m ON m.key = LOWER(regexp_replace(BTRIM(t.topic), '\s+', ' ', 'g'))
+			UNION ALL
+			SELECT a.item_id, a.user_id, g.canonical AS label, a.updated_at
+			FROM article_rows a
+			JOIN genre_map g ON g.key = a.genre
+		), topic_rows AS (
+			SELECT user_id, LOWER(label) AS topic_key, label,
+			       COUNT(DISTINCT item_id)::int AS article_count,
+			       MAX(updated_at) AS updated_at
+			FROM topic_items
+			GROUP BY user_id, label
+		), ranked_topics AS (
+			SELECT *, ROW_NUMBER() OVER (
+				PARTITION BY user_id ORDER BY article_count DESC, topic_key
+			) AS topic_rank
+			FROM topic_rows
 		)
 		SELECT user_id,
 		       label,
@@ -211,7 +265,8 @@ func (r *SearchSuggestionDocumentRepo) loadTopics(ctx context.Context, whereClau
 		       label AS topic,
 		       article_count,
 		       updated_at
-		FROM topic_rows
+		FROM ranked_topics
+		WHERE topic_rank <= `+itoa(maxSearchSuggestionTopicsPerUser)+`
 		`+orderClause,
 		args...,
 	)

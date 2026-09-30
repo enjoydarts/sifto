@@ -1,9 +1,26 @@
 import unittest
 
 from app.services.summary_parse_common import finalize_summary_result
+from app.services.topic_catalog import normalize_topics
 
 
 class SummaryParseCommonTests(unittest.TestCase):
+    def test_topics_use_bounded_canonical_vocabulary(self):
+        self.assertEqual(
+            normalize_topics(["LLM", "大規模言語モデル", "開発ツール", "OpenAI", "AIエージェント", "クラウド"], "ai"),
+            ["LLM", "開発者ツール", "AIエージェント"],
+        )
+
+    def test_topics_fall_back_to_genre_when_model_returns_only_unknowns(self):
+        self.assertEqual(normalize_topics(["OpenAI", "local-dev", "x" * 1005], "ai"), ["AI"])
+        self.assertEqual(normalize_topics(["OpenAI"], "other"), [])
+
+    def test_common_legacy_topic_spellings_are_preserved_as_canonical_topics(self):
+        self.assertEqual(
+            normalize_topics(["AI エージェント", "データベース", "可観測性"], "other"),
+            ["AIエージェント", "データ基盤", "インフラ"],
+        )
+
     def test_finalize_summary_result_keeps_taxonomy_genre_and_clears_other_label(self):
         result = finalize_summary_result(
             title="Example",

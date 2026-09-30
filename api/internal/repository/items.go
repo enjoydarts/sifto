@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/topiccatalog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -120,6 +121,20 @@ func firstTopicKey(topics []string) string {
 	return "__untagged__"
 }
 
+func appendSummaryTopicMatch(args []any, topic, summaryAlias string) (string, []any) {
+	labels, genres, err := topiccatalog.FilterValues(topic)
+	if err != nil {
+		labels = []string{topic}
+	}
+	args = append(args, labels)
+	match := "COALESCE(" + summaryAlias + ".topics, '{}'::text[]) && $" + itoa(len(args)) + "::text[]"
+	if len(genres) > 0 {
+		args = append(args, genres)
+		match = "(" + match + " OR " + summaryAlias + ".genre = ANY($" + itoa(len(args)) + "::text[]))"
+	}
+	return match, args
+}
+
 func buildItemListFilterParts(userID string, p ItemListParams, includeGenre bool) (string, string, []any) {
 	joins := `
 		JOIN sources s ON s.id = i.source_id
@@ -136,8 +151,9 @@ func buildItemListFilterParts(userID string, p ItemListParams, includeGenre bool
 		where += ` AND i.source_id = $` + itoa(len(args))
 	}
 	if p.Topic != nil && *p.Topic != "" {
-		args = append(args, *p.Topic)
-		where += ` AND COALESCE(sm.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]`
+		match, nextArgs := appendSummaryTopicMatch(args, *p.Topic, "sm")
+		args = nextArgs
+		where += " AND " + match
 	}
 	if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
 		args = append(args, "%"+strings.TrimSpace(*p.Query)+"%")
@@ -359,11 +375,12 @@ func (r *ItemRepo) MarkReadBulk(ctx context.Context, userID string, p BulkMarkRe
 		where += ` AND i.source_id = $` + itoa(len(args))
 	}
 	if p.Topic != nil && *p.Topic != "" {
-		args = append(args, *p.Topic)
+		match, nextArgs := appendSummaryTopicMatch(args, *p.Topic, "smt")
+		args = nextArgs
 		where += ` AND EXISTS (
 			SELECT 1 FROM item_summaries smt
 			WHERE smt.item_id = i.id
-			  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]
+			  AND ` + match + `
 		)`
 	}
 	if p.UnreadOnly {

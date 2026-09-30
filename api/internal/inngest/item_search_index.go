@@ -134,13 +134,9 @@ func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *ser
 				}, nil
 			}
 			sourceIDs := map[string]struct{}{}
-			userIDs := map[string]struct{}{}
 			for _, doc := range articleDocs {
 				if doc.SourceID != nil && *doc.SourceID != "" {
 					sourceIDs[*doc.SourceID] = struct{}{}
-				}
-				if doc.UserID != "" {
-					userIDs[doc.UserID] = struct{}{}
 				}
 			}
 			sourceDocs := make([]model.SearchSuggestionDocument, 0, len(sourceIDs))
@@ -175,48 +171,10 @@ func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *ser
 					"error":  err.Error(),
 				}, nil
 			}
-			for userID := range userIDs {
-				if err := search.DeleteSearchSuggestionDocumentsByFilter(
-					ctx,
-					"user_id = "+service.QuoteMeilisearchFilter(userID)+" AND kind = topic",
-				); err != nil {
-					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
-						return nil, markErr
-					}
-					return map[string]any{
-						"run_id": input.Event.Data.RunID,
-						"offset": input.Event.Data.Offset,
-						"limit":  input.Event.Data.Limit,
-						"status": "failed",
-						"error":  err.Error(),
-					}, nil
-				}
-				topicDocs, topicErr := suggestionRepo.ListTopicsByUser(ctx, userID)
-				if topicErr != nil {
-					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, topicErr.Error()); markErr != nil {
-						return nil, markErr
-					}
-					return map[string]any{
-						"run_id": input.Event.Data.RunID,
-						"offset": input.Event.Data.Offset,
-						"limit":  input.Event.Data.Limit,
-						"status": "failed",
-						"error":  topicErr.Error(),
-					}, nil
-				}
-				if err := search.UpsertSearchSuggestionDocuments(ctx, topicDocs); err != nil {
-					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
-						return nil, markErr
-					}
-					return map[string]any{
-						"run_id": input.Event.Data.RunID,
-						"offset": input.Event.Data.Offset,
-						"limit":  input.Event.Data.Limit,
-						"status": "failed",
-						"error":  err.Error(),
-					}, nil
-				}
-			}
+			// Topic suggestions are a global aggregate of a user's articles. Rebuilding
+			// them for every article page would reindex the entire topic vocabulary on
+			// each backfill batch. Article and source suggestions are the only
+			// documents this page backfill is responsible for.
 			if _, err := runRepo.MarkBatchSucceeded(ctx, input.Event.Data.RunID, len(docs)); err != nil {
 				return nil, err
 			}
@@ -233,6 +191,7 @@ func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *ser
 
 func itemSearchBackfillRunFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
 	runRepo := repository.NewSearchBackfillRunRepo(db)
+	suggestionRepo := repository.NewSearchSuggestionDocumentRepo(db)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -274,6 +233,26 @@ func itemSearchBackfillRunFn(client inngestgo.Client, db *pgxpool.Pool) (inngest
 						"status":         "failed",
 						"error":          err.Error(),
 					}, nil
+				}
+			}
+			if run.AllItems {
+				userIDs, err := suggestionRepo.ListTopicUserIDs(ctx)
+				if err != nil {
+					if _, markErr := runRepo.MarkFanoutFailed(ctx, run.ID, err.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{"run_id": run.ID, "status": "failed", "error": err.Error()}, nil
+				}
+				for _, userID := range userIDs {
+					if _, err := client.Send(ctx, inngestgo.Event{
+						Name: "search/suggestions.topics.refresh",
+						Data: map[string]any{"user_id": userID},
+					}); err != nil {
+						if _, markErr := runRepo.MarkFanoutFailed(ctx, run.ID, err.Error()); markErr != nil {
+							return nil, markErr
+						}
+						return map[string]any{"run_id": run.ID, "status": "failed", "error": err.Error()}, nil
+					}
 				}
 			}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
+	"github.com/inngest/inngest/pkg/enums"
 	"github.com/inngest/inngestgo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -127,7 +128,15 @@ func searchSuggestionTopicsRefreshFn(client inngestgo.Client, db *pgxpool.Pool, 
 
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{ID: "search-suggestion-topics-refresh", Name: "Refresh Search Suggestion Topics"},
+		inngestgo.FunctionOpts{
+			ID:   "search-suggestion-topics-refresh",
+			Name: "Refresh Search Suggestion Topics",
+			Concurrency: []inngestgo.ConfigStepConcurrency{{
+				Limit: 1,
+				Key:   inngestgo.StrPtr("event.data.user_id"),
+				Scope: enums.ConcurrencyScopeFn,
+			}},
+		},
 		inngestgo.EventTrigger("search/suggestions.topics.refresh", nil),
 		func(ctx context.Context, input inngestgo.Input[searchSuggestionTopicsRefreshEvent]) (any, error) {
 			userID := input.Event.Data.UserID
@@ -135,15 +144,14 @@ func searchSuggestionTopicsRefreshFn(client inngestgo.Client, db *pgxpool.Pool, 
 				return nil, fmt.Errorf("user_id is required")
 			}
 
+			docs, err := docRepo.ListTopicsByUser(ctx, userID)
+			if err != nil {
+				return nil, err
+			}
 			if err := search.DeleteSearchSuggestionDocumentsByFilter(
 				ctx,
 				"user_id = "+service.QuoteMeilisearchFilter(userID)+" AND kind = topic",
 			); err != nil {
-				return nil, err
-			}
-
-			docs, err := docRepo.ListTopicsByUser(ctx, userID)
-			if err != nil {
 				return nil, err
 			}
 			if err := search.UpsertSearchSuggestionDocuments(ctx, docs); err != nil {

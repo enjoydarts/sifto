@@ -25,6 +25,15 @@ func TestBuildItemSearchFiltersNormalizesUncategorizedGenre(t *testing.T) {
 	}
 }
 
+func TestBuildItemSearchFiltersExpandsCanonicalTopicForLegacyDocuments(t *testing.T) {
+	topic := "LLM"
+	filters := buildItemSearchFilters(ItemSearchQuery{UserID: "user-1", Topic: &topic}, true)
+	joined := strings.Join(filters, " ")
+	if !strings.Contains(joined, `topics = "LLM"`) || !strings.Contains(joined, `topics = "大規模言語モデル"`) {
+		t.Fatalf("filters = %#v, want canonical and legacy topic values", filters)
+	}
+}
+
 func TestBuildItemSearchFiltersNormalizesLegacyFreeformGenreToOther(t *testing.T) {
 	genre := "Observability"
 

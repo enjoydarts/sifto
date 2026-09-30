@@ -20,3 +20,13 @@ func TestListGenreCountsQueryUsesPositionalGroupBy(t *testing.T) {
 		t.Fatalf("items.go missing GROUP BY 1 for genre counts query")
 	}
 }
+
+func TestAppendSummaryTopicMatchExpandsCanonicalTopic(t *testing.T) {
+	match, args := appendSummaryTopicMatch([]any{"user-id"}, "AI", "sm")
+	if !strings.Contains(match, "sm.topics") || !strings.Contains(match, "sm.genre = ANY($3::text[])") {
+		t.Fatalf("match = %q", match)
+	}
+	if len(args) != 3 {
+		t.Fatalf("args = %#v, want user, labels, genres", args)
+	}
+}

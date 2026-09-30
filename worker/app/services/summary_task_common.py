@@ -2,6 +2,7 @@ from app.services.llm_text_utils import clamp_int, target_summary_chars
 from app.services.langfuse_client import get_prompt_text
 from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import apply_prompt_override
+from app.services.topic_catalog import MAX_TOPICS_PER_ARTICLE, load_topic_catalog
 
 SUMMARY_TAXONOMY = [
     "ai",
@@ -25,6 +26,7 @@ SUMMARY_TAXONOMY = [
 ]
 
 SUMMARY_OTHER_LABEL_MAX_LENGTH = 20
+TOPIC_CATALOG = load_topic_catalog()["topics"]
 _SUMMARY_TAXONOMY_GUIDANCE = (
     "genre は必須です。固定 taxonomy から必ず 1 つだけ選んでください: "
     + ", ".join(SUMMARY_TAXONOMY)
@@ -37,15 +39,22 @@ _SUMMARY_TAXONOMY_GUIDANCE = (
     "それ以外では空文字にしてください。"
     "空文字は上流で null 扱いになります。"
 )
+_TOPIC_GUIDANCE = (
+    "topics は記事の主題を次の固定語彙から最大3件選んでください。"
+    "企業名・製品名・型番・一時的な出来事は topics に入れないでください。"
+    "該当する語がなければ空配列にしてください: " + ", ".join(TOPIC_CATALOG) + "。"
+)
 
 
 def _append_summary_taxonomy_guidance(text: str) -> str:
     rendered = str(text or "").strip()
     if not rendered:
         return ""
-    if _SUMMARY_TAXONOMY_GUIDANCE in rendered:
-        return rendered
-    return f"{rendered}\n\n# Genre\n{_SUMMARY_TAXONOMY_GUIDANCE}"
+    if _SUMMARY_TAXONOMY_GUIDANCE not in rendered:
+        rendered += f"\n\n# Genre\n{_SUMMARY_TAXONOMY_GUIDANCE}"
+    if _TOPIC_GUIDANCE not in rendered:
+        rendered += f"\n\n# Topics\n{_TOPIC_GUIDANCE}"
+    return rendered
 
 
 SUMMARY_SYSTEM_INSTRUCTION = _append_summary_taxonomy_guidance(
@@ -57,7 +66,11 @@ SUMMARY_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
-        "topics": {"type": "array", "items": {"type": "string"}},
+        "topics": {
+            "type": "array",
+            "items": {"type": "string", "enum": TOPIC_CATALOG},
+            "maxItems": MAX_TOPICS_PER_ARTICLE,
+        },
         "translated_title": {"type": "string"},
         "genre": {"type": "string", "enum": SUMMARY_TAXONOMY},
         "other_label": {"type": "string", "maxLength": SUMMARY_OTHER_LABEL_MAX_LENGTH},

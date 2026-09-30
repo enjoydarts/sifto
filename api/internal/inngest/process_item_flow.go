@@ -13,6 +13,7 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/enjoydarts/sifto/api/internal/timeutil"
+	"github.com/enjoydarts/sifto/api/internal/topiccatalog"
 	"github.com/inngest/inngestgo/step"
 )
 
@@ -846,6 +847,15 @@ func summarizeAndPersistItem(
 	if finalFaithfulness.Verdict == "fail" {
 		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "faithfulness check", fmt.Errorf("%s", finalFaithfulness.ShortComment))
 	}
+	genre := ""
+	if summary.Genre != nil {
+		genre = *summary.Genre
+	}
+	canonicalTopics, err := topiccatalog.Normalize(summary.Topics, genre)
+	if err != nil {
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "normalize topics", err)
+	}
+	summary.Topics = canonicalTopics
 	if err := deps.itemRepo.InsertSummary(
 		ctx,
 		itemID,

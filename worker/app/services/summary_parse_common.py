@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from app.services.llm_text_utils import extract_json_string_value_loose, summary_composite_score
 from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
+from app.services.topic_catalog import normalize_topics
 
 DEFAULT_SCORE_REASON = "総合的な重要度・新規性・実用性を基に採点。"
 
@@ -37,7 +38,7 @@ def finalize_summary_result(
     score_breakdown = normalize_score_breakdown(raw_score_breakdown)
     return {
         "summary": summary,
-        "topics": [str(t).strip() for t in (topics or []) if str(t).strip()],
+        "topics": normalize_topics(topics, normalized_genre),
         "genre": str(normalized_genre or "").strip(),
         "other_label": str(normalized_other_label or "").strip()[:20],
         "translated_title": finalize_translated_title(

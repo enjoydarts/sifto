@@ -2,10 +2,19 @@ import unittest
 
 from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import bind_prompt_override
-from app.services.summary_task_common import SUMMARY_SYSTEM_INSTRUCTION, SUMMARY_TAXONOMY, build_summary_task
+from app.services.summary_task_common import SUMMARY_SYSTEM_INSTRUCTION, SUMMARY_TAXONOMY, TOPIC_CATALOG, build_summary_task
 
 
 class SummaryTaskCommonTests(unittest.TestCase):
+    def test_existing_genre_guidance_only_gets_topics_added_once(self):
+        genre_only = SUMMARY_SYSTEM_INSTRUCTION.split("\n\n# Topics", 1)[0]
+        with bind_prompt_override("summary.default", genre_only, genre_only):
+            task = build_summary_task("Example", ["A fact."], source_text_chars=100)
+        self.assertEqual(task["system_instruction"].count("# Genre"), 1)
+        self.assertEqual(task["system_instruction"].count("# Topics"), 1)
+        self.assertEqual(task["prompt"].count("# Genre"), 1)
+        self.assertEqual(task["prompt"].count("# Topics"), 1)
+
     def test_system_instruction_discourages_fact_by_fact_rewrites(self):
         self.assertIn("関連する facts を統合", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("「〜である。」の連続を避け", SUMMARY_SYSTEM_INSTRUCTION)
@@ -48,6 +57,9 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertEqual(genre_schema["enum"], SUMMARY_TAXONOMY)
         self.assertEqual(task["schema"]["properties"]["other_label"]["type"], "string")
         self.assertEqual(task["schema"]["properties"]["other_label"]["maxLength"], 20)
+        self.assertEqual(task["schema"]["properties"]["topics"]["items"]["enum"], TOPIC_CATALOG)
+        self.assertEqual(task["schema"]["properties"]["topics"]["maxItems"], 3)
+        self.assertIn("固定語彙から最大3件", task["system_instruction"])
 
     def test_genre_schema_allows_only_taxonomy_keys(self):
         task = build_summary_task(

@@ -7,6 +7,7 @@ import (
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/topiccatalog"
 )
 
 var itemGenreFilterKeys = map[string]struct{}{
@@ -165,7 +166,18 @@ func buildItemSearchFilters(q ItemSearchQuery, includeGenre bool) []string {
 		filters = append(filters, "source_id = "+QuoteMeilisearchFilter(*q.SourceID))
 	}
 	if q.Topic != nil && strings.TrimSpace(*q.Topic) != "" {
-		filters = append(filters, "topics = "+QuoteMeilisearchFilter(*q.Topic))
+		labels, genres, err := topiccatalog.FilterValues(*q.Topic)
+		if err != nil {
+			labels = []string{*q.Topic}
+		}
+		matches := make([]string, 0, len(labels)+len(genres))
+		for _, label := range labels {
+			matches = append(matches, "topics = "+QuoteMeilisearchFilter(label))
+		}
+		for _, genre := range genres {
+			matches = append(matches, "effective_genre = "+QuoteMeilisearchFilter(genre))
+		}
+		filters = append(filters, "("+strings.Join(matches, " OR ")+")")
 	}
 	if includeGenre {
 		if normalizedGenre := normalizeGenreFilterValue(q.Genre); normalizedGenre != nil {

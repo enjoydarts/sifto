@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/topiccatalog"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -106,7 +107,15 @@ func (r *ItemInngestRepo) InsertSummary(
 		translatedTitlePtr = &translatedTitle
 	}
 	genre, otherGenreLabel = normalizeGenreInput(genre, otherGenreLabel)
-	_, err := r.db.Exec(ctx, `
+	genreValue := ""
+	if genre != nil {
+		genreValue = *genre
+	}
+	topics, err := topiccatalog.Normalize(topics, genreValue)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx, `
 		INSERT INTO item_summaries (item_id, summary, topics, genre, other_genre_label, translated_title, score, score_breakdown, score_reason, score_policy_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (item_id) DO UPDATE SET

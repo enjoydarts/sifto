@@ -1364,6 +1364,13 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 			if data.ItemID == "" {
 				return nil, fmt.Errorf("item_id is required")
 			}
+			hasEmbedding, err := itemRepo.HasEmbedding(ctx, data.ItemID)
+			if err != nil {
+				return nil, fmt.Errorf("check existing embedding: %w", err)
+			}
+			if hasEmbedding {
+				return map[string]any{"item_id": data.ItemID, "status": "already_embedded"}, nil
+			}
 
 			candidate, err := itemRepo.GetEmbeddingCandidate(ctx, data.ItemID)
 			if err != nil {

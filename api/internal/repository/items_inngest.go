@@ -227,6 +227,12 @@ func (r *ItemInngestRepo) UpsertEmbedding(ctx context.Context, itemID, model str
 	return err
 }
 
+func (r *ItemInngestRepo) HasEmbedding(ctx context.Context, itemID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM item_embeddings WHERE item_id = $1)`, itemID).Scan(&exists)
+	return exists, err
+}
+
 func (r *ItemInngestRepo) GetEmbeddingCandidate(ctx context.Context, itemID string) (*ItemEmbeddingCandidate, error) {
 	var v ItemEmbeddingCandidate
 	err := r.db.QueryRow(ctx, `

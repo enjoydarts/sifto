@@ -172,7 +172,7 @@ func NewJevClient(baseURL string, client *http.Client, catalog JevCatalog) *JevC
 }
 
 func NewD1ClientFromCatalog(catalog JevCatalog) *JevClient {
-	client := NewJevClient("https://api.liquid.ai", &http.Client{Timeout: 10 * time.Second}, catalog)
+	client := NewJevClient("https://api.liquid.ai", &http.Client{Timeout: 60 * time.Second}, catalog)
 	client.endpointPath = "/decisions/v1/systemone"
 	client.providerName = "D1"
 	return client

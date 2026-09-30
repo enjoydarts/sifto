@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func passingJevDimensions() map[string]JevDimension {
@@ -65,6 +66,9 @@ func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewD1ClientFromCatalog(catalog)
+	if client.http.Timeout != 60*time.Second {
+		t.Fatalf("D1 timeout = %s", client.http.Timeout)
+	}
 	client.baseURL = server.URL
 	evaluation, err := client.EvaluateFacts(context.Background(), "liquid_test", "title", "body", []string{"fact"})
 	if err != nil {

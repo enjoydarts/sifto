@@ -51,6 +51,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": _public_error_detail(request, exc)},
+        # Starlette re-raises this exception after sending the response, and
+        # Uvicorn then closes the socket. Keep proxies from reusing that socket
+        # for the immediate fallback request before the close reaches them.
+        headers={"Connection": "close"},
     )
 
 _INTERNAL_WORKER_SECRET = os.getenv("INTERNAL_WORKER_SECRET", "").strip()

@@ -877,6 +877,7 @@ export const enDict: Dict = {
   "settings.modelGuide.highlights.experimental": "Experimental",
   "settings.modelGuide.highlights.latest": "Latest",
   "settings.modelGuide.comments.claude-sonnet-5-5": "Anthropic's latest Sonnet, balancing speed and quality for summaries, Ask, and digests.",
+  "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol, an option for balancing quality and cost on complex summaries, Ask, and digests.",
   "settings.section.llm": "LLM",
   "settings.section.llmDescription": "Manage provider access, per-purpose models, and update notices in one place.",
   "settings.section.goals": "Reading Goals",

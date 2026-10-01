@@ -117,6 +117,8 @@ def messages_create(
         "max_tokens": max_tokens,
         "timeout": req_timeout,
     }
+    if str(model or "").strip() == "claude-sonnet-5-5":
+        kwargs["extra_body"] = {"thinking": {"type": "between_tools"}}
     if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
     if top_p is not None and supports_sampling_parameters(model):
@@ -289,6 +291,8 @@ async def messages_create_async(
         "max_tokens": max_tokens,
         "timeout": req_timeout,
     }
+    if str(model or "").strip() == "claude-sonnet-5-5":
+        kwargs["extra_body"] = {"thinking": {"type": "between_tools"}}
     if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
     if top_p is not None and supports_sampling_parameters(model):

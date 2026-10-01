@@ -22,6 +22,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-6-sol"); got == nil {
 		t.Fatal("gpt-6-sol not found in catalog")
 	}
+	if got := findModelCatalog("gpt-6.1-sol"); got == nil {
+		t.Fatal("gpt-6.1-sol not found in catalog")
+	}
 	if got := findModelCatalog("gpt-6-luna"); got == nil {
 		t.Fatal("gpt-6-luna not found in catalog")
 	}
@@ -407,6 +410,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "gpt-6-astra", provider: "openai"},
 		{model: "gpt-6-sol", provider: "openai"},
+		{model: "gpt-6.1-sol", provider: "openai"},
 		{model: "gpt-6-luna", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
 		{model: "gpt-5.6-sol", provider: "openai"},
@@ -621,6 +625,7 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 		cacheRead  float64
 	}{
 		{model: "gpt-6-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
+		{model: "gpt-6.1-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1},
 		{model: "gpt-6-luna", input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01},
 		{model: "claude-opus-5-5", input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2},
 		{model: "claude-sonnet-5-5", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},

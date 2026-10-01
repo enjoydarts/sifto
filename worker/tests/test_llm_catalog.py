@@ -52,6 +52,7 @@ REPRESENTATIVE_PROVIDER_MODELS = (
     ("siliconflow", "siliconflow::zai-org/GLM-5.3-Flash"),
     ("openai", "gpt-6-astra"),
     ("openai", "gpt-6-sol"),
+    ("openai", "gpt-6.1-sol"),
     ("openai", "gpt-6-luna"),
     ("openai", "gpt-5.6-luna"),
 )
@@ -66,6 +67,16 @@ ALIASED_PROVIDER_MODELS = (
 
 
 class LlmCatalogSmokeTests(unittest.TestCase):
+    def test_new_model_standard_prices(self):
+        for model, cache_read in (("claude-sonnet-5-5", 0.2), ("gpt-6.1-sol", 0.1)):
+            with self.subTest(model=model):
+                pricing = model_pricing(model)
+                self.assertIsNotNone(pricing)
+                self.assertEqual(pricing["input_per_mtok_usd"], 2)
+                self.assertEqual(pricing["output_per_mtok_usd"], 10)
+                self.assertEqual(pricing["cache_write_per_mtok_usd"], 2.5)
+                self.assertEqual(pricing["cache_read_per_mtok_usd"], cache_read)
+
     def test_provider_match_rules_are_arrays(self):
         catalog = load_llm_catalog()
         for provider in catalog.get("providers", []):

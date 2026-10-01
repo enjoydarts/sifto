@@ -430,6 +430,7 @@
       "api_key_header": "x-openai-api-key",
       "match_exact": [
         "gpt-6-astra",
+        "gpt-6.1-sol",
         "gpt-6-sol",
         "gpt-6-luna"
       ],
@@ -5638,7 +5639,7 @@
       }
     },
     {
-      "id": "gpt-6-sol",
+      "id": "gpt-6.1-sol",
       "provider": "openai",
       "available_purposes": [
         "facts",
@@ -5652,6 +5653,40 @@
       "best_for": "digest",
       "highlights": [
         "latest",
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "OpenAI GPT-6.1 Sol。複雑な要約・Ask・ダイジェスト向けの品質と費用のバランスを比較する候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_10",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 10.0,
+        "cache_read_per_mtok_usd": 0.1,
+        "cache_write_per_mtok_usd": 2.5
+      }
+    },
+    {
+      "id": "gpt-6-sol",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [
         "jsonStable",
         "longContext"
       ],

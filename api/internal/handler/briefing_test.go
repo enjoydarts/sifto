@@ -1,10 +1,14 @@
 package handler
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 func TestBuildBriefingNavigatorIntroContext(t *testing.T) {
@@ -77,5 +81,83 @@ func TestHasNavigatorProviderKeySupportsDeepInfra(t *testing.T) {
 
 	if !hasNavigatorProviderKey(settings, "deepinfra") {
 		t.Fatal("hasNavigatorProviderKey(deepinfra) = false, want true")
+	}
+}
+
+func TestResolveBriefingNavigatorModelsIncludesConfiguredFallback(t *testing.T) {
+	primary, fallback := "mimo-v2.6-flash", "deepinfra::zai-org/GLM-5.3-Flash"
+	settings := &model.UserSettings{
+		NavigatorModel: &primary, NavigatorFallbackModel: &fallback,
+		HasXiaomiMiMoTokenPlanAPIKey: true, HasDeepInfraAPIKey: true,
+	}
+	got := resolveBriefingNavigatorModels(settings)
+	if len(got) != 2 || got[0] != primary || got[1] != fallback {
+		t.Fatalf("models = %v, want [%s %s]", got, primary, fallback)
+	}
+	settings.NavigatorFallbackModel = &primary
+	if got := resolveBriefingNavigatorModels(settings); len(got) != 1 || got[0] != primary {
+		t.Fatalf("duplicate models = %v", got)
+	}
+	settings.NavigatorFallbackModel = &fallback
+	settings.HasXiaomiMiMoTokenPlanAPIKey = false
+	if got := resolveBriefingNavigatorModels(settings); len(got) != 1 || got[0] != fallback {
+		t.Fatalf("models with missing primary key = %v", got)
+	}
+}
+
+func TestGenerateBriefingNavigatorWithFallbackAfterWorkerError(t *testing.T) {
+	for _, message := range []string{
+		"worker /briefing-navigator: status 500 detail=provider status=429 quota exhausted",
+		"worker /briefing-navigator: status 502 detail=Bad Gateway",
+		"worker /briefing-navigator: context deadline exceeded",
+	} {
+		t.Run(message, func(t *testing.T) {
+			models := []string{"mimo-v2.6-flash", "deepinfra::zai-org/GLM-5.3-Flash"}
+			var called []string
+			want := &service.BriefingNavigatorResponse{Intro: "fallback result"}
+			resp, usedModel, err := generateNavigatorWithFallback(context.Background(), "u1", "briefing_navigator", models, func(modelName *string) (*service.BriefingNavigatorResponse, error) {
+				called = append(called, *modelName)
+				if len(called) == 1 {
+					return nil, errors.New(message)
+				}
+				return want, nil
+			})
+			if err != nil || resp != want || usedModel != models[1] || len(called) != 2 || called[0] != models[0] || called[1] != models[1] {
+				t.Fatalf("resp=%v model=%s calls=%v err=%v", resp, usedModel, called, err)
+			}
+		})
+	}
+}
+
+func TestGenerateBriefingNavigatorWithFallbackStopsAfterSuccess(t *testing.T) {
+	calls := 0
+	_, usedModel, err := generateNavigatorWithFallback(context.Background(), "u1", "briefing_navigator", []string{"primary", "fallback"}, func(modelName *string) (*service.BriefingNavigatorResponse, error) {
+		calls++
+		return &service.BriefingNavigatorResponse{Intro: "primary result"}, nil
+	})
+	if err != nil || calls != 1 || usedModel != "primary" {
+		t.Fatalf("model=%s calls=%d err=%v", usedModel, calls, err)
+	}
+}
+
+func TestGenerateBriefingNavigatorWithFallbackPreservesBothErrors(t *testing.T) {
+	resp, _, err := generateNavigatorWithFallback(context.Background(), "u1", "briefing_navigator", []string{"primary", "fallback"}, func(modelName *string) (*service.BriefingNavigatorResponse, error) {
+		return nil, errors.New(*modelName + " unavailable")
+	})
+	if resp != nil || err == nil || !strings.Contains(err.Error(), "primary unavailable") || !strings.Contains(err.Error(), "fallback unavailable") {
+		t.Fatalf("resp=%v err=%v", resp, err)
+	}
+}
+
+func TestGenerateBriefingNavigatorWithFallbackStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	_, _, err := generateNavigatorWithFallback(ctx, "u1", "briefing_navigator", []string{"primary", "fallback"}, func(modelName *string) (*service.BriefingNavigatorResponse, error) {
+		calls++
+		cancel()
+		return nil, context.Canceled
+	})
+	if !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("calls=%d err=%v", calls, err)
 	}
 }

@@ -197,8 +197,6 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 		return nil
 	}
 
-	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
-
 	workerCandidates := make([]service.SourceNavigatorCandidate, 0, len(candidates))
 	titleBySourceID := make(map[string]string, len(candidates))
 	for _, candidate := range candidates {
@@ -233,22 +231,25 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 	}
 
 	workerCtx := service.WithWorkerTraceMetadata(ctx, "source_navigator", &userID, nil, nil, nil)
-	resp, err := h.worker.GenerateSourceNavigatorWithModel(
-		workerCtx,
-		persona,
-		workerCandidates,
-		derefString(nk.anthropicKey),
-		derefString(nk.googleKey),
-		derefString(nk.groqKey),
-		derefString(nk.deepseekKey),
-		derefString(nk.alibabaKey),
-		derefString(nk.mistralKey),
-		derefString(nk.xaiKey),
-		derefString(nk.zaiKey),
-		derefString(nk.fireworksKey),
-		derefString(nk.openAIKey),
-		modelName,
-	)
+	resp, _, err := generateNavigatorWithFallback(workerCtx, userID, "source_navigator", resolveBriefingNavigatorModels(settings), func(attemptModel *string) (*service.SourceNavigatorResponse, error) {
+		nk := loadNavigatorKeys(workerCtx, h.keyProvider, userID, attemptModel)
+		return h.worker.GenerateSourceNavigatorWithModel(
+			workerCtx,
+			persona,
+			workerCandidates,
+			derefString(nk.anthropicKey),
+			derefString(nk.googleKey),
+			derefString(nk.groqKey),
+			derefString(nk.deepseekKey),
+			derefString(nk.alibabaKey),
+			derefString(nk.mistralKey),
+			derefString(nk.xaiKey),
+			derefString(nk.zaiKey),
+			derefString(nk.fireworksKey),
+			derefString(nk.openAIKey),
+			attemptModel,
+		)
+	})
 	if err != nil {
 		log.Printf("source navigator worker user=%s model=%s: %v", userID, strings.TrimSpace(*modelName), err)
 		return nil

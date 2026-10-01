@@ -349,8 +349,6 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	navKeys := loadNavigatorKeys(r.Context(), h.keyProvider, userID, modelName)
-
 	workerCitations := make([]service.AskNavigatorCitation, 0, len(body.Citations))
 	for _, citation := range body.Citations {
 		workerCitations = append(workerCitations, service.AskNavigatorCitation{
@@ -381,28 +379,31 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workerCtx := service.WithWorkerTraceMetadata(r.Context(), "ask_navigator", &userID, nil, nil, nil)
-	resp, err := h.worker.GenerateAskNavigatorWithModel(
-		workerCtx,
-		persona,
-		service.AskNavigatorInput{
-			Query:        body.Query,
-			Answer:       body.Answer,
-			Bullets:      body.Bullets,
-			Citations:    workerCitations,
-			RelatedItems: workerRelated,
-		},
-		navKeys.anthropicKey,
-		navKeys.googleKey,
-		navKeys.groqKey,
-		navKeys.deepseekKey,
-		navKeys.alibabaKey,
-		navKeys.mistralKey,
-		navKeys.xaiKey,
-		navKeys.zaiKey,
-		navKeys.fireworksKey,
-		navKeys.openAIKey,
-		modelName,
-	)
+	resp, _, err := generateNavigatorWithFallback(workerCtx, userID, "ask_navigator", resolveBriefingNavigatorModels(settings), func(attemptModel *string) (*service.AskNavigatorResponse, error) {
+		navKeys := loadNavigatorKeys(workerCtx, h.keyProvider, userID, attemptModel)
+		return h.worker.GenerateAskNavigatorWithModel(
+			workerCtx,
+			persona,
+			service.AskNavigatorInput{
+				Query:        body.Query,
+				Answer:       body.Answer,
+				Bullets:      body.Bullets,
+				Citations:    workerCitations,
+				RelatedItems: workerRelated,
+			},
+			navKeys.anthropicKey,
+			navKeys.googleKey,
+			navKeys.groqKey,
+			navKeys.deepseekKey,
+			navKeys.alibabaKey,
+			navKeys.mistralKey,
+			navKeys.xaiKey,
+			navKeys.zaiKey,
+			navKeys.fireworksKey,
+			navKeys.openAIKey,
+			attemptModel,
+		)
+	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask navigator worker: %v", err), http.StatusBadGateway)
 		return

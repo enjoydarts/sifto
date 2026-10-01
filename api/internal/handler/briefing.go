@@ -370,8 +370,6 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		log.Printf("briefing navigator candidates user=%s: %v", userID, err)
 		return nil
 	}
-	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
-
 	introContext := buildBriefingNavigatorIntroContext(generatedAt)
 	workerCandidates := make([]service.BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -395,27 +393,31 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 	}
 
 	workerCtx := service.WithWorkerTraceMetadata(ctx, "briefing_navigator", &userID, nil, nil, nil)
-	resp, err := h.worker.GenerateBriefingNavigatorWithModel(
-		workerCtx,
-		persona,
-		workerCandidates,
-		introContext,
-		nk.anthropicKey,
-		nk.googleKey,
-		nk.groqKey,
-		nk.deepseekKey,
-		nk.alibabaKey,
-		nk.mistralKey,
-		nk.xaiKey,
-		nk.zaiKey,
-		nk.fireworksKey,
-		nk.openAIKey,
-		modelName,
-	)
+	resp, usedModel, err := generateNavigatorWithFallback(workerCtx, userID, "briefing_navigator", resolveBriefingNavigatorModels(settings), func(attemptModel *string) (*service.BriefingNavigatorResponse, error) {
+		nk := loadNavigatorKeys(workerCtx, h.keyProvider, userID, attemptModel)
+		return h.worker.GenerateBriefingNavigatorWithModel(
+			workerCtx,
+			persona,
+			workerCandidates,
+			introContext,
+			nk.anthropicKey,
+			nk.googleKey,
+			nk.groqKey,
+			nk.deepseekKey,
+			nk.alibabaKey,
+			nk.mistralKey,
+			nk.xaiKey,
+			nk.zaiKey,
+			nk.fireworksKey,
+			nk.openAIKey,
+			attemptModel,
+		)
+	})
 	if err != nil {
 		log.Printf("briefing navigator worker user=%s model=%s: %v", userID, strings.TrimSpace(*modelName), err)
 		return nil
 	}
+	modelName = &usedModel
 	if resp.LLM == nil {
 		log.Printf("briefing navigator llm missing user=%s model=%s", userID, strings.TrimSpace(*modelName))
 	}
@@ -631,24 +633,9 @@ func briefingNavigatorPersonaMeta(persona string) briefingNavigatorPersonaPresen
 }
 
 func resolveBriefingNavigatorModel(settings *model.UserSettings) *string {
-	if settings == nil {
-		return nil
-	}
-	if modelName := chooseNavigatorModelOverride(settings.NavigatorModel, settings); modelName != nil {
-		return modelName
-	}
-	if modelName := chooseNavigatorModelOverride(settings.NavigatorFallbackModel, settings); modelName != nil {
-		return modelName
-	}
-	for _, provider := range service.CostEfficientLLMProviders("") {
-		if !hasNavigatorProviderKey(settings, provider) {
-			continue
-		}
-		v := strings.TrimSpace(service.DefaultLLMModelForPurpose(provider, "summary"))
-		if v == "" {
-			continue
-		}
-		return &v
+	models := resolveBriefingNavigatorModels(settings)
+	if len(models) > 0 {
+		return &models[0]
 	}
 	return nil
 }

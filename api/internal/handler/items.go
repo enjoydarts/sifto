@@ -566,38 +566,39 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 		return nil
 	}
 
-	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
-
 	var publishedAt *string
 	if item.PublishedAt != nil {
 		v := item.PublishedAt.Format(time.RFC3339)
 		publishedAt = &v
 	}
 	workerCtx := service.WithWorkerTraceMetadata(ctx, "item_navigator", &userID, nil, &itemID, nil)
-	resp, err := h.worker.GenerateItemNavigatorWithModel(
-		workerCtx,
-		persona,
-		service.ItemNavigatorArticle{
-			ItemID:          item.ID,
-			Title:           item.Title,
-			TranslatedTitle: item.TranslatedTitle,
-			SourceTitle:     item.SourceTitle,
-			Summary:         strings.TrimSpace(item.Summary.Summary),
-			Facts:           facts,
-			PublishedAt:     publishedAt,
-		},
-		nk.anthropicKey,
-		nk.googleKey,
-		nk.groqKey,
-		nk.deepseekKey,
-		nk.alibabaKey,
-		nk.mistralKey,
-		nk.xaiKey,
-		nk.zaiKey,
-		nk.fireworksKey,
-		nk.openAIKey,
-		modelName,
-	)
+	resp, _, err := generateNavigatorWithFallback(workerCtx, userID, "item_navigator", resolveBriefingNavigatorModels(settings), func(attemptModel *string) (*service.ItemNavigatorResponse, error) {
+		nk := loadNavigatorKeys(workerCtx, h.keyProvider, userID, attemptModel)
+		return h.worker.GenerateItemNavigatorWithModel(
+			workerCtx,
+			persona,
+			service.ItemNavigatorArticle{
+				ItemID:          item.ID,
+				Title:           item.Title,
+				TranslatedTitle: item.TranslatedTitle,
+				SourceTitle:     item.SourceTitle,
+				Summary:         strings.TrimSpace(item.Summary.Summary),
+				Facts:           facts,
+				PublishedAt:     publishedAt,
+			},
+			nk.anthropicKey,
+			nk.googleKey,
+			nk.groqKey,
+			nk.deepseekKey,
+			nk.alibabaKey,
+			nk.mistralKey,
+			nk.xaiKey,
+			nk.zaiKey,
+			nk.fireworksKey,
+			nk.openAIKey,
+			attemptModel,
+		)
+	})
 	if err != nil {
 		log.Printf("item navigator worker user=%s item=%s model=%s: %v", userID, itemID, strings.TrimSpace(*modelName), err)
 		return nil

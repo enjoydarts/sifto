@@ -7,8 +7,71 @@ import (
 	"testing"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 )
+
+type d1DetailCacheSpy struct {
+	service.NoopJSONCache
+	onBump func(string)
+}
+
+func (c d1DetailCacheSpy) BumpVersion(_ context.Context, key string) (int64, error) {
+	c.onBump(key)
+	return 1, nil
+}
+
+func TestPersistD1InvalidatesDetailAfterSaving(t *testing.T) {
+	ctx := context.Background()
+	pool, err := repository.NewPool(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	const userID = "00000000-0000-4000-8000-000000000176"
+	const sourceID = "00000000-0000-4000-8000-000000000177"
+	const itemID = "00000000-0000-4000-8000-000000000178"
+	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	for _, query := range []string{
+		`INSERT INTO users (id, email) VALUES ('` + userID + `', 'd1-cache-test@example.com')`,
+		`INSERT INTO sources (id, user_id, url, type) VALUES ('` + sourceID + `', '` + userID + `', 'https://example.com/d1-feed', 'rss')`,
+		`INSERT INTO items (id, source_id, url) VALUES ('` + itemID + `', '` + sourceID + `', 'https://example.com/d1-cache')`,
+	} {
+		if _, err := pool.Exec(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+	repo := repository.NewItemQualityEvaluationRepo(pool)
+	currentID := itemID
+	config := jevPrecheckConfig{Provider: "d1", Kind: "facts", ItemID: &currentID,
+		Catalog: service.JevCatalog{DefaultModel: "d1:free", GatePolicy: service.JevGatePolicy{Version: "test"}}}
+	for _, decision := range []service.JevDecision{service.JevDecisionAccepted, service.JevDecisionError} {
+		bumps := 0
+		deps := processItemDeps{qualityRepo: repo, cache: d1DetailCacheSpy{onBump: func(key string) {
+			bumps++
+			if key != service.ItemDetailCacheVersionKey(itemID) {
+				t.Fatalf("cache key = %s", key)
+			}
+			saved, err := repo.LoadLatestByKindAndProvider(ctx, itemID, "facts", "d1")
+			if err != nil || saved == nil || saved.Decision != string(decision) {
+				t.Fatalf("cache invalidated before saving: evaluation=%#v err=%v", saved, err)
+			}
+		}}}
+		if err := persistJevPrecheck(ctx, deps, config, &jevPrecheckStepResult{Gate: service.JevGateResult{Decision: decision}}); err != nil {
+			t.Fatal(err)
+		}
+		if bumps != 1 {
+			t.Fatalf("D1 decision %s: detail cache invalidations = %d, want 1", decision, bumps)
+		}
+	}
+	missingID := "00000000-0000-4000-8000-000000000179"
+	config.ItemID = &missingID
+	deps := processItemDeps{qualityRepo: repo, cache: d1DetailCacheSpy{onBump: func(string) { t.Fatal("invalidated cache after failed save") }}}
+	if err := persistJevPrecheck(ctx, deps, config, &jevPrecheckStepResult{Gate: service.JevGateResult{Decision: service.JevDecisionError}}); err == nil {
+		t.Fatal("expected save failure for missing item")
+	}
+}
 
 func TestD1ShadowRecoversFromTimeoutWithoutChangingCandidate(t *testing.T) {
 	calls := 0

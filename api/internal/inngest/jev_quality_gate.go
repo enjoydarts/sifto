@@ -175,7 +175,10 @@ func persistJevPrecheck(ctx context.Context, deps processItemDeps, config jevPre
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, config.Purpose, usage, config.Attempt, config.UserID, config.SourceID, config.ItemID, nil, nil)
 	}
 	if deps.qualityRepo != nil {
-		return deps.qualityRepo.Upsert(ctx, input)
+		if err := deps.qualityRepo.Upsert(ctx, input); err != nil {
+			return err
+		}
+		bumpProcessItemDetailCacheVersion(ctx, deps.cache, input.ItemID)
 	}
 	return nil
 }

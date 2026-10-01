@@ -116,12 +116,12 @@ func dispatchD1Shadow(ctx context.Context, deps processItemDeps, data service.D1
 	}
 }
 
-func d1ShadowFn(client inngestgo.Client, db *pgxpool.Pool, keys *service.UserKeyProvider) (inngestgo.ServableFunction, error) {
+func d1ShadowFn(client inngestgo.Client, db *pgxpool.Pool, keys *service.UserKeyProvider, cache service.JSONCache) (inngestgo.ServableFunction, error) {
 	catalog, err := service.LoadD1Catalog()
 	if err != nil {
 		return nil, err
 	}
-	deps := processItemDeps{d1: service.NewD1ClientFromCatalog(catalog), d1Catalog: catalog, keyProvider: keys,
+	deps := processItemDeps{d1: service.NewD1ClientFromCatalog(catalog), d1Catalog: catalog, keyProvider: keys, cache: cache,
 		qualityRepo: repository.NewItemQualityEvaluationRepo(db), llmUsageRepo: repository.NewLLMUsageLogRepo(db), llmExecutionRepo: repository.NewLLMExecutionEventRepo(db)}
 	return inngestgo.CreateFunction(client, inngestgo.FunctionOpts{
 		ID: "evaluate-d1-shadow", Name: "Evaluate D1 Shadow",

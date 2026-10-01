@@ -592,7 +592,8 @@ export const api = {
     const qs = q.toString();
     return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
-  getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  getItem: (id: string, options?: { cacheBust?: boolean }) =>
+    apiFetch<ItemDetail>(`/items/${id}${options?.cacheBust ? "?cache_bust=1" : ""}`),
   updateItemGenre: (id: string, body: { user_genre: string | null; user_other_genre_label?: string | null }) =>
     apiFetch<ItemGenreUpdateResult>(`/items/${id}/genre`, {
       method: "PATCH",

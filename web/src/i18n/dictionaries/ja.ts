@@ -1636,6 +1636,7 @@ export const jaDict: Dict = {
   "settings.toast.d1Saved": "D1 APIキーを保存しました",
   "settings.toast.d1Deleted": "D1 APIキーを削除しました",
   "itemDetail.d1.shadow": "D1参考評価（合否に未使用）",
+  "itemDetail.d1.pending": "D1参考評価を待っています。結果は自動で反映されます。",
   "itemDetail.d1.decision.accepted": "参考基準を満たしました",
   "itemDetail.d1.decision.escalated": "参考基準では追加確認相当です",
   "itemDetail.d1.decision.error": "D1評価に失敗しました",

@@ -301,6 +301,7 @@ export default function ItemDetailPage() {
     locale,
     requestedItemId,
     item,
+    pendingD1,
     loading,
     loadError,
     actionError,
@@ -717,9 +718,10 @@ export default function ItemDetailPage() {
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
                     )}
                     <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} t={t} locale={locale} />
-                    <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
+                <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} t={t} locale={locale} />
+                {pendingD1.faithfulness && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 <ExecutionTimeline
                   attempts={item.summary_executions}
                   title={t("itemDetail.execution.summary")}
@@ -783,9 +785,10 @@ export default function ItemDetailPage() {
                       <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
                     )}
                     <QualityEvaluationCard evaluation={item.facts_quality_evaluation} t={t} locale={locale} />
-                    <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
+                <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} t={t} locale={locale} />
+                {pendingD1.facts && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 {item.facts && item.facts.facts.length > 0 ? (
                   <ul className="mt-4 space-y-2.5">
                     {item.facts.facts.map((f, i) => (

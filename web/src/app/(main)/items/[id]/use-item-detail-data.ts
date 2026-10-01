@@ -19,6 +19,7 @@ import { useConfirm } from "@/components/confirm-provider";
 import { settingsQueryOptions } from "@/lib/settings-query";
 import { queryKeys } from "@/lib/query-keys";
 import { startItemDetailLoads } from "./item-detail-load-core";
+import { getPendingD1Evaluations, startD1EvaluationRefresh } from "./d1-evaluation-refresh";
 import {
   isItemScopedStateCurrent,
   ITEM_DETAIL_STALE_TIME_MS,
@@ -145,6 +146,27 @@ export function useItemDetailData() {
   });
   const itemNavigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
   const itemNavigatorDisplayPersona = itemNavigator?.avatar_style || itemNavigator?.persona || itemNavigatorLoadingPersona;
+  const d1Enabled = Boolean(settingsQuery.data?.has_d1_api_key);
+  const pendingD1 = getPendingD1Evaluations(item?.id === id ? item : null, d1Enabled);
+
+  useEffect(() => {
+    if (!item || item.id !== id) return;
+    return startD1EvaluationRefresh({
+      item,
+      enabled: d1Enabled,
+      load: () => api.getItem(id, { cacheBust: true }),
+      onDetail: (detail) => {
+        // Preserve read/favorite/note mutations that may finish during a poll.
+        const merge = (current: ItemDetail | null | undefined) => current?.id === id ? {
+          ...current,
+          facts_d1_quality_evaluation: detail.facts_d1_quality_evaluation,
+          faithfulness_d1_quality_evaluation: detail.faithfulness_d1_quality_evaluation,
+        } : current;
+        queryClient.setQueryData<ItemDetail>(queryKeys.items.detail(id), (current) => merge(current) ?? undefined);
+        setItem((current) => merge(current) ?? null);
+      },
+    });
+  }, [d1Enabled, id, item, queryClient]);
 
   const applyReadOverride = useCallback((nextItem: ItemDetail): ItemDetail => {
     const override = readStateOverrideRef.current[nextItem.id];
@@ -761,6 +783,7 @@ export function useItemDetailData() {
     locale,
     requestedItemId: id,
     item,
+    pendingD1,
     loading,
     loadError,
     actionError,

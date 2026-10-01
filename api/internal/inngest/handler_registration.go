@@ -51,7 +51,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(fetchRSSFn(client, db))
 	register(runItemBulkJobFn(client, db, cache))
 	register(processItemFn(client, db, worker, openAI, oneSignal, keyProvider, cache))
-	register(d1ShadowFn(client, db, keyProvider))
+	register(d1ShadowFn(client, db, keyProvider, cache))
 	register(itemSearchUpsertFn(client, db, search))
 	register(itemSearchDeleteFn(client, search))
 	register(searchSuggestionArticleUpsertFn(client, db, search))

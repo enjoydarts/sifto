@@ -1634,6 +1634,7 @@ export const enDict: Dict = {
   "settings.toast.d1Saved": "D1 API key saved",
   "settings.toast.d1Deleted": "D1 API key deleted",
   "itemDetail.d1.shadow": "D1 reference evaluation (not used for decisions)",
+  "itemDetail.d1.pending": "Waiting for the D1 reference evaluation. Results will appear automatically.",
   "itemDetail.d1.decision.accepted": "Met the reference criteria",
   "itemDetail.d1.decision.escalated": "Would require additional review under the reference criteria",
   "itemDetail.d1.decision.error": "D1 evaluation failed",

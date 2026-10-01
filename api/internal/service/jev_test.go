@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,7 +67,7 @@ func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewD1ClientFromCatalog(catalog)
-	if client.http.Timeout != 60*time.Second {
+	if client.http.Timeout != 120*time.Second {
 		t.Fatalf("D1 timeout = %s", client.http.Timeout)
 	}
 	client.baseURL = server.URL
@@ -76,6 +77,22 @@ func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
 	}
 	if evaluation.Model != "d1:free" || evaluation.Usage.InputTokens != 20 || evaluation.Usage.EstimatedCostUSD != 0 {
 		t.Fatalf("evaluation=%#v", evaluation)
+	}
+}
+
+func TestJevClientPreservesHTTPStatusAndRetryAfter(t *testing.T) {
+	for _, retryAfter := range []string{"180", time.Now().Add(3 * time.Minute).UTC().Format(http.TimeFormat)} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", retryAfter)
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		client := NewJevClient(server.URL, server.Client(), JevCatalog{DefaultModel: "test"})
+		_, err := client.EvaluateFacts(context.Background(), "key", "title", "body", []string{"fact"})
+		server.Close()
+		var httpErr *JevHTTPError
+		if !errors.As(err, &httpErr) || httpErr.StatusCode != 429 || httpErr.RetryAfter < 179*time.Second || httpErr.RetryAfter > 180*time.Second {
+			t.Fatalf("error = %v, want HTTP 429 with 3 minute cooldown", err)
+		}
 	}
 }
 

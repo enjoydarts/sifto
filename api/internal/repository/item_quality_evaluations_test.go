@@ -89,4 +89,31 @@ func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	if err != nil || d1Got == nil || d1Got.Model != "d1:free" || d1Got.Decision != "accepted" {
 		t.Fatalf("D1 evaluation = %#v, %v", d1Got, err)
 	}
+	// An asynchronous result from an older processing run must not replace a
+	// result for the newer candidate, even when both use attempt zero.
+	currentTrigger := "new-processing-run"
+	executionUserID, executionItemID := userID, itemID
+	executionRepo := NewLLMExecutionEventRepo(pool)
+	if err := executionRepo.Insert(ctx, LLMExecutionEventInput{UserID: &executionUserID, ItemID: &executionItemID, TriggerID: &currentTrigger,
+		Provider: "openai", Model: "test", Purpose: "facts", Status: "success"}); err != nil {
+		t.Fatalf("prepare execution: %v", err)
+	}
+	oldTrigger := "old-processing-run"
+	d1.CurrentTriggerID = &oldTrigger
+	d1.Decision = "error"
+	if err := repo.Upsert(ctx, d1); err != nil {
+		t.Fatalf("stale D1 Upsert() error = %v", err)
+	}
+	d1Got, err = repo.LoadLatestByKindAndProvider(ctx, itemID, "facts", "d1")
+	if err != nil || d1Got == nil || d1Got.Decision != "accepted" {
+		t.Fatalf("stale D1 overwrote current evaluation: %#v, %v", d1Got, err)
+	}
+	d1.CurrentTriggerID = &currentTrigger
+	if err := repo.Upsert(ctx, d1); err != nil {
+		t.Fatalf("current D1 Upsert() error = %v", err)
+	}
+	d1Got, err = repo.LoadLatestByKindAndProvider(ctx, itemID, "facts", "d1")
+	if err != nil || d1Got == nil || d1Got.Decision != "error" {
+		t.Fatalf("current D1 result was skipped: %#v, %v", d1Got, err)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -164,6 +165,16 @@ type JevClient struct {
 	catalog      JevCatalog
 }
 
+type JevHTTPError struct {
+	Provider   string
+	StatusCode int
+	RetryAfter time.Duration
+}
+
+func (e *JevHTTPError) Error() string {
+	return fmt.Sprintf("%s HTTP status=%d", e.Provider, e.StatusCode)
+}
+
 func NewJevClient(baseURL string, client *http.Client, catalog JevCatalog) *JevClient {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
@@ -172,7 +183,7 @@ func NewJevClient(baseURL string, client *http.Client, catalog JevCatalog) *JevC
 }
 
 func NewD1ClientFromCatalog(catalog JevCatalog) *JevClient {
-	client := NewJevClient("https://api.liquid.ai", &http.Client{Timeout: 60 * time.Second}, catalog)
+	client := NewJevClient("https://api.liquid.ai", &http.Client{Timeout: 120 * time.Second}, catalog)
 	client.endpointPath = "/decisions/v1/systemone"
 	client.providerName = "D1"
 	return client
@@ -211,7 +222,7 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s HTTP status=%d", c.providerName, resp.StatusCode)
+		return nil, &JevHTTPError{Provider: c.providerName, StatusCode: resp.StatusCode, RetryAfter: parseJevRetryAfter(resp.Header.Get("Retry-After"), time.Now())}
 	}
 	var decoded struct {
 		Model   string                     `json:"model"`
@@ -271,6 +282,17 @@ func (c *JevClient) evaluate(ctx context.Context, apiKey string, state any, ques
 	}
 	cost := float64(decoded.Usage.InputTokens)*pricing.InputPerMTokUSD/1_000_000 + float64(decoded.Usage.OutputTokens)*pricing.OutputPerMTokUSD/1_000_000
 	return &JevEvaluation{RequestedModel: requestedModel, Model: decoded.Model, Dimensions: dimensions, Signals: signals, Usage: JevUsage{InputTokens: decoded.Usage.InputTokens, OutputTokens: decoded.Usage.OutputTokens, EstimatedCostUSD: cost, PricingSource: pricing.PricingSource}, LatencyMS: time.Since(started).Milliseconds()}, nil
+}
+
+func parseJevRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if seconds, err := strconv.ParseInt(value, 10, 32); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if until, err := http.ParseTime(value); err == nil && until.After(now) {
+		return until.Sub(now)
+	}
+	return 0
 }
 
 func validJevProbabilities(probabilities map[string]float64) bool {

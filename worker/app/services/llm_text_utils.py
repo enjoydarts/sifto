@@ -115,7 +115,7 @@ def decode_json_string_fragment(raw: str) -> str:
         return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
 
 
-def extract_json_string_value_loose(text: str, field: str) -> str:
+def extract_json_string_value_loose(text: str, field: str, *, allow_incomplete: bool = True) -> str:
     s = strip_code_fence(text)
     key = f'"{field}"'
     i = s.find(key)
@@ -143,6 +143,9 @@ def extract_json_string_value_loose(text: str, field: str) -> str:
         if ch == '"':
             break
         out.append(ch)
+    else:
+        if not allow_incomplete:
+            return ""
     return decode_json_string_fragment("".join(out)).strip()
 
 

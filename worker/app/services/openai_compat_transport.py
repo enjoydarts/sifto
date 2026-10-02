@@ -109,7 +109,13 @@ def _is_non_retryable_quota_response(response: httpx.Response) -> bool:
     return any(marker in body for marker in permanent_quota_markers)
 
 
-def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
+def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict, *, schema_name: str = "response") -> None:
+    if provider_name == "xiaomi_mimo_token_plan" and schema_name == "summary":
+        # MiMo defaults to thinking, which shares the small summary output
+        # budget with the JSON answer. Reserve that budget for the summary.
+        body["thinking"] = {"type": "disabled"}
+        body["max_completion_tokens"] = body.pop("max_tokens")
+        return
     if provider_name == "cerebras":
         if _is_gpt_oss_model(normalized_model):
             # GPT-OSS can spend the whole output budget on reasoning and return
@@ -498,7 +504,7 @@ def run_chat_json(
         else:
             body["response_format"] = {"type": "json_object"}
     normalized_model = str(normalize_model_name(model) or "")
-    _apply_openai_compat_request_overrides(provider_name, normalized_model, body)
+    _apply_openai_compat_request_overrides(provider_name, normalized_model, body, schema_name=schema_name)
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
@@ -565,6 +571,27 @@ def run_chat_json(
                 else:
                     text = str(content or "")
                 text = text.strip()
+                if schema_name == "summary" and choices[0].get("finish_reason") == "length":
+                    token_field = "max_completion_tokens" if "max_completion_tokens" in body else "max_tokens"
+                    current_budget = body[token_field]
+                    reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"
+                    if i == attempts - 1:
+                        raise RuntimeError(f"{provider_name} chat.completions failed: {reason}")
+                    _append_execution_failure(retry_usage, requested_model, reason)
+                    body[token_field] = _normalize_openai_compat_max_tokens(provider_name, current_budget * 2)
+                    sleep_sec = base_sleep_sec * (2**i)
+                    logger.warning(
+                        "%s chat.completions retrying model=%s reason=output_truncated finish_reason=length max_output_tokens=%d next_max_output_tokens=%d retry_in=%.1fs attempt=%d/%d",
+                        provider_name,
+                        normalize_model_name(model),
+                        current_budget,
+                        body[token_field],
+                        sleep_sec,
+                        i + 1,
+                        attempts,
+                    )
+                    time.sleep(sleep_sec)
+                    continue
                 if text == "":
                     _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
                     if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
@@ -689,7 +716,7 @@ async def run_chat_json_async(
         else:
             body["response_format"] = {"type": "json_object"}
     normalized_model = str(normalize_model_name(model) or "")
-    _apply_openai_compat_request_overrides(provider_name, normalized_model, body)
+    _apply_openai_compat_request_overrides(provider_name, normalized_model, body, schema_name=schema_name)
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
@@ -759,6 +786,27 @@ async def run_chat_json_async(
                 else:
                     text = str(content or "")
                 text = text.strip()
+                if schema_name == "summary" and choices[0].get("finish_reason") == "length":
+                    token_field = "max_completion_tokens" if "max_completion_tokens" in body else "max_tokens"
+                    current_budget = body[token_field]
+                    reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"
+                    if i == attempts - 1:
+                        raise RuntimeError(f"{provider_name} chat.completions failed: {reason}")
+                    _append_execution_failure(retry_usage, requested_model, reason)
+                    body[token_field] = _normalize_openai_compat_max_tokens(provider_name, current_budget * 2)
+                    sleep_sec = base_sleep_sec * (2**i)
+                    logger.warning(
+                        "%s chat.completions retrying model=%s reason=output_truncated finish_reason=length max_output_tokens=%d next_max_output_tokens=%d retry_in=%.1fs attempt=%d/%d",
+                        provider_name,
+                        normalize_model_name(model),
+                        current_budget,
+                        body[token_field],
+                        sleep_sec,
+                        i + 1,
+                        attempts,
+                    )
+                    await asyncio.sleep(sleep_sec)
+                    continue
                 if text == "":
                     _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
                     if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):

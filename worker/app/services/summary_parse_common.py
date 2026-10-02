@@ -24,7 +24,7 @@ def finalize_summary_result(
 ) -> dict:
     summary = str(summary_text or "").strip()
     if not summary:
-        summary = extract_json_string_value_loose(response_text, "summary")
+        summary = extract_json_string_value_loose(response_text, "summary", allow_incomplete=False)
     if not summary:
         raise RuntimeError(f"{error_prefix}: response_snippet={response_text[:500]}")
     normalized_genre = str(genre or "").strip()

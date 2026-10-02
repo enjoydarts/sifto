@@ -565,9 +565,8 @@ func extractAndPersistFacts(
 		}
 		var factsCheck *service.FactsCheckResponse
 		var shouldRetry bool
-		executeD1FactsShadow(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts)
-		if executeJevFactsPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts) {
-			factsCheck = &service.FactsCheckResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
+		if provider := executeFactsQualityGate(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, content, factsResp.Facts); provider != "" {
+			factsCheck = &service.FactsCheckResponse{Verdict: "pass", ShortComment: qualityGateComment(provider)}
 		} else {
 			factsCheck, shouldRetry, err = executeLLMCheck(ctx, deps, llmCheckConfig[service.FactsCheckResponse]{
 				baseStepName:   "check-facts",
@@ -784,9 +783,8 @@ func summarizeAndPersistItem(
 		}
 		var faithfulness *service.SummaryFaithfulnessResponse
 		var shouldRetry bool
-		executeD1FaithfulnessShadow(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary)
-		if executeJevFaithfulnessPrecheck(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary) {
-			faithfulness = &service.SummaryFaithfulnessResponse{Verdict: "pass", ShortComment: "Jevの高信頼品質ゲートを通過しました。"}
+		if provider := executeFaithfulnessQualityGate(ctx, deps, data, itemID, userIDPtr, attempt, titleForLLM, facts, summary.Summary); provider != "" {
+			faithfulness = &service.SummaryFaithfulnessResponse{Verdict: "pass", ShortComment: qualityGateComment(provider)}
 		} else {
 			faithfulness, shouldRetry, err = executeLLMCheck(ctx, deps, llmCheckConfig[service.SummaryFaithfulnessResponse]{
 				baseStepName:   "check-summary-faithfulness",

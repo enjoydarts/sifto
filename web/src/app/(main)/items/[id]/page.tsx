@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { ItemLLMExecutionAttempt, ItemQualityEvaluation, NavigatorLLM } from "@/lib/api";
+import { qualityEvaluationRoute } from "./quality-evaluation-route";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
@@ -203,7 +204,7 @@ function DetailInfoBox({
 
 function jevFlaggedDimensions(evaluation: ItemQualityEvaluation): Array<[string, number]> {
   // v4 and v5 evaluations store the policy version but not the per-dimension thresholds.
-  if (evaluation.gate_policy_version !== "jev-quality-gate-v4" && evaluation.gate_policy_version !== "jev-quality-gate-v5" && evaluation.gate_policy_version !== "d1-shadow-v1") return [];
+  if (evaluation.gate_policy_version !== "jev-quality-gate-v4" && evaluation.gate_policy_version !== "jev-quality-gate-v5" && evaluation.gate_policy_version !== "d1-shadow-v1" && evaluation.gate_policy_version !== "d1-conditional-gate-v1") return [];
   const reason = evaluation.escalation_reason;
   const critical = evaluation.kind === "facts"
     ? new Set(["source_support", "contradiction_free"])
@@ -219,11 +220,11 @@ function jevFlaggedDimensions(evaluation: ItemQualityEvaluation): Array<[string,
     .sort((a, b) => a[1] - b[1]);
 }
 
-function QualityEvaluationCard({ evaluation, t, locale }: { evaluation?: ItemQualityEvaluation | null; t: (key: string, fallback?: string) => string; locale: string }) {
+function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluation?: ItemQualityEvaluation | null; finalCheck?: { retry_count: number; short_comment?: string | null } | null; t: (key: string, fallback?: string) => string; locale: string }) {
   if (!evaluation) return null;
   const isD1 = evaluation.provider === "d1";
   const percent = (value: number) => `${Math.round(value * 100)}%`;
-  const route = isD1 ? t("itemDetail.d1.shadow") : evaluation.decision === "accepted" ? t("itemDetail.jev.route.accepted") : t("itemDetail.jev.route.escalated");
+  const route = t(qualityEvaluationRoute(evaluation, finalCheck));
   const hasScores = evaluation.decision !== "error";
   const listSeparator = locale === "ja" ? "、" : ", ";
   const flaggedDimensions = jevFlaggedDimensions(evaluation);
@@ -715,12 +716,12 @@ export default function ItemDetailPage() {
                       </span>
                     </div>
                     {item.faithfulness.short_comment && (
-                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
                     )}
-                    <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} t={t} locale={locale} />
+                    <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} finalCheck={item.faithfulness} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
-                <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} t={t} locale={locale} />
+                <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} finalCheck={item.faithfulness} t={t} locale={locale} />
                 {pendingD1.faithfulness && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 <ExecutionTimeline
                   attempts={item.summary_executions}
@@ -782,12 +783,12 @@ export default function ItemDetailPage() {
                       </span>
                     </div>
                     {item.facts_check.short_comment && (
-                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
                     )}
-                    <QualityEvaluationCard evaluation={item.facts_quality_evaluation} t={t} locale={locale} />
+                    <QualityEvaluationCard evaluation={item.facts_quality_evaluation} finalCheck={item.facts_check} t={t} locale={locale} />
                   </DetailInfoBox>
                 )}
-                <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} t={t} locale={locale} />
+                <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} finalCheck={item.facts_check} t={t} locale={locale} />
                 {pendingD1.facts && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 {item.facts && item.facts.facts.length > 0 ? (
                   <ul className="mt-4 space-y-2.5">

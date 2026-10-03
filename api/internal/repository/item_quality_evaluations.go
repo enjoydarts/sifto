@@ -50,6 +50,9 @@ func (r *ItemQualityEvaluationRepo) Upsert(ctx context.Context, in ItemQualityEv
 	if err != nil {
 		return err
 	}
+	// A delayed shadow evaluation must not overwrite a gate for the same
+	// candidate. Attempt indexes are reused across processing runs, so allow a
+	// shadow to replace an old gate after a new candidate has been generated.
 	_, err = r.db.Exec(ctx, `
 		INSERT INTO item_quality_evaluations (
 			item_id, kind, attempt_index, provider, requested_model, model, dimensions_json, signals_json, signal_thresholds_json,
@@ -72,7 +75,19 @@ func (r *ItemQualityEvaluationRepo) Upsert(ctx context.Context, in ItemQualityEv
 			gate_policy_version=EXCLUDED.gate_policy_version, decision=EXCLUDED.decision,
 			escalation_reason=EXCLUDED.escalation_reason, reason_detail=EXCLUDED.reason_detail,
 			input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
-			estimated_cost_usd=EXCLUDED.estimated_cost_usd, latency_ms=EXCLUDED.latency_ms, updated_at=NOW()`,
+			estimated_cost_usd=EXCLUDED.estimated_cost_usd, latency_ms=EXCLUDED.latency_ms, updated_at=NOW()
+		WHERE NOT (
+			item_quality_evaluations.provider = 'd1'
+			AND item_quality_evaluations.gate_policy_version = 'd1-conditional-gate-v1'
+			AND EXCLUDED.gate_policy_version = 'd1-shadow-v1'
+		) OR EXISTS (
+			SELECT 1 FROM llm_execution_events e
+			WHERE e.user_id = (SELECT s.user_id FROM items i JOIN sources s ON s.id = i.source_id WHERE i.id = EXCLUDED.item_id)
+			  AND e.item_id = EXCLUDED.item_id AND e.status = 'success'
+			  AND e.purpose = CASE EXCLUDED.kind WHEN 'facts' THEN 'facts' WHEN 'faithfulness' THEN 'summary' END
+			  AND e.attempt_index = EXCLUDED.attempt_index
+			  AND e.created_at > item_quality_evaluations.updated_at
+		)`,
 		in.ItemID, in.Kind, in.AttemptIndex, in.Provider, in.RequestedModel, in.Model, dimensions, signals, signalThresholds,
 		in.AggregateScore, in.MinimumScore, in.MinimumConfidence, in.QualityThreshold, in.ConfidenceThreshold,
 		in.GatePolicyVersion, in.Decision, in.EscalationReason, in.ReasonDetail, in.InputTokens, in.OutputTokens,

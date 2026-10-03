@@ -1636,6 +1636,7 @@ export const enDict: Dict = {
   "itemDetail.d1.shadow": "D1 reference evaluation (not used for decisions)",
   "itemDetail.d1.gate": "D1 quality gate",
   "itemDetail.d1.route.accepted": "Checked by D1 (additional LLM review skipped)",
+  "itemDetail.d1.route.acceptedWithShadow": "Approved by D1 (displayed scores are from a reference evaluation)",
   "itemDetail.d1.passedComment": "Met D1's review criteria.",
   "itemDetail.d1.pending": "Waiting for the D1 reference evaluation. Results will appear automatically.",
   "itemDetail.d1.decision.accepted": "Met the review criteria",

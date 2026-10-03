@@ -1638,6 +1638,7 @@ export const jaDict: Dict = {
   "itemDetail.d1.shadow": "D1参考評価（合否に未使用）",
   "itemDetail.d1.gate": "D1品質ゲート",
   "itemDetail.d1.route.accepted": "D1で確認（追加LLM省略）",
+  "itemDetail.d1.route.acceptedWithShadow": "D1で承認済み（表示スコアは参考評価）",
   "itemDetail.d1.passedComment": "D1の確認基準を満たしました。",
   "itemDetail.d1.pending": "D1参考評価を待っています。結果は自動で反映されます。",
   "itemDetail.d1.decision.accepted": "確認基準を満たしました",

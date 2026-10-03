@@ -116,4 +116,79 @@ func TestItemQualityEvaluationRepoUpsertAndLoadLatest(t *testing.T) {
 	if err != nil || d1Got == nil || d1Got.Decision != "error" {
 		t.Fatalf("current D1 result was skipped: %#v, %v", d1Got, err)
 	}
+
+	for _, kind := range []string{"facts", "faithfulness"} {
+		t.Run("late shadow preserves "+kind+" gate", func(t *testing.T) {
+			trigger := "gate-run-" + kind
+			recordGeneration := func(purpose, status string) {
+				t.Helper()
+				if err := executionRepo.Insert(ctx, LLMExecutionEventInput{
+					UserID: &executionUserID, ItemID: &executionItemID, TriggerID: &trigger,
+					Provider: "openai", Model: "test", Purpose: purpose, Status: status,
+				}); err != nil {
+					t.Fatalf("prepare %s generation: %v", purpose, err)
+				}
+			}
+			purpose, otherPurpose := "facts", "summary"
+			if kind == "faithfulness" {
+				purpose, otherPurpose = "summary", "facts"
+			}
+			recordGeneration("facts", "success")
+			if purpose == "summary" {
+				recordGeneration(purpose, "success")
+			}
+			gate := d1
+			gate.Kind, gate.AttemptIndex = kind, 0
+			gate.CurrentTriggerID = &trigger
+			gate.GatePolicyVersion, gate.Decision = "d1-conditional-gate-v1", "accepted"
+			gate.AggregateScore = 0.96
+			if err := repo.Upsert(ctx, gate); err != nil {
+				t.Fatalf("save gate: %v", err)
+			}
+			shadow := gate
+			shadow.GatePolicyVersion, shadow.Decision = "d1-shadow-v1", "escalated"
+			shadow.AggregateScore = 0.85
+			assertPolicy := func(policy string, score float64) {
+				t.Helper()
+				got, err := repo.LoadLatestByKindAndProvider(ctx, itemID, kind, "d1")
+				if err != nil || got == nil || got.GatePolicyVersion != policy || got.AggregateScore != score {
+					t.Fatalf("evaluation = %#v, error = %v; want %s / %v", got, err, policy, score)
+				}
+			}
+			if err := repo.Upsert(ctx, shadow); err != nil {
+				t.Fatalf("save late shadow: %v", err)
+			}
+			assertPolicy(gate.GatePolicyVersion, gate.AggregateScore)
+
+			// Neither a failed generation nor a success of the other kind is a
+			// new candidate for this evaluation.
+			recordGeneration(purpose, "failure")
+			recordGeneration(otherPurpose, "success")
+			if err := repo.Upsert(ctx, shadow); err != nil {
+				t.Fatalf("save shadow after unrelated execution: %v", err)
+			}
+			assertPolicy(gate.GatePolicyVersion, gate.AggregateScore)
+
+			// A new candidate can reuse attempt zero. Its shadow must be able
+			// to replace the previous candidate's gate.
+			trigger = "new-candidate-" + kind
+			recordGeneration("facts", "success")
+			if purpose == "summary" {
+				recordGeneration(purpose, "success")
+			}
+			if err := repo.Upsert(ctx, shadow); err != nil {
+				t.Fatalf("save new candidate shadow: %v", err)
+			}
+			assertPolicy(shadow.GatePolicyVersion, shadow.AggregateScore)
+			if err := repo.Upsert(ctx, gate); err != nil {
+				t.Fatalf("promote shadow to gate: %v", err)
+			}
+			assertPolicy(gate.GatePolicyVersion, gate.AggregateScore)
+			gate.AggregateScore = 0.98
+			if err := repo.Upsert(ctx, gate); err != nil {
+				t.Fatalf("update gate: %v", err)
+			}
+			assertPolicy(gate.GatePolicyVersion, gate.AggregateScore)
+		})
+	}
 }

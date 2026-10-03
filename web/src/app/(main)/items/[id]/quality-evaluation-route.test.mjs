@@ -15,7 +15,21 @@ test("an old or other-attempt D1 acceptance does not imply final approval", () =
   assert.equal(qualityEvaluationRoute(jev, { ...passed, retry_count: 2 }), "itemDetail.jev.gate");
   assert.equal(qualityEvaluationRoute(d1, { ...passed, retry_count: 2 }), "itemDetail.d1.gate");
   assert.equal(qualityEvaluationRoute(d1, { retry_count: 1, short_comment: "LLM review" }), "itemDetail.d1.gate");
-  assert.equal(qualityEvaluationRoute({ ...d1, gate_policy_version: "d1-shadow-v1" }, passed), "itemDetail.d1.shadow");
+  assert.equal(qualityEvaluationRoute({ ...d1, gate_policy_version: "d1-shadow-v1" }, { ...passed, retry_count: 2 }), "itemDetail.d1.shadow");
+});
+
+test("a late shadow distinguishes final D1 approval from its reference scores", () => {
+  const shadow = { ...d1, gate_policy_version: "d1-shadow-v1" };
+  for (const decision of ["accepted", "escalated", "error"]) {
+    assert.equal(qualityEvaluationRoute({ ...shadow, decision }, passed), "itemDetail.d1.route.acceptedWithShadow");
+  }
+});
+
+test("a shadow remains a reference when Jev or an LLM made the final decision", () => {
+  const shadow = { ...d1, gate_policy_version: "d1-shadow-v1" };
+  assert.equal(qualityEvaluationRoute(shadow), "itemDetail.d1.shadow");
+  assert.equal(qualityEvaluationRoute(shadow, { retry_count: 1, short_comment: "Jevの高信頼品質ゲートを通過しました。" }), "itemDetail.d1.shadow");
+  assert.equal(qualityEvaluationRoute(shadow, { retry_count: 1, short_comment: "LLM review" }), "itemDetail.d1.shadow");
 });
 
 test("Jev acceptance and D1 errors retain their actual evaluation routes", () => {

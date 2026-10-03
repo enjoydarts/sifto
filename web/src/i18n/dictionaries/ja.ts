@@ -2596,6 +2596,7 @@ export const jaDict: Dict = {
   "itemDetail.jev.aggregate": "品質スコア / 合格ライン",
   "itemDetail.jev.minimumConfidence": "最も低い判定の確かさ",
   "itemDetail.jev.escalationReason": "追加確認の理由",
+  "itemDetail.jev.gate": "Jev品質ゲート",
   "itemDetail.jev.route.accepted": "Jevで確認",
   "itemDetail.jev.route.escalated": "LLMで追加確認",
   "itemDetail.jev.passedComment": "Jevの確認基準を満たしました。",

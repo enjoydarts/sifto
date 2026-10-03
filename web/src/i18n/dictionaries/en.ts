@@ -2596,6 +2596,7 @@ export const enDict: Dict = {
   "itemDetail.jev.aggregate": "Quality score / passing threshold",
   "itemDetail.jev.minimumConfidence": "Lowest assessment confidence",
   "itemDetail.jev.escalationReason": "Reason for additional review",
+  "itemDetail.jev.gate": "Jev quality gate",
   "itemDetail.jev.route.accepted": "Checked by Jev",
   "itemDetail.jev.route.escalated": "Additional LLM review",
   "itemDetail.jev.passedComment": "Met Jev's review criteria.",

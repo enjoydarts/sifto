@@ -11,9 +11,14 @@ export function qualityEvaluationRoute(evaluation: Evaluation, finalCheck?: Fina
   const isD1 = evaluation.provider === "d1";
   const isD1Gate = evaluation.gate_policy_version === "d1-conditional-gate-v1";
   if (isD1 && !isD1Gate) return "itemDetail.d1.shadow";
-  if (finalCheck?.short_comment === "D1の高信頼品質ゲートを通過しました。" && finalCheck.retry_count === evaluation.attempt_index) {
+  if (
+    isD1 &&
+    evaluation.decision === "accepted" &&
+    finalCheck?.short_comment === "D1の高信頼品質ゲートを通過しました。" &&
+    finalCheck.retry_count === evaluation.attempt_index
+  ) {
     return "itemDetail.d1.route.accepted";
   }
   if (isD1) return "itemDetail.d1.gate";
-  return evaluation.decision === "accepted" ? "itemDetail.jev.route.accepted" : "itemDetail.jev.route.escalated";
+  return evaluation.decision === "accepted" ? "itemDetail.jev.route.accepted" : "itemDetail.jev.gate";
 }

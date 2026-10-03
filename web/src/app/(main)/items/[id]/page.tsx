@@ -233,7 +233,7 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
     return typeof threshold === "number" && signal.probability >= threshold;
   });
   return (
-    <div className="mt-4 rounded-[16px] border border-violet-200 bg-violet-50/60 p-3 text-xs text-[var(--color-editorial-ink-soft)]">
+    <div className="min-w-0 rounded-[16px] border border-violet-200 bg-violet-50/60 p-3 text-xs text-[var(--color-editorial-ink-soft)] [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">{route}</span>
         <span className="font-medium text-[var(--color-editorial-ink)]">{t(`${isD1 ? "itemDetail.d1" : "itemDetail.jev"}.decision.${evaluation.decision}`, evaluation.decision)}</span>
@@ -262,7 +262,7 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
         </p>
       ) : null}
       {evaluation.reason_detail ? <p className="mt-1 break-words text-[var(--color-editorial-ink-faint)]">{evaluation.reason_detail}</p> : null}
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {Object.entries(evaluation.dimensions).map(([name, dimension]) => (
           <div key={name} className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
             <div className="font-medium text-[var(--color-editorial-ink)]">{t(`itemDetail.jev.dimension.${name}`, name)}</div>
@@ -275,7 +275,7 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
       {Object.keys(evaluation.signals ?? {}).length > 0 ? (
         <div className="mt-3">
           <div className="mb-2 font-medium text-[var(--color-editorial-ink)]">{t("itemDetail.jev.criticalSignals")}</div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(evaluation.signals).map(([name, signal]) => {
               const threshold = evaluation.signal_thresholds?.[name];
               const exceedsThreshold = typeof threshold === "number" && signal.probability >= threshold;
@@ -290,6 +290,37 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
               );
             })}
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function QualityEvaluationCards({
+  evaluation,
+  d1Evaluation,
+  pendingD1,
+  finalCheck,
+  t,
+  locale,
+}: {
+  evaluation?: ItemQualityEvaluation | null;
+  d1Evaluation?: ItemQualityEvaluation | null;
+  pendingD1: boolean;
+  finalCheck?: { retry_count: number; short_comment?: string | null } | null;
+  t: (key: string, fallback?: string) => string;
+  locale: string;
+}) {
+  if (!evaluation && !d1Evaluation && !pendingD1) return null;
+  const hasBothEvaluations = Boolean(evaluation && (d1Evaluation || pendingD1));
+  return (
+    <div className={`mt-4 grid min-w-0 items-start gap-3 ${hasBothEvaluations ? "md:grid-cols-2" : ""}`}>
+      <QualityEvaluationCard evaluation={evaluation} finalCheck={finalCheck} t={t} locale={locale} />
+      {d1Evaluation ? (
+        <QualityEvaluationCard evaluation={d1Evaluation} finalCheck={finalCheck} t={t} locale={locale} />
+      ) : pendingD1 ? (
+        <div role="status" className="min-w-0 rounded-[16px] border border-violet-200 bg-violet-50/60 p-3 text-sm text-[var(--color-editorial-ink-faint)]">
+          {t("itemDetail.d1.pending")}
         </div>
       ) : null}
     </div>
@@ -689,40 +720,49 @@ export default function ItemDetailPage() {
                     })}
                   </div>
                 )}
-                {item.faithfulness && (
+                {(item.faithfulness || item.faithfulness_quality_evaluation || item.faithfulness_d1_quality_evaluation || pendingD1.faithfulness) && (
                   <DetailInfoBox title={t("itemDetail.faithfulness")}>
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
-                      {item.faithfulness_llm && (
-                        <span
-                          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
-                          title={t("itemDetail.faithfulnessModelTitle")}
-                        >
-                          {renderLLMModelDisplay(
-                            item.faithfulness_llm.provider,
-                            item.faithfulness_llm.model,
-                            item.faithfulness_llm.requested_model,
-                            item.faithfulness_llm.resolved_model,
-                            t
+                    {item.faithfulness && (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
+                          {item.faithfulness_llm && (
+                            <span
+                              className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
+                              title={t("itemDetail.faithfulnessModelTitle")}
+                            >
+                              {renderLLMModelDisplay(
+                                item.faithfulness_llm.provider,
+                                item.faithfulness_llm.model,
+                                item.faithfulness_llm.requested_model,
+                                item.faithfulness_llm.resolved_model,
+                                t
+                              )}
+                            </span>
                           )}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
-                        {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
-                      </span>
-                      <span className="text-[var(--color-editorial-ink-faint)]">
-                        {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
-                      </span>
-                    </div>
-                    {item.faithfulness.short_comment && (
-                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
+                            {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
+                          </span>
+                          <span className="text-[var(--color-editorial-ink-faint)]">
+                            {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
+                          </span>
+                        </div>
+                        {item.faithfulness.short_comment && (
+                          <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.faithfulness.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.faithfulness.short_comment}</p>
+                        )}
+                      </>
                     )}
-                    <QualityEvaluationCard evaluation={item.faithfulness_quality_evaluation} finalCheck={item.faithfulness} t={t} locale={locale} />
+                    <QualityEvaluationCards
+                      evaluation={item.faithfulness_quality_evaluation}
+                      d1Evaluation={item.faithfulness_d1_quality_evaluation}
+                      pendingD1={pendingD1.faithfulness}
+                      finalCheck={item.faithfulness}
+                      t={t}
+                      locale={locale}
+                    />
                   </DetailInfoBox>
                 )}
-                <QualityEvaluationCard evaluation={item.faithfulness_d1_quality_evaluation} finalCheck={item.faithfulness} t={t} locale={locale} />
-                {pendingD1.faithfulness && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 <ExecutionTimeline
                   attempts={item.summary_executions}
                   title={t("itemDetail.execution.summary")}
@@ -756,40 +796,49 @@ export default function ItemDetailPage() {
                     </span>
                   )}
                 </div>
-                {item.facts_check && (
+                {(item.facts_check || item.facts_quality_evaluation || item.facts_d1_quality_evaluation || pendingD1.facts) && (
                   <DetailInfoBox title={t("itemDetail.factsCheck")}>
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
-                      {item.facts_check_llm && (
-                        <span
-                          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
-                          title={t("itemDetail.factsCheckModelTitle")}
-                        >
-                          {renderLLMModelDisplay(
-                            item.facts_check_llm.provider,
-                            item.facts_check_llm.model,
-                            item.facts_check_llm.requested_model,
-                            item.facts_check_llm.resolved_model,
-                            t
+                    {item.facts_check && (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
+                          {item.facts_check_llm && (
+                            <span
+                              className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
+                              title={t("itemDetail.factsCheckModelTitle")}
+                            >
+                              {renderLLMModelDisplay(
+                                item.facts_check_llm.provider,
+                                item.facts_check_llm.model,
+                                item.facts_check_llm.requested_model,
+                                item.facts_check_llm.resolved_model,
+                                t
+                              )}
+                            </span>
                           )}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
-                        {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
-                      </span>
-                      <span className="text-[var(--color-editorial-ink-faint)]">
-                        {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
-                      </span>
-                    </div>
-                    {item.facts_check.short_comment && (
-                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
+                            {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
+                          </span>
+                          <span className="text-[var(--color-editorial-ink-faint)]">
+                            {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
+                          </span>
+                        </div>
+                        {item.facts_check.short_comment && (
+                          <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment === "D1の高信頼品質ゲートを通過しました。" ? t("itemDetail.d1.passedComment") : item.facts_check.short_comment === "Jevの高信頼品質ゲートを通過しました。" ? t("itemDetail.jev.passedComment") : item.facts_check.short_comment}</p>
+                        )}
+                      </>
                     )}
-                    <QualityEvaluationCard evaluation={item.facts_quality_evaluation} finalCheck={item.facts_check} t={t} locale={locale} />
+                    <QualityEvaluationCards
+                      evaluation={item.facts_quality_evaluation}
+                      d1Evaluation={item.facts_d1_quality_evaluation}
+                      pendingD1={pendingD1.facts}
+                      finalCheck={item.facts_check}
+                      t={t}
+                      locale={locale}
+                    />
                   </DetailInfoBox>
                 )}
-                <QualityEvaluationCard evaluation={item.facts_d1_quality_evaluation} finalCheck={item.facts_check} t={t} locale={locale} />
-                {pendingD1.facts && <p role="status" className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.d1.pending")}</p>}
                 {item.facts && item.facts.facts.length > 0 ? (
                   <ul className="mt-4 space-y-2.5">
                     {item.facts.facts.map((f, i) => (

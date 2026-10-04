@@ -118,10 +118,10 @@ jobs:
         run: |
           set -euo pipefail
           response="$(
-            curl --fail-with-body --retry 3 --get \
+            curl --fail-with-body --retry 3 --request POST \
               -H "Authorization: Bearer $COOLIFY_TOKEN" \
-              --data-urlencode "uuid=$COOLIFY_WORKER_UUID" \
-              --data-urlencode "force=false" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -nc --arg uuid "$COOLIFY_WORKER_UUID" '{uuid: $uuid, force: false}')" \
               "$COOLIFY_URL/api/v1/deploy"
           )"
           deployment_uuid="$(
@@ -181,10 +181,10 @@ jobs:
         run: |
           set -euo pipefail
           response="$(
-            curl --fail-with-body --retry 3 --get \
+            curl --fail-with-body --retry 3 --request POST \
               -H "Authorization: Bearer $COOLIFY_TOKEN" \
-              --data-urlencode "uuid=$COOLIFY_API_UUID" \
-              --data-urlencode "force=false" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -nc --arg uuid "$COOLIFY_API_UUID" '{uuid: $uuid, force: false}')" \
               "$COOLIFY_URL/api/v1/deploy"
           )"
           deployment_uuid="$(

@@ -1578,6 +1578,39 @@
       }
     },
     {
+      "id": "gemini-3.7-flash",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [
+        "fast",
+        "long-context"
+      ],
+      "comment": "Gemini 3.7 Flash の安定版。1M context、64K max output、構造化出力と調整可能な thinking level に対応し、日常的な要約、ダイジェスト、Askや複数段階の処理向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_intro_2026_09",
+        "input_per_mtok_usd": 0.75,
+        "output_per_mtok_usd": 3.75,
+        "cache_read_per_mtok_usd": 0.075
+      }
+    },
+    {
       "id": "gemini-3.6-flash",
       "provider": "google",
       "available_purposes": [
@@ -1603,10 +1636,10 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "google_ai_studio_base_2026_07",
-        "input_per_mtok_usd": 1.5,
-        "output_per_mtok_usd": 7.5,
-        "cache_read_per_mtok_usd": 0.15
+        "pricing_source": "google_ai_studio_intro_2026_09",
+        "input_per_mtok_usd": 0.75,
+        "output_per_mtok_usd": 3.75,
+        "cache_read_per_mtok_usd": 0.075
       }
     },
     {

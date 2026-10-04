@@ -62,6 +62,8 @@ class GeminiTransportSamplingTests(unittest.TestCase):
     def test_new_models_omit_sampling_parameters_sync(self):
         for model in (
             "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "models/gemini-3.7-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
             "models/gemini-3.6-flash-20260721",
@@ -75,11 +77,14 @@ class GeminiTransportSamplingTests(unittest.TestCase):
                     logger=Mock(),
                     temperature=0.7,
                     top_p=0.8,
+                    response_schema={"type": "OBJECT", "properties": {"summary": {"type": "STRING"}}},
                 )
                 config = _FakeClient.last_json["generationConfig"]
                 self.assertNotIn("temperature", config)
                 self.assertNotIn("topP", config)
                 self.assertEqual(config["maxOutputTokens"], 1024)
+                self.assertEqual(config["responseMimeType"], "application/json")
+                self.assertEqual(config["responseSchema"]["properties"]["summary"]["type"], "STRING")
 
     @patch("app.services.gemini_transport.httpx.Client", _FakeClient)
     def test_legacy_model_keeps_sampling_parameters_sync(self):
@@ -100,6 +105,8 @@ class GeminiTransportSamplingTests(unittest.TestCase):
     def test_new_models_omit_sampling_parameters_async(self):
         for model in (
             "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "models/gemini-3.7-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
             "models/gemini-3.5-flash-lite-20260721",
@@ -114,12 +121,15 @@ class GeminiTransportSamplingTests(unittest.TestCase):
                         logger=Mock(),
                         temperature=0.7,
                         top_p=0.8,
+                        response_schema={"type": "OBJECT", "properties": {"summary": {"type": "STRING"}}},
                     )
                 )
                 config = _FakeAsyncClient.last_json["generationConfig"]
                 self.assertNotIn("temperature", config)
                 self.assertNotIn("topP", config)
                 self.assertEqual(config["maxOutputTokens"], 1024)
+                self.assertEqual(config["responseMimeType"], "application/json")
+                self.assertEqual(config["responseSchema"]["properties"]["summary"]["type"], "STRING")
 
 
 if __name__ == "__main__":

@@ -1,17 +1,44 @@
 import unittest
+from unittest.mock import patch
+
+from app.services.gemini_service import _llm_meta
 
 from app.services.llm_catalog import model_pricing, model_supports, provider_for_model
 
 
 class GoogleCatalogTests(unittest.TestCase):
+    def test_gemini_37_flash_is_available(self):
+        pricing = model_pricing("gemini-3.7-flash")
+
+        self.assertEqual(provider_for_model("gemini-3.7-flash"), "google")
+        self.assertIsNotNone(pricing)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.75)
+        self.assertEqual(pricing["output_per_mtok_usd"], 3.75)
+        self.assertEqual(pricing["cache_read_per_mtok_usd"], 0.075)
+        self.assertTrue(model_supports("gemini-3.7-flash", "supports_structured_output"))
+        self.assertTrue(model_supports("gemini-3.7-flash", "supports_reasoning"))
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_gemini_37_flash_usage_counts_cached_input_and_thinking_output(self):
+        meta = _llm_meta("models/gemini-3.7-flash", "summary", {
+            "input_tokens": 1_000,
+            "cache_read_input_tokens": 400,
+            "output_tokens": 200,
+        })
+
+        self.assertEqual(meta["provider"], "google")
+        self.assertEqual(meta["model"], "gemini-3.7-flash")
+        self.assertEqual(meta["pricing_source"], "google_ai_studio_intro_2026_09")
+        self.assertAlmostEqual(meta["estimated_cost_usd"], 0.00123)
+
     def test_gemini_36_flash_is_available(self):
         pricing = model_pricing("gemini-3.6-flash")
 
         self.assertEqual(provider_for_model("gemini-3.6-flash"), "google")
         self.assertIsNotNone(pricing)
-        self.assertEqual(pricing["input_per_mtok_usd"], 1.5)
-        self.assertEqual(pricing["output_per_mtok_usd"], 7.5)
-        self.assertEqual(pricing["cache_read_per_mtok_usd"], 0.15)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.75)
+        self.assertEqual(pricing["output_per_mtok_usd"], 3.75)
+        self.assertEqual(pricing["cache_read_per_mtok_usd"], 0.075)
         self.assertTrue(model_supports("gemini-3.6-flash", "supports_structured_output"))
         self.assertTrue(model_supports("gemini-3.6-flash", "supports_reasoning"))
 

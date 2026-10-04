@@ -55,6 +55,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gemini-3.6-flash"); got == nil {
 		t.Fatal("gemini-3.6-flash not found in catalog")
 	}
+	if got := findModelCatalog("gemini-3.7-flash"); got == nil || !reflect.DeepEqual(got.AvailablePurposes, []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"}) {
+		t.Fatal("gemini-3.7-flash should be selectable for all Google chat purposes")
+	}
 	if got := findModelCatalog("gemini-3.8-flash"); got == nil {
 		t.Fatal("gemini-3.8-flash not found in catalog")
 	}
@@ -334,6 +337,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "claude-sonnet-5-5", provider: "anthropic"},
 		{model: "gemini-3.5-flash", provider: "google"},
 		{model: "gemini-3.8-flash", provider: "google"},
+		{model: "gemini-3.7-flash", provider: "google"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "qwen/qwen3.8-27b", provider: "groq"},

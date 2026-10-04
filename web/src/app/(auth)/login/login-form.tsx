@@ -27,6 +27,8 @@ export default function LoginForm({ showClerk }: Props) {
           {showClerk ? (
             <SignIn
               routing="hash"
+              withSignUp={false}
+              transferable={false}
               fallbackRedirectUrl={callbackUrl}
               forceRedirectUrl={callbackUrl}
               appearance={{
@@ -45,8 +47,7 @@ export default function LoginForm({ showClerk }: Props) {
                     "min-h-12 border-zinc-300 shadow-none focus:border-zinc-500 focus:ring-zinc-500",
                   formButtonPrimary:
                     "min-h-12 bg-zinc-900 hover:bg-zinc-700 text-white shadow-none",
-                  footerActionText: "text-zinc-500",
-                  footerActionLink: "text-zinc-900 hover:text-zinc-700",
+                  footerAction: "hidden",
                   identityPreviewText: "text-zinc-700",
                 },
               }}

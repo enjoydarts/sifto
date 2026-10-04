@@ -2,12 +2,16 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserRepo struct{ db *pgxpool.Pool }
+
+var ErrUserRegistrationDisabled = errors.New("user registration is disabled")
 
 func NewUserRepo(db *pgxpool.Pool) *UserRepo { return &UserRepo{db} }
 
@@ -35,12 +39,14 @@ func (r *UserRepo) ListAll(ctx context.Context) ([]model.User, error) {
 func (r *UserRepo) Upsert(ctx context.Context, email string, name *string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO users (email, name)
-		VALUES ($1, $2)
-		ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
+		UPDATE users SET name = $2, updated_at = NOW()
+		WHERE email = $1
 		RETURNING id, email, name, email_verified_at, created_at, updated_at`,
 		email, name,
 	).Scan(&u.ID, &u.Email, &u.Name, &u.EmailVerifiedAt, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserRegistrationDisabled
+	}
 	if err != nil {
 		return nil, err
 	}

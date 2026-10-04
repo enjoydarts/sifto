@@ -87,7 +87,7 @@ func checkInternalAdmin(r *http.Request) bool {
 	return service.NewPromptAdminAuthServiceFromEnv().CanManagePrompts(email)
 }
 
-// UpsertUser はメールアドレスでユーザーを取得または作成して UUID を返す内部エンドポイント。
+// UpsertUser は登録済みユーザーを更新して UUID を返す内部エンドポイント。
 // Next.js の auth bridge / debug route から呼ばれる。X-Internal-Secret で保護。
 func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalSecret(r) {
@@ -105,6 +105,10 @@ func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.userRepo.Upsert(r.Context(), body.Email, body.Name)
+	if errors.Is(err, repository.ErrUserRegistrationDisabled) {
+		http.Error(w, "user registration is disabled", http.StatusForbidden)
+		return
+	}
 	if err != nil {
 		log.Printf("internal users upsert failed: email=%s err=%v", body.Email, err)
 		http.Error(w, fmt.Sprintf("upsert user failed: %v", err), http.StatusInternalServerError)
@@ -115,7 +119,7 @@ func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // ResolveIdentity は external auth provider の subject を internal user_id へ解決する。
-// identity が未登録なら email ベースで既存/新規 user を解決し、provider identity を保存する。
+// identity が未登録なら email ベースで既存 user を解決し、provider identity を保存する。
 func (h *InternalHandler) ResolveIdentity(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalSecret(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -160,20 +164,14 @@ func (h *InternalHandler) ResolveIdentity(w http.ResponseWriter, r *http.Request
 	}
 
 	user, getErr := h.userRepo.GetByEmail(r.Context(), body.Email)
-	userCreated := false
 	if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
 		log.Printf("internal resolve identity user lookup failed: email=%s err=%v", body.Email, getErr)
 		http.Error(w, fmt.Sprintf("resolve identity failed: %v", getErr), http.StatusInternalServerError)
 		return
 	}
 	if errors.Is(getErr, pgx.ErrNoRows) {
-		user, err = h.userRepo.Upsert(r.Context(), body.Email, body.Name)
-		if err != nil {
-			log.Printf("internal resolve identity user upsert failed: provider=%s provider_user_id=%s email=%s err=%v", body.Provider, body.ProviderUserID, body.Email, err)
-			http.Error(w, fmt.Sprintf("resolve identity failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		userCreated = true
+		http.Error(w, "user registration is disabled", http.StatusForbidden)
+		return
 	}
 
 	identity, err = h.identityRepo.Upsert(r.Context(), user.ID, body.Provider, body.ProviderUserID, &body.Email)
@@ -187,7 +185,7 @@ func (h *InternalHandler) ResolveIdentity(w http.ResponseWriter, r *http.Request
 		"id":               user.ID,
 		"identity_id":      identity.ID,
 		"identity_created": true,
-		"user_created":     userCreated,
+		"user_created":     false,
 		"resolved_by":      "email",
 		"provider":         identity.Provider,
 		"provider_user_id": identity.ProviderUserID,

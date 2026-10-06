@@ -254,7 +254,7 @@ Main Inngest jobs (30 functions):
 | `check-budget-alerts` | `0 0 * * *` | Monthly budget alert evaluation (email + push) |
 | `generate-audio-briefings` | `0 * * * *` | Auto-generate audio briefings for enabled users |
 | `run-audio-briefing-pipeline` | `audio-briefing/run` | Audio briefing script → TTS → concat pipeline |
-| `move-audio-briefings-to-ia` | `17 3 * * *` | Move old audio to R2 IA bucket |
+| `cleanup-expired-podcast-audio` | `17 3 * * *` | Delete expired public Podcast copies while retaining private originals |
 | `fail-stale-audio-briefing-voicing` | `*/5 * * * *` | Mark stalled voicing jobs as failed |
 | `notify-review-queue` | `0 * * * *` | Push notifications for review queue |
 | `sync-openrouter-models` | `0 3 * * *` | Sync OpenRouter model catalog |
@@ -472,7 +472,8 @@ See [.env.example](.env.example) for details. Only the important ones are listed
 | `APP_COMMIT_SHA` | Sentry release identification |
 | `AUDIO_BRIEFING_R2_*` | Cloudflare R2 audio storage |
 | `AUDIO_BRIEFING_CONCAT_MODE` | Audio concat mode (`cloud_run` / `local`) |
-| `AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS` | Days before IA move |
+| `PODCAST_EPISODE_RETENTION_DAYS` | Podcast public retention period in days (default: 30) |
+| `PODCAST_PUBLIC_CLEANUP_BATCH_LIMIT` | Maximum public Podcast copies deleted per run |
 | `AUDIO_BRIEFING_STALE_DELETE_AFTER_MINUTES` | Minutes before stale job deletion |
 | `AUDIO_BRIEFING_CHUNK_RETRY_AFTER_SEC` | Seconds before chunk retry |
 | `AIVIS_TTS_ENDPOINT` / `AIVIS_API_KEY` | Aivis TTS synthesis |

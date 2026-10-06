@@ -15,8 +15,11 @@ Cloud Run Jobs 上で `infra/audio-concat` コンテナを実行し、音声チ�
 API / worker 側では、standard bucket に加えて次も使う:
 
 - `AUDIO_BRIEFING_R2_IA_BUCKET`
-- `AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS`
-- `AUDIO_BRIEFING_IA_MOVE_BATCH_LIMIT`
+  - 既存の IA 保存済み音声の一覧・再生・削除用。新規移送は行わない
+- `PODCAST_EPISODE_RETENTION_DAYS`
+  - Podcast 公開期間（既定 30 日）。原本は標準 bucket に保持する
+- `PODCAST_PUBLIC_CLEANUP_BATCH_LIMIT`
+  - 公開期限を過ぎた Podcast 公開コピーの削除件数（既定 50 件）
 
 実行時 override env は API 側が `jobs.run` で渡す:
 

@@ -89,7 +89,7 @@ func TestAudioBriefingListTabMatches(t *testing.T) {
 
 func TestAudioBriefingJobIsPodcastEligibleExcludesArchived(t *testing.T) {
 	t.Setenv("AUDIO_BRIEFING_PUBLIC_BUCKET", "briefings-public")
-	t.Setenv("AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS", "30")
+	t.Setenv("PODCAST_EPISODE_RETENTION_DAYS", "30")
 
 	now := time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)
 	publishedAt := now.Add(-24 * time.Hour)

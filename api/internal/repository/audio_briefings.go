@@ -531,7 +531,7 @@ func (r *AudioBriefingRepo) DeleteJob(ctx context.Context, userID, jobID string)
 	return nil
 }
 
-func (r *AudioBriefingRepo) ListIAMoveCandidates(ctx context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error) {
+func (r *AudioBriefingRepo) ListExpiredPodcastPublicCopies(ctx context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -546,7 +546,10 @@ func (r *AudioBriefingRepo) ListIAMoveCandidates(ctx context.Context, cutoff tim
 		WHERE status = 'published'
 		  AND published_at IS NOT NULL
 		  AND published_at <= $1
-		  AND r2_audio_object_key IS NOT NULL
+		  AND podcast_public_object_key IS NOT NULL
+		  AND podcast_public_object_key <> ''
+		  AND podcast_public_bucket <> ''
+		  AND podcast_public_deleted_at IS NULL
 		ORDER BY published_at ASC, id ASC
 		LIMIT $2
 	`, cutoff, limit)
@@ -607,38 +610,6 @@ func listStaleVoicingJobsQuery() string {
 		ORDER BY j.updated_at ASC, j.id ASC
 		LIMIT $2
 	`
-}
-
-func (r *AudioBriefingRepo) UpdateStorageBucketForJobAndChunks(ctx context.Context, jobID string, bucket string) error {
-	bucket = strings.TrimSpace(bucket)
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if _, err := tx.Exec(ctx, `
-		UPDATE audio_briefing_script_chunks
-		SET r2_storage_bucket = $2,
-		    updated_at = NOW()
-		WHERE job_id = $1
-		  AND r2_audio_object_key IS NOT NULL
-	`, jobID, bucket); err != nil {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `
-		UPDATE audio_briefing_jobs
-		SET r2_storage_bucket = $2,
-		    updated_at = NOW()
-		WHERE id = $1
-	`, jobID, bucket)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return tx.Commit(ctx)
 }
 
 func (r *AudioBriefingRepo) UpdateArchiveStatus(ctx context.Context, userID, jobID, archiveStatus string) (*model.AudioBriefingJob, error) {

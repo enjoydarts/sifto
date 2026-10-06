@@ -298,25 +298,25 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 	)
 }
 
-func moveAudioBriefingsToIAFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient) (inngestgo.ServableFunction, error) {
+func cleanupExpiredPodcastAudioFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient) (inngestgo.ServableFunction, error) {
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
-	archiveSvc := service.NewAudioBriefingArchiveService(audioBriefingRepo, worker)
+	cleanupSvc := service.NewPodcastCleanupService(audioBriefingRepo, worker)
 
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{ID: "move-audio-briefings-to-ia", Name: "Move Audio Briefings To IA"},
+		inngestgo.FunctionOpts{ID: "cleanup-expired-podcast-audio", Name: "Cleanup Expired Podcast Audio"},
 		inngestgo.CronTrigger("17 3 * * *"),
 		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
-			result, err := archiveSvc.MovePublishedToIA(ctx)
+			result, err := cleanupSvc.DeleteExpiredPublicCopies(ctx)
 			if err != nil {
 				return nil, err
 			}
 			if result == nil {
-				result = &service.AudioBriefingArchiveResult{}
+				result = &service.PodcastCleanupResult{}
 			}
 			return map[string]any{
 				"processed": result.Processed,
-				"moved":     result.Moved,
+				"deleted":   result.Deleted,
 				"failed":    result.Failed,
 			}, nil
 		},

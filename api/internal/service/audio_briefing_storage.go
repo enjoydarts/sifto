@@ -33,12 +33,12 @@ func AudioBriefingPublicBaseURLFromEnv() string {
 	return strings.TrimRight(strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_PUBLIC_BASE_URL")), "/")
 }
 
-func AudioBriefingIAMoveAfterDaysFromEnv() int {
-	return envIntOrDefault("AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS", 30)
+func PodcastEpisodeRetentionDaysFromEnv() int {
+	return envIntOrDefault("PODCAST_EPISODE_RETENTION_DAYS", 30)
 }
 
-func AudioBriefingIAMoveBatchLimitFromEnv() int {
-	return envIntOrDefault("AUDIO_BRIEFING_IA_MOVE_BATCH_LIMIT", 50)
+func PodcastPublicCleanupBatchLimitFromEnv() int {
+	return envIntOrDefault("PODCAST_PUBLIC_CLEANUP_BATCH_LIMIT", 50)
 }
 
 func NormalizeAudioBriefingStorageBucket(bucket string) string {
@@ -66,7 +66,7 @@ func AudioBriefingPodcastExpiresAt(publishedAt *time.Time) *time.Time {
 	if publishedAt == nil {
 		return nil
 	}
-	v := publishedAt.AddDate(0, 0, AudioBriefingIAMoveAfterDaysFromEnv())
+	v := publishedAt.AddDate(0, 0, PodcastEpisodeRetentionDaysFromEnv())
 	return &v
 }
 
@@ -117,6 +117,19 @@ func CollectAudioBriefingObjectRefs(job *model.AudioBriefingJob, chunks []model.
 		appendRef(chunk.R2StorageBucket, chunk.R2AudioObjectKey)
 	}
 	return out
+}
+
+func groupAudioBriefingObjectRefsByBucket(refs []AudioBriefingObjectRef) map[string][]string {
+	grouped := make(map[string][]string)
+	for _, ref := range refs {
+		bucket := strings.TrimSpace(ref.Bucket)
+		objectKey := strings.TrimSpace(ref.ObjectKey)
+		if bucket == "" || objectKey == "" {
+			continue
+		}
+		grouped[bucket] = append(grouped[bucket], objectKey)
+	}
+	return grouped
 }
 
 func firstNonEmptyTrimmed(values ...string) string {

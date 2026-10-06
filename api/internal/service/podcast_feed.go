@@ -104,7 +104,7 @@ func (s *PodcastFeedService) Build(ctx context.Context, slug string) (*PodcastFe
 	}
 
 	now := timeutil.NowJST()
-	cutoff := now.AddDate(0, 0, -AudioBriefingIAMoveAfterDaysFromEnv())
+	cutoff := now.AddDate(0, 0, -PodcastEpisodeRetentionDaysFromEnv())
 	jobs, err := s.audioBriefingRepo.ListPodcastPublishedJobsByUser(ctx, settings.UserID, cutoff, 30)
 	if err != nil {
 		return nil, err

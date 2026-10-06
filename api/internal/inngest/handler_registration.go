@@ -71,7 +71,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(generateAudioBriefingsFn(client, db, worker, cache))
 	register(runAudioBriefingPipelineFn(client, db, worker, cache))
 	register(failStaleAudioBriefingVoicingFn(client, db))
-	register(moveAudioBriefingsToIAFn(client, db, worker))
+	register(cleanupExpiredPodcastAudioFn(client, db, worker))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, keyProvider))
 	register(sendDigestFn(client, db, worker, resend, oneSignal))

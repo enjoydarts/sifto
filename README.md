@@ -256,7 +256,7 @@ sifto/
 | `check-budget-alerts` | `0 0 * * *` | 月次予算アラート判定（メール + Push） |
 | `generate-audio-briefings` | `0 * * * *` | 有効ユーザーの音声ブリーフィングを自動生成 |
 | `run-audio-briefing-pipeline` | `audio-briefing/run` | 音声ブリーフィングのスクリプト→TTS→連結パイプライン |
-| `move-audio-briefings-to-ia` | `17 3 * * *` | 古い音声を R2 IA バケットへ移送 |
+| `cleanup-expired-podcast-audio` | `17 3 * * *` | 公開期限を過ぎた Podcast の公開コピーを削除（原本は保持） |
 | `fail-stale-audio-briefing-voicing` | `*/5 * * * *` | 停滞した音声合成ジョブを失敗扱いに |
 | `notify-review-queue` | `0 * * * *` | 復習キューの Push 通知 |
 | `sync-openrouter-models` | `0 3 * * *` | OpenRouter モデルカタログ同期 |
@@ -474,7 +474,8 @@ make migrate-version
 | `APP_COMMIT_SHA` | Sentry リリース識別 |
 | `AUDIO_BRIEFING_R2_*` | Cloudflare R2 音声保管 |
 | `AUDIO_BRIEFING_CONCAT_MODE` | 音声連結モード (`cloud_run` / `local`) |
-| `AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS` | IA 移送までの日数 |
+| `PODCAST_EPISODE_RETENTION_DAYS` | Podcast 公開期間（日数、既定30日） |
+| `PODCAST_PUBLIC_CLEANUP_BATCH_LIMIT` | Podcast 公開コピー削除の1回あたり件数 |
 | `AUDIO_BRIEFING_STALE_DELETE_AFTER_MINUTES` | stale job 削除までの分数 |
 | `AUDIO_BRIEFING_CHUNK_RETRY_AFTER_SEC` | chunk 再試行までの秒数 |
 | `AIVIS_TTS_ENDPOINT` / `AIVIS_API_KEY` | Aivis TTS 音声合成 |

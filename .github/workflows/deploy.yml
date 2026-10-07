@@ -38,8 +38,7 @@ jobs:
   migrate:
     name: Run DB migrations
     needs: validate
-    # Keep the proven Tailscale/DB path until DNS, routing and migrate are tested on 26.04.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
 

@@ -16,8 +16,7 @@ permissions:
 
 jobs:
   deploy-audio-concat:
-    # Keep the proven Docker host until build/push and GCP deploy are tested on 26.04.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
 

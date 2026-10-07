@@ -151,10 +151,10 @@ sifto/
 
 補足:
 
-- [shared/llm_catalog.json](/Users/minoru-kitayama/private/sifto/shared/llm_catalog.json) で利用可能モデルと既定モデルを管理します。
-- [shared/prompt_templates/](/Users/minoru-kitayama/private/sifto/shared/prompt_templates/) に用途別のプロンプトテンプレートが格納されています。Prompt Admin で管理・上書き可能です。
-- [api/cmd/server/main.go](/Users/minoru-kitayama/private/sifto/api/cmd/server/main.go) に API ルーティングがまとまっています。
-- [api/internal/inngest/](/Users/minoru-kitayama/private/sifto/api/internal/inngest/) 配下に定期ジョブとイベント処理があります。
+- [shared/llm_catalog.json](shared/llm_catalog.json) で利用可能モデルと既定モデルを管理します。
+- [shared/prompt_templates/](shared/prompt_templates/) に用途別のプロンプトテンプレートが格納されています。Prompt Admin で管理・上書き可能です。
+- [api/cmd/server/main.go](api/cmd/server/main.go) に API ルーティングがまとまっています。
+- [api/internal/inngest/](api/internal/inngest/) 配下に定期ジョブとイベント処理があります。
 
 ## 画面とユースケース
 
@@ -232,7 +232,7 @@ sifto/
   - facts check
   - faithfulness check
   - embedding
-- モデル定義は [shared/llm_catalog.json](/Users/minoru-kitayama/private/sifto/shared/llm_catalog.json) を API / Worker で共有します。
+- モデル定義は [shared/llm_catalog.json](shared/llm_catalog.json) を API / Worker で共有します。
 - Settings 画面で recent provider model updates を確認できます。
 - Prompt Admin でテンプレート管理・バージョン管理・A/B 実験が行えます。
 
@@ -287,7 +287,7 @@ sifto/
 
 ## API の概要
 
-認証付き API は [api/cmd/server/main.go](/Users/minoru-kitayama/private/sifto/api/cmd/server/main.go) に定義されています。主なグループは以下です。
+認証付き API は [api/cmd/server/main.go](api/cmd/server/main.go) に定義されています。主なグループは以下です。
 
 - `/api/items` — 記事 CRUD、検索、トリアージ、ハイライト、メモ、フィードバック、ジャンル
 - `/api/sources` — ソース管理、OPML、Inoreader、健全性、推薦・発見
@@ -426,7 +426,7 @@ make migrate-version
 
 ## 環境変数
 
-詳細は [.env.example](/Users/minoru-kitayama/private/sifto/.env.example) を参照してください。ここでは重要なものだけ挙げます。
+詳細は [.env.example](.env.example) を参照してください。ここでは重要なものだけ挙げます。
 
 ### 開発で最低限必要なもの
 

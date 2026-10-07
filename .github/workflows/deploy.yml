@@ -74,10 +74,20 @@ jobs:
           PY
           )
 
-          echo "Checking Tailscale path to ${db_host}..."
-          if ! tailscale ping --c 3 --timeout=10s "$db_host"; then
-            echo "::warning::Tailscale ping to ${db_host} failed; continuing with the TCP check."
-          fi
+          # Accept DERP as well as direct paths; newly joined peers may take time to propagate.
+          # Keep ping diagnostic-only so it cannot prevent a working DB TCP connection.
+          ping_ok=false
+          for attempt in $(seq 1 3); do
+            echo "Checking Tailscale path to ${db_host} (${attempt}/3)..."
+            if tailscale ping --c 1 --timeout=10s --until-direct=false "$db_host"; then
+              ping_ok=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Tailscale ping has not succeeded yet; retrying in 5s for peer propagation."
+              sleep 5
+            fi
+          done
 
           connected=false
           for attempt in $(seq 1 6); do
@@ -95,9 +105,14 @@ jobs:
 
           if [ "$connected" != true ]; then
             echo "::error::PostgreSQL is unreachable at ${db_host}:${db_port} after 6 attempts."
+            echo "Tailscale ping succeeded: ${ping_ok}. Current Tailscale status:"
+            tailscale status || true
             exit 1
           fi
           echo "PostgreSQL is reachable at ${db_host}:${db_port}."
+          if [ "$ping_ok" != true ]; then
+            echo "::notice::Tailscale ping to ${db_host} did not succeed after 3 attempts, but PostgreSQL TCP connectivity succeeded; continuing with migrations."
+          fi
 
       - name: Run migrations
         env:

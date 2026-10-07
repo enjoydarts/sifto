@@ -13,8 +13,10 @@ def test_r2_bucket_override_is_limited_to_configured_audio_buckets():
     service.r2_bucket = "standard"
     service.r2_standard_bucket = "standard"
     service.r2_ia_bucket = "archive"
+    service.r2_public_bucket = "public"
     assert service.resolve_bucket() == "standard"
     assert service.resolve_bucket("archive") == "archive"
+    assert service.resolve_bucket("public") == "public"
     with pytest.raises(ValueError):
         service.resolve_bucket("unrelated-private-bucket")
 

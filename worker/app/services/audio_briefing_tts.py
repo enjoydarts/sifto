@@ -86,6 +86,7 @@ class AudioBriefingTTSService:
         )
         self.r2_bucket = self.r2_standard_bucket
         self.r2_ia_bucket = os.getenv("AUDIO_BRIEFING_R2_IA_BUCKET", "").strip()
+        self.r2_public_bucket = os.getenv("AUDIO_BRIEFING_PUBLIC_BUCKET", "").strip()
         self.r2_region = os.getenv("AUDIO_BRIEFING_R2_REGION", "auto").strip() or "auto"
         self.r2_access_key_id = os.getenv("AUDIO_BRIEFING_R2_ACCESS_KEY_ID", "").strip()
         self.r2_secret_access_key = os.getenv("AUDIO_BRIEFING_R2_SECRET_ACCESS_KEY", "").strip()
@@ -339,7 +340,7 @@ class AudioBriefingTTSService:
         bucket = (bucket_override or "").strip() or self.standard_bucket()
         if not bucket:
             raise RuntimeError("audio briefing R2 bucket is not configured")
-        if bucket not in {self.standard_bucket(), self.ia_bucket()}:
+        if bucket not in {self.standard_bucket(), self.ia_bucket(), self.r2_public_bucket}:
             raise ValueError("audio briefing R2 bucket is not allowed")
         return bucket
 

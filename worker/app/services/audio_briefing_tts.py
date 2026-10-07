@@ -28,12 +28,23 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _heartbeat_callback_base_url() -> str:
+    base = os.getenv("AUDIO_BRIEFING_HEARTBEAT_BASE_URL", "").strip()
+    if base:
+        return base.rstrip("/")
+    # Match the API's audioBriefingChunkHeartbeatURL callback selection.
+    mode = os.getenv("AUDIO_BRIEFING_CONCAT_MODE", "").strip().lower() or "cloud_run"
+    if mode == "local":
+        return os.getenv("AUDIO_BRIEFING_LOCAL_CALLBACK_BASE_URL", "").strip().rstrip("/") or "http://api:8080"
+    return (os.getenv("APP_BASE_URL") or os.getenv("NEXT_PUBLIC_APP_URL") or "").strip().rstrip("/")
+
+
 class AudioBriefingHeartbeatLoop:
     def __init__(self, heartbeat_url: str | None, heartbeat_token: str | None, interval_sec: float, timeout_sec: float) -> None:
         self.heartbeat_url = (heartbeat_url or "").strip()
         self.heartbeat_token = (heartbeat_token or "").strip()
         if self.heartbeat_url:
-            base = (os.getenv("AUDIO_BRIEFING_HEARTBEAT_BASE_URL") or os.getenv("AUDIO_BRIEFING_LOCAL_CALLBACK_BASE_URL") or os.getenv("APP_BASE_URL") or "").strip()
+            base = _heartbeat_callback_base_url()
             target, trusted = urlparse(self.heartbeat_url), urlparse(base)
             prefix = trusted.path.rstrip("/") + "/api/internal/audio-briefings/chunks/"
             valid_path = re.fullmatch(re.escape(prefix) + r"[0-9a-fA-F-]{36}/heartbeat", target.path)

@@ -1142,7 +1142,10 @@ func audioBriefingChunkObjectKey(userID string, jobID string, seq int) string {
 }
 
 func audioBriefingChunkHeartbeatURL(chunkID string) string {
-	baseURL := audioBriefingCallbackBaseURL(AudioBriefingConcatModeFromEnv())
+	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_HEARTBEAT_BASE_URL")), "/")
+	if baseURL == "" {
+		baseURL = audioBriefingCallbackBaseURL(AudioBriefingConcatModeFromEnv())
+	}
 	if baseURL == "" {
 		return ""
 	}

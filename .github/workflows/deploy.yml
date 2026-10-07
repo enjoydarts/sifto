@@ -15,7 +15,7 @@ concurrency:
 jobs:
   validate:
     name: Validate deployment configuration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
       COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
@@ -38,7 +38,8 @@ jobs:
   migrate:
     name: Run DB migrations
     needs: validate
-    runs-on: ubuntu-latest
+    # Keep the proven Tailscale/DB path until DNS, routing and migrate are tested on 26.04.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -107,7 +108,7 @@ jobs:
   deploy-worker:
     name: Deploy Worker
     needs: migrate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
@@ -170,7 +171,7 @@ jobs:
   deploy-api:
     name: Deploy API
     needs: deploy-worker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
@@ -248,7 +249,7 @@ jobs:
   sync-inngest:
     name: Sync Inngest
     needs: deploy-api
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
     steps:

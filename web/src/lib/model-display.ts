@@ -73,6 +73,8 @@ export function formatModelDisplayName(model: string): string {
       return "MiMo-V2-Pro";
     case "mimo-v2-omni":
       return "MiMo-V2-Omni";
+    case "mistral-large-4":
+      return "Mistral Large 4";
     case "mistral-large-2512":
       return "Mistral Large 3";
     case "mistral-medium-2508":

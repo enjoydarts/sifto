@@ -118,6 +118,8 @@
       "api_key_header": "x-mistral-api-key",
       "match_exact": [
         "mistral-small-2603",
+        "mistral-large-4",
+        "mistral-large-4-0",
         "mistral-large-2512",
         "mistral-medium-3.5",
         "mistral-medium-2508",
@@ -2750,6 +2752,40 @@
         "pricing_source": "mistral_docs_2026_04",
         "input_per_mtok_usd": 0.15,
         "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "mistral-large-4",
+      "provider": "mistral",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [
+        "latest",
+        "long-context",
+        "experimental"
+      ],
+      "comment": "Mistral Large 4（公開Preview）。100万tokenの長文コンテキストを備え、複雑な要約・Ask・ダイジェストの比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_docs_2026_10_standard",
+        "input_per_mtok_usd": 1.36,
+        "output_per_mtok_usd": 4.18,
+        "cache_read_per_mtok_usd": 0.14
       }
     },
     {

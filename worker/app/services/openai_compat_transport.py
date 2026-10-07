@@ -110,6 +110,10 @@ def _is_non_retryable_quota_response(response: httpx.Response) -> bool:
 
 
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict, *, schema_name: str = "response") -> None:
+    if provider_name == "mistral" and normalized_model in {"mistral-large-4", "mistral-large-4-0"}:
+        # Keep the small structured-output budget available for the JSON answer.
+        body["reasoning_effort"] = "none"
+        return
     if provider_name == "xiaomi_mimo_token_plan" and schema_name == "summary":
         # MiMo defaults to thinking, which shares the small summary output
         # budget with the JSON answer. Reserve that budget for the summary.

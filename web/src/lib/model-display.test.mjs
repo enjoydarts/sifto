@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 
 import { formatModelDisplayName, providerLabel } from "./model-display.ts";
 
+test("formatModelDisplayName formats Mistral Large 4 consistently", () => {
+  assert.equal(formatModelDisplayName("mistral-large-4"), "Mistral Large 4");
+});
+
 test("formatModelDisplayName formats Xiaomi MiMo models with branded casing", () => {
   assert.equal(formatModelDisplayName("mimo-v2-pro"), "MiMo-V2-Pro");
   assert.equal(formatModelDisplayName("mimo-v2-omni"), "MiMo-V2-Omni");

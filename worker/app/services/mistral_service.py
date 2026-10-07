@@ -6,6 +6,7 @@ _config = ProviderConfig(
     pricing_source_version="mistral_static_2026_03",
     api_base_url="https://api.mistral.ai/v1/chat/completions",
     api_base_url_env="MISTRAL_API_BASE_URL",
+    model_families=["mistral-large-4"],
 )
 _p = OpenAICompatProvider(_config)
 

@@ -505,7 +505,7 @@ See [.env.example](.env.example) for details. Only the important ones are listed
 - Redis is used for API JSON caching and some Worker-side caching.
 - Meilisearch powers full-text search and suggestions for articles.
 - Audio briefings follow the flow: LLM script generation → TTS via Aivis/Fish Speech/Gemini/xAI/ElevenLabs/Azure Speech → concatenation via Cloud Run / local → R2 storage.
-- Older audio is automatically moved to the IA bucket after a configurable number of days.
+- Private audio originals are retained in the Standard bucket. Existing IA objects remain supported for compatibility (listing, playback, and deletion), with no new automatic transfers. Only public Podcast copies are deleted after the configured retention period.
 - Podcast feeds are published per-user with slug-based URLs.
 - Obsidian export goes through a GitHub App integration.
 - OneSignal notifications link to in-app pages by default.

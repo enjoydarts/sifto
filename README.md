@@ -507,7 +507,7 @@ make migrate-version
 - Redis は API の JSON キャッシュや Worker 側の一部キャッシュに利用します。
 - Meilisearch は記事の全文検索とサジェストに利用します。
 - 音声ブリーフィングは LLM でスクリプト生成 → Aivis/Fish Speech/Gemini/xAI/ElevenLabs/Azure Speech で TTS → Cloud Run / ローカルで連結 → R2 に保管の流れです。
-- 古い音声は設定日数後に IA バケットへ自動移送されます。
+- 音声の private 原本は Standard バケットに保持します。既存の IA オブジェクトは互換用途（一覧・再生・削除）で扱い、新規の自動移送は行いません。Podcast の公開コピーのみ、設定した公開期間後に削除します。
 - Podcast フィードはユーザーごとに slug ベースで公開されます。
 - Obsidian エクスポートは GitHub App 経由です。
 - OneSignal はアプリ内ページへの導線を前提にしています。

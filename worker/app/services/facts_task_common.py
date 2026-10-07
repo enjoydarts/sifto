@@ -119,11 +119,10 @@ def dedupe_facts(raw: list[str], max_items: int = 18) -> list[str]:
 
 
 def parse_facts_result(text: str, *, max_items: int = 18) -> list[str]:
-    obj = extract_first_json_object(text) or {}
-    raw = obj.get("facts")
-    facts = dedupe_facts(raw if isinstance(raw, list) else [], max_items=max_items)
-    if facts:
-        return facts
+    obj = extract_first_json_object(text)
+    if obj is not None:
+        raw = obj.get("facts")
+        return dedupe_facts(raw if isinstance(raw, list) else [], max_items=max_items)
     facts = dedupe_facts(parse_json_string_array(text), max_items=max_items)
     if facts:
         return facts

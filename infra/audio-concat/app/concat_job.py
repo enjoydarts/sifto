@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import random
 import shutil
@@ -46,6 +47,7 @@ def run_from_env() -> int:
         provider_job_id=provider_job_id,
         bgm_enabled=bgm_enabled,
         bgm_r2_prefix=bgm_r2_prefix,
+        gap_seconds=float(os.getenv("AUDIO_BRIEFING_GAP_SECONDS", "1")),
     )
 
 
@@ -61,6 +63,7 @@ def run_job(
     provider_job_id: str | None = None,
     bgm_enabled: bool = False,
     bgm_r2_prefix: str | None = None,
+    gap_seconds: float = 1.0,
 ) -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="audio-concat-") as tmp_dir:
@@ -69,7 +72,7 @@ def run_job(
             segment_specs = normalize_segment_specs(audio_object_keys, segments)
             segment_files = download_segments(tmp_path, r2, [spec["audio_object_key"] for spec in segment_specs])
             concat_path = tmp_path / "episode-concat.mp3"
-            concat_audio(segment_files, concat_path, segment_specs)
+            concat_audio(segment_files, concat_path, segment_specs, gap_seconds=gap_seconds)
             bgm_object_key = None
             try:
                 if bgm_enabled and bgm_r2_prefix:
@@ -197,7 +200,15 @@ def download_direct(url: str, destination: Path) -> None:
             shutil.copyfileobj(response, stream)
 
 
-def concat_audio(segment_files: list[Path], output_path: Path, segment_specs: list[dict] | None = None) -> None:
+def validate_gap_seconds(value: float) -> float:
+    gap = float(value)
+    if not math.isfinite(gap) or not 0 <= gap <= 5:
+        raise ValueError("gap_seconds must be between 0 and 5")
+    return gap
+
+
+def concat_audio(segment_files: list[Path], output_path: Path, segment_specs: list[dict] | None = None, *, gap_seconds: float = 1.0) -> None:
+    gap_seconds = validate_gap_seconds(gap_seconds)
     if not segment_files:
         raise RuntimeError("segment files are empty")
     segment_specs = segment_specs or []
@@ -216,9 +227,9 @@ def concat_audio(segment_files: list[Path], output_path: Path, segment_specs: li
         gap_after = True
         if index < len(segment_specs):
             gap_after = bool(segment_specs[index].get("gap_after", True))
-        if index < len(segment_files)-1 and gap_after:
+        if index < len(segment_files)-1 and gap_after and gap_seconds > 0:
             padded_label = f"a{index}"
-            filter_parts.append(f"[{normalized_label}]apad=pad_dur=1[{padded_label}]")
+            filter_parts.append(f"[{normalized_label}]apad=pad_dur={gap_seconds:g}[{padded_label}]")
             concat_inputs.append(f"[{padded_label}]")
         else:
             concat_inputs.append(f"[{normalized_label}]")

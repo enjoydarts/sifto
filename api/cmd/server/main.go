@@ -20,10 +20,13 @@ func main() {
 	ctx := context.Background()
 	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
 		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:              dsn,
-			Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
-			Release:          os.Getenv("APP_COMMIT_SHA"),
-			AttachStacktrace: true,
+			Dsn:                   dsn,
+			Environment:           os.Getenv("SENTRY_ENVIRONMENT"),
+			Release:               os.Getenv("APP_COMMIT_SHA"),
+			AttachStacktrace:      true,
+			SendDefaultPII:        false,
+			BeforeSend:            service.ScrubSentryEvent,
+			BeforeSendTransaction: service.ScrubSentryEvent,
 		}); err != nil {
 			log.Printf("sentry init error: %v", err)
 		} else {
@@ -70,6 +73,7 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth(repository.NewUserIdentityRepo(deps.db), deps.clerkVerifier))
 		r.Use(rateLimiter.Middleware)
+		r.Use(middleware.IgnoreClientCacheBust)
 
 		for _, m := range modules {
 			if m.registerAPI != nil {

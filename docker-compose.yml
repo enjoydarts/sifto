@@ -95,8 +95,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
 
   meilisearch:
     image: getmeili/meilisearch:v1.13

@@ -41,13 +41,13 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
             "app.services.youtube_extract_service.json.loads", side_effect=[metadata, {"events": [{"segs": [{"utf8": "日本語字幕です。"}]}]}]
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response) as mocked_get:
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])) as mocked_get:
             result = extract_body("https://www.youtube.com/watch?v=abc123")
 
         self.assertEqual(result["title"], "動画タイトル")
         self.assertEqual(result["content"], "日本語字幕です。")
         self.assertEqual(result["published_at"], "2026-04-02")
-        mocked_get.assert_called_once_with("https://subs.example/ja.json3", timeout=30.0, follow_redirects=True)
+        mocked_get.assert_called_once_with("https://subs.example/ja.json3", 5 * 1024 * 1024, timeout_sec=5.0)
 
     def test_extract_body_falls_back_to_english_auto_captions(self):
         metadata = {
@@ -64,7 +64,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             result = extract_body("https://youtu.be/abc123")
 
         self.assertEqual(result["content"], "English line")
@@ -84,7 +84,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             result = extract_body("https://youtu.be/abc123")
 
         self.assertEqual(result["content"], "字幕あります")
@@ -108,15 +108,15 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=[proc, verbose_result]), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             with self.assertRaisesRegex(
                 YouTubeTranscriptUnavailableError,
-                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*pot_provider_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\].*debug=\[debug\] \[youtube\] \[pot\] PO Token Providers: bgutil:http-1.3.1 \(external\)",
+                r"^youtube transcript unavailable: no supported transcript$",
             ) as ctx:
                 extract_body("https://www.youtube.com/watch?v=abc123")
         self.assertEqual(ctx.exception.title, "Video Title")
 
-    def test_extract_body_includes_ytdlp_stderr_on_metadata_failure(self):
+    def test_extract_body_hides_ytdlp_stderr_on_metadata_failure(self):
         err = subprocess.CalledProcessError(
             1,
             ["yt-dlp", "--dump-single-json"],
@@ -132,11 +132,11 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=[err, verbose_result]):
             with self.assertRaisesRegex(
                 RuntimeError,
-                r"yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False pot_provider_present=False .*debug=\[debug\] \[youtube\] \[pot\] PO Token Providers: bgutil:http-1.3.1 \(external\)",
+                r"^yt-dlp metadata fetch failed$",
             ):
                 extract_body("https://www.youtube.com/watch?v=abc123")
 
-    def test_extract_body_passes_temp_cookie_file_when_env_is_set(self):
+    def test_extract_body_ignores_shared_cookies_when_env_is_set(self):
         metadata = {
             "title": "Video Title",
             "subtitles": {},
@@ -149,10 +149,6 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
-            cookies_path = cmd[cmd.index("--cookies") + 1]
-            captured["cookies_path"] = cookies_path
-            with open(cookies_path, "r", encoding="utf-8") as f:
-                captured["cookies_content"] = f.read()
             return Mock(stdout='{"ignored": true}')
 
         with patch.dict(
@@ -161,14 +157,13 @@ class YoutubeExtractServiceTests(unittest.TestCase):
             clear=False,
         ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             result = extract_body("https://youtu.be/abc123")
 
         self.assertEqual(result["content"], "English line")
-        self.assertIn("--cookies", captured["cmd"])
+        self.assertNotIn("--cookies", captured["cmd"])
+        self.assertIn("--ignore-config", captured["cmd"])
         self.assertIn("--ignore-no-formats-error", captured["cmd"])
-        self.assertIn("#HTTP Cookie File", captured["cookies_content"])
-        self.assertFalse(os.path.exists(captured["cookies_path"]))
 
     def test_extract_body_passes_extractor_args_when_env_is_set(self):
         metadata = {
@@ -191,7 +186,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
             clear=False,
         ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             result = extract_body("https://youtu.be/abc123")
 
         self.assertEqual(result["content"], "English line")
@@ -222,7 +217,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
             clear=False,
         ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+        ), patch("app.services.youtube_extract_service.download_bytes", side_effect=lambda *args, **kwargs: (response.text.encode(), args[0])):
             result = extract_body("https://youtu.be/abc123")
 
         self.assertEqual(result["content"], "English line")

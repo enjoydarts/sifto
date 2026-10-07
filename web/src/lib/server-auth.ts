@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { verifiedPrimaryEmail } from "@/lib/verified-primary-email";
 
 export interface ServerAuthUser {
   provider: "clerk";
@@ -17,10 +18,7 @@ export async function getServerAuthUser(): Promise<ServerAuthUser | null> {
   if (!clerkAuth.userId) return null;
 
   const user = await currentUser();
-  const primaryEmail =
-    user?.emailAddresses.find((entry) => entry.id === user.primaryEmailAddressId)?.emailAddress ??
-    user?.emailAddresses[0]?.emailAddress ??
-    null;
+  const primaryEmail = user?.id === clerkAuth.userId ? verifiedPrimaryEmail(user) : null;
 
   return {
     provider: "clerk",

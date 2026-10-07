@@ -462,7 +462,6 @@ See [.env.example](.env.example) for details. Only the important ones are listed
 | `ONESIGNAL_PICK_MAX_PER_DAY` | Max notifications per day |
 | `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_INSTALL_URL` | Obsidian GitHub export |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth / Inoreader |
-| `YTDLP_COOKIES_B64` | YouTube extraction cookies.txt (base64) |
 | `YTDLP_EXTRACTOR_ARGS` | `yt-dlp --extractor-args` passthrough |
 | `YTDLP_POT_PROVIDER_BASE_URL` | bgutil PO Token provider HTTP server base URL |
 | `YTDLP_POT_PROVIDER_DISABLE_INNERTUBE` | Pass `disable_innertube=1` to provider plugin |

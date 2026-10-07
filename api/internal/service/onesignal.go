@@ -3,6 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -101,6 +104,15 @@ func (c *OneSignalClient) SendToExternalID(ctx context.Context, externalID, titl
 	if externalID == "" {
 		return nil, fmt.Errorf("external_id is required")
 	}
+	// Web SDK cannot verify login(email). Only server-generated, unguessable
+	// identities may receive private notification payloads; legacy aliases stop.
+	secret := os.Getenv("INTERNAL_API_SECRET")
+	if len(secret) < 32 {
+		return nil, fmt.Errorf("push identity secret is not configured")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("sifto:onesignal:v2:" + strings.ToLower(externalID)))
+	externalID = "sifto_v2_" + hex.EncodeToString(mac.Sum(nil))
 	if strings.TrimSpace(title) == "" || strings.TrimSpace(body) == "" {
 		return nil, fmt.Errorf("title/body are required")
 	}

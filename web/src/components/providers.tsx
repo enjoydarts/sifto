@@ -168,7 +168,7 @@ function ProvidersWithI18n({
 function ProtectedAppGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const { t } = useI18n();
 
   const isPublicRoute = pathname === "/login";
@@ -195,5 +195,21 @@ function ProtectedAppGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <UserQueryCache key={userId ?? "anonymous"}>{children}</UserQueryCache>;
+}
+
+function UserQueryCache({ children }: { children: React.ReactNode }) {
+  const [client] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: true,
+        refetchOnReconnect: true,
+        refetchOnMount: true,
+        retry: 1,
+      },
+    },
+  }));
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

@@ -1,6 +1,7 @@
 import contextvars
 import logging
 import os
+import sys
 from contextlib import contextmanager
 
 
@@ -293,9 +294,26 @@ def span(name: str, *, input=None, metadata=None, tags=None, as_type: str = "spa
         return
 
     try:
-        with span_cm as current_span:
-            _current_span_var.set(current_span)
+        try:
+            current_span = span_cm.__enter__()
+        except Exception:
+            _log.warning("langfuse context unavailable name=%s", name)
+            yield None
+            return
+        _current_span_var.set(current_span)
+        try:
             yield current_span
+        except BaseException:
+            try:
+                span_cm.__exit__(*sys.exc_info())
+            except Exception:
+                _log.warning("langfuse context exit failed name=%s", name)
+            raise
+        else:
+            try:
+                span_cm.__exit__(None, None, None)
+            except Exception:
+                _log.warning("langfuse context exit failed name=%s", name)
     finally:
         _prompt_refs_var.reset(token)
         _current_span_var.reset(span_token)

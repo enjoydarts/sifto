@@ -853,6 +853,8 @@ class RunChatJsonTests(unittest.TestCase):
         )
 
         self.assertEqual(_text, '{"answer":"ok"}')
+        self.assertEqual(usage["input_tokens"], 23)
+        self.assertEqual(usage["output_tokens"], 6434)
         self.assertEqual(
             usage.get("execution_failures"),
             [{"model": "openrouter::moonshotai/kimi-k2.5", "reason": "empty_json_content finish_reason=length provider=DeepInfra"}],

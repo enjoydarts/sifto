@@ -8,9 +8,12 @@ function isOneSignalLike(
 ): v is {
   init: (options: Record<string, unknown>) => Promise<void>;
   login?: (externalId: string) => Promise<void>;
+  logout?: () => Promise<void>;
 } {
   return typeof v === "object" && v !== null && typeof (v as { init?: unknown }).init === "function";
 }
+
+let identityChain: Promise<void> = Promise.resolve();
 
 async function cleanupLegacyOneSignalRootWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -32,7 +35,7 @@ async function cleanupLegacyOneSignalRootWorker() {
 
 export default function OneSignalInit() {
   const { user } = useUser();
-  return <OneSignalInitInner externalId={user?.primaryEmailAddress?.emailAddress ?? null} />;
+  return <OneSignalInitInner externalId={user?.id ?? null} />;
 }
 
 function OneSignalInitInner({ externalId }: { externalId: string | null }) {
@@ -102,12 +105,21 @@ function OneSignalInitInner({ externalId }: { externalId: string | null }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!ready && !window.__siftoOneSignalReady) return;
-    if (!externalId) return;
     const oneSignal = isOneSignalLike(window.OneSignal) ? window.OneSignal : undefined;
     if (!oneSignal?.login) return;
-    oneSignal.login(externalId).catch(() => {
-      // no-op
-    });
+    let cancelled = false;
+    identityChain = identityChain.catch(() => {}).then(async () => {
+      if (cancelled) return;
+      await oneSignal.logout?.();
+      if (!externalId || cancelled) return;
+      const response = await fetch("/api/push/identity", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+      if (!response.ok || cancelled) return;
+      const identity = await response.json() as { externalId?: string; userId?: string };
+      if (!cancelled && identity.userId === externalId && identity.externalId) {
+        await oneSignal.login?.(identity.externalId);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [externalId, ready]);
 
   return null;

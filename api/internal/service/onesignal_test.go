@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -16,6 +17,7 @@ func (f oneSignalRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response,
 }
 
 func TestOneSignalSendToExternalIDIncludesTargetURLInData(t *testing.T) {
+	t.Setenv("INTERNAL_API_SECRET", strings.Repeat("a", 32))
 	var got map[string]any
 	client := &OneSignalClient{
 		appID:  "app-id",
@@ -48,6 +50,13 @@ func TestOneSignalSendToExternalIDIncludesTargetURLInData(t *testing.T) {
 
 	if got["url"] != "https://app.example.com/audio-briefings/job-1" {
 		t.Fatalf("url = %v, want target url", got["url"])
+	}
+	aliases := got["include_aliases"].(map[string]any)["external_id"].([]any)
+	if aliases[0] == "user@example.com" || !strings.HasPrefix(aliases[0].(string), "sifto_v2_") {
+		t.Fatalf("guessable identity: %v", aliases)
+	}
+	if aliases[0] != "sifto_v2_4386dd05bbea24cdc3e89636ee221cbdfc6fe51d29b4a31348a291f6bab440cf" {
+		t.Fatalf("notification identity differs from Web identity: %v", aliases)
 	}
 	data, _ := got["data"].(map[string]any)
 	if data["target_url"] != "https://app.example.com/audio-briefings/job-1" {

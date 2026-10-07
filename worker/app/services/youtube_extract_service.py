@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
 import re
 import subprocess
-import tempfile
 import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+from app.services.bounded_download import download_bytes
 from app.services.url_security import ensure_response_size, validate_public_http_url
 
 _log = logging.getLogger(__name__)
@@ -69,59 +67,39 @@ def is_youtube_url(url: str) -> bool:
 def extract_body(url: str) -> dict | None:
     url = validate_public_http_url(url)
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
-    cookies_present = bool((os.getenv("YTDLP_COOKIES_B64") or "").strip())
     pot_provider_present = bool((os.getenv("YTDLP_POT_PROVIDER_BASE_URL") or "").strip())
     pot_provider_args = _build_pot_provider_extractor_args()
-    cookies_path = _write_ytdlp_cookies_file()
-    try:
-        metadata = _load_video_metadata(url)
-        title = str(metadata.get("title") or "").strip()
-        if not title:
-            raise RuntimeError("youtube metadata unavailable")
+    metadata = _load_video_metadata(url)
+    title = str(metadata.get("title") or "").strip()
+    if not title:
+        raise RuntimeError("youtube metadata unavailable")
 
-        published_at = _normalize_upload_date(str(metadata.get("upload_date") or "").strip())
-        image_url = str(metadata.get("thumbnail") or "").strip() or None
-        transcript = _extract_transcript(metadata)
-        if not transcript:
-            debug_detail = _collect_ytdlp_debug_details(url, extractor_args, pot_provider_args, cookies_path)
-            diagnostics = (
-                f"cookies_present={cookies_present} "
-                f"extractor_args_present={bool(extractor_args)} "
-                f"pot_provider_present={pot_provider_present} "
-                f"{_describe_available_transcripts(metadata)}"
-            ).strip()
-            if debug_detail:
-                diagnostics = f"{diagnostics} debug={debug_detail}"
-            raise YouTubeTranscriptUnavailableError(
-                title=title,
-                published_at=published_at,
-                image_url=image_url,
-                diagnostics=diagnostics,
-            )
+    published_at = _normalize_upload_date(str(metadata.get("upload_date") or "").strip())
+    image_url = str(metadata.get("thumbnail") or "").strip() or None
+    transcript = _extract_transcript(metadata)
+    if not transcript:
+        raise YouTubeTranscriptUnavailableError(
+            title=title,
+            published_at=published_at,
+            image_url=image_url,
+            diagnostics="no supported transcript",
+        )
 
-        return {
-            "title": title,
-            "content": transcript,
-            "published_at": published_at,
-            "image_url": image_url,
-        }
-    finally:
-        if cookies_path:
-            try:
-                os.unlink(cookies_path)
-            except FileNotFoundError:
-                pass
+    return {
+        "title": title,
+        "content": transcript,
+        "published_at": published_at,
+        "image_url": image_url,
+    }
 
 
 def _load_video_metadata(url: str) -> dict:
     cmd = _build_ytdlp_metadata_command(verbose=False)
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     pot_provider_args = _build_pot_provider_extractor_args()
-    cookies_path = _write_ytdlp_cookies_file()
     _log.info(
-        "youtube metadata fetch url=%s cookies_present=%s extractor_args_present=%s pot_provider_present=%s",
+        "youtube metadata fetch url=%s extractor_args_present=%s pot_provider_present=%s",
         url,
-        bool(cookies_path),
         bool(extractor_args),
         bool(pot_provider_args),
     )
@@ -129,54 +107,15 @@ def _load_video_metadata(url: str) -> dict:
         cmd.extend(["--extractor-args", extractor_args])
     if pot_provider_args:
         cmd.extend(["--extractor-args", pot_provider_args])
-    if cookies_path:
-        cmd.extend(["--cookies", cookies_path])
     cmd.append(url)
     try:
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as exc:
-            detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
-            debug_detail = _collect_ytdlp_debug_details(url, extractor_args, pot_provider_args, cookies_path)
-            if debug_detail:
-                detail = f"{detail} debug={debug_detail}"
-            raise RuntimeError(
-                f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} "
-                f"extractor_args_present={bool(extractor_args)} "
-                f"pot_provider_present={bool(pot_provider_args)} {detail}"
-            ) from exc
-    finally:
-        if cookies_path:
-            try:
-                os.unlink(cookies_path)
-            except FileNotFoundError:
-                pass
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=35)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("yt-dlp metadata fetch failed") from exc
     payload = json.loads(proc.stdout or "{}")
     if not isinstance(payload, dict):
         raise RuntimeError("youtube metadata unavailable")
     return payload
-
-
-def _write_ytdlp_cookies_file() -> str | None:
-    raw = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
-    if not raw:
-        return None
-    try:
-        content = base64.b64decode(raw.encode("ascii"), validate=True).decode("utf-8")
-    except Exception as exc:
-        raise RuntimeError("invalid YTDLP_COOKIES_B64") from exc
-
-    fd, path = tempfile.mkstemp(prefix="yt-dlp-cookies-", suffix=".txt")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
-    except Exception:
-        try:
-            os.unlink(path)
-        except FileNotFoundError:
-            pass
-        raise
-    return path
 
 
 def _build_pot_provider_extractor_args() -> str:
@@ -190,10 +129,11 @@ def _build_pot_provider_extractor_args() -> str:
 
 
 def _build_ytdlp_metadata_command(*, verbose: bool) -> list[str]:
-    cmd = ["yt-dlp"]
+    # Never inherit a host config containing shared account credentials.
+    cmd = ["yt-dlp", "--ignore-config"]
     if verbose:
         cmd.append("-v")
-    cmd.extend(["--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"])
+    cmd.extend(["--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error", "--no-playlist", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1"])
     return cmd
 
 
@@ -201,18 +141,15 @@ def _collect_ytdlp_debug_details(
     url: str,
     extractor_args: str,
     pot_provider_args: str,
-    cookies_path: str | None,
 ) -> str:
     debug_cmd = _build_ytdlp_metadata_command(verbose=True)
     if extractor_args:
         debug_cmd.extend(["--extractor-args", extractor_args])
     if pot_provider_args:
         debug_cmd.extend(["--extractor-args", pot_provider_args])
-    if cookies_path:
-        debug_cmd.extend(["--cookies", cookies_path])
     debug_cmd.append(url)
     try:
-        proc = subprocess.run(debug_cmd, capture_output=True, text=True, check=False)
+        proc = subprocess.run(debug_cmd, capture_output=True, text=True, check=False, timeout=10)
     except Exception as exc:
         return f"verbose_run_failed={type(exc).__name__}"
     merged = "\n".join(part for part in [proc.stderr or "", proc.stdout or ""] if part).strip()
@@ -325,18 +262,14 @@ def _language_rank(lang: str) -> int | None:
 
 
 def _download_transcript(entries: list[dict]) -> str:
-    preferred = sorted(entries, key=_format_rank)
+    preferred = sorted(entries, key=_format_rank)[:3]
     for entry in preferred:
         transcript_url = str((entry or {}).get("url") or "").strip()
         if not transcript_url:
             continue
         ext = str((entry or {}).get("ext") or "").strip().lower()
-        transcript_url = validate_public_http_url(transcript_url)
-        resp = httpx.get(transcript_url, timeout=30.0, follow_redirects=True)
-        resp.raise_for_status()
-        validate_public_http_url(str(resp.url))
-        body = resp.text or ""
-        ensure_response_size(body.encode("utf-8", errors="replace"), 5 * 1024 * 1024)
+        content, _ = download_bytes(transcript_url, 5 * 1024 * 1024, timeout_sec=5.0)
+        body = content.decode("utf-8", errors="replace")
         text = _parse_transcript_text(ext, body)
         if text:
             return text

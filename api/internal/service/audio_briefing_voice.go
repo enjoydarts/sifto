@@ -134,11 +134,12 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	if r == nil || r.repo == nil || r.worker == nil {
 		return nil, fmt.Errorf("audio briefing voice runner unavailable")
 	}
+	authorized := false
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("audio briefing voice stage panic: %v", recovered)
 		}
-		if err != nil {
+		if err != nil && authorized {
 			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		}
 	}()
@@ -147,6 +148,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	if err != nil {
 		return nil, err
 	}
+	authorized = true
 	if strings.TrimSpace(job.Status) != "voicing" {
 		job, err = r.repo.StartVoicingJob(ctx, jobID)
 		if err != nil {
@@ -587,7 +589,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			speechParams.EmotionalIntensity,
 			speechParams.TempoDynamics,
 			speechParams.LineBreakSilenceSeconds,
-			speechParams.ChunkTrailingSilenceSecond,
+			0, // Episode concatenation applies the configured gap at article boundaries.
 			speechParams.Pitch,
 			speechParams.VolumeGain,
 			audioObjectKey,
@@ -726,7 +728,7 @@ func audioBriefingSpeechParamsForChunk(
 		Pitch:                      0.0,
 		VolumeGain:                 0.0,
 	}
-	if settings != nil && settings.ChunkTrailingSilenceSeconds >= 0 {
+	if settings != nil && settings.ChunkTrailingSilenceSeconds >= 0 && settings.ChunkTrailingSilenceSeconds <= 5 {
 		params.ChunkTrailingSilenceSecond = settings.ChunkTrailingSilenceSeconds
 	}
 	selectedVoice := hostVoice

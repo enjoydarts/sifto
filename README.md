@@ -464,7 +464,6 @@ make migrate-version
 | `ONESIGNAL_PICK_MAX_PER_DAY` | 1日最大通知件数 |
 | `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_INSTALL_URL` | Obsidian GitHub エクスポート |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth / Inoreader 周辺 |
-| `YTDLP_COOKIES_B64` | YouTube 抽出用 cookies.txt を base64 で渡す |
 | `YTDLP_EXTRACTOR_ARGS` | `yt-dlp --extractor-args` をそのまま渡す |
 | `YTDLP_POT_PROVIDER_BASE_URL` | bgutil PO Token provider HTTP server の base URL |
 | `YTDLP_POT_PROVIDER_DISABLE_INNERTUBE` | provider plugin に `disable_innertube=1` を渡す |

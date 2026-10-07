@@ -454,6 +454,23 @@ def usage_from_chat_response(data: dict) -> dict:
     return usage_payload
 
 
+_USAGE_TOTAL_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "billed_cost_usd")
+
+
+def _accumulate_retry_usage(total: dict, data: dict) -> None:
+    usage = usage_from_chat_response(data)
+    for key in _USAGE_TOTAL_FIELDS:
+        if key in usage:
+            total[key] = total.get(key, 0) + usage[key]
+
+
+def _include_retry_usage(usage: dict, total: dict) -> dict:
+    for key in _USAGE_TOTAL_FIELDS:
+        if key in total:
+            usage[key] = usage.get(key, 0) + total[key]
+    return usage
+
+
 def run_chat_json(
     prompt: str,
     model: str,
@@ -577,6 +594,7 @@ def run_chat_json(
                     reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"
                     if i == attempts - 1:
                         raise RuntimeError(f"{provider_name} chat.completions failed: {reason}")
+                    _accumulate_retry_usage(retry_usage, data)
                     _append_execution_failure(retry_usage, requested_model, reason)
                     body[token_field] = _normalize_openai_compat_max_tokens(provider_name, current_budget * 2)
                     sleep_sec = base_sleep_sec * (2**i)
@@ -596,6 +614,7 @@ def run_chat_json(
                     _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
                     if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
                         finish_reason = str(choices[0].get("finish_reason") or "").strip() or "unknown"
+                        _accumulate_retry_usage(retry_usage, data)
                         _append_execution_failure(
                             retry_usage,
                             requested_model,
@@ -613,7 +632,7 @@ def run_chat_json(
                         )
                         time.sleep(sleep_sec)
                         continue
-                usage = usage_from_chat_response(data)
+                usage = _include_retry_usage(usage_from_chat_response(data), retry_usage)
                 usage["requested_model"] = requested_model
                 if retry_usage.get("execution_failures"):
                     usage["execution_failures"] = list(retry_usage["execution_failures"])
@@ -792,6 +811,7 @@ async def run_chat_json_async(
                     reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"
                     if i == attempts - 1:
                         raise RuntimeError(f"{provider_name} chat.completions failed: {reason}")
+                    _accumulate_retry_usage(retry_usage, data)
                     _append_execution_failure(retry_usage, requested_model, reason)
                     body[token_field] = _normalize_openai_compat_max_tokens(provider_name, current_budget * 2)
                     sleep_sec = base_sleep_sec * (2**i)
@@ -811,6 +831,7 @@ async def run_chat_json_async(
                     _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
                     if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
                         finish_reason = str(choices[0].get("finish_reason") or "").strip() or "unknown"
+                        _accumulate_retry_usage(retry_usage, data)
                         _append_execution_failure(
                             retry_usage,
                             requested_model,
@@ -828,7 +849,7 @@ async def run_chat_json_async(
                         )
                         await asyncio.sleep(sleep_sec)
                         continue
-                usage = usage_from_chat_response(data)
+                usage = _include_retry_usage(usage_from_chat_response(data), retry_usage)
                 usage["requested_model"] = requested_model
                 if retry_usage.get("execution_failures"):
                     usage["execution_failures"] = list(retry_usage["execution_failures"])

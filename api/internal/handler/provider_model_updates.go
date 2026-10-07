@@ -24,10 +24,12 @@ type providerModelSnapshotSyncer interface {
 type ProviderModelUpdateHandler struct {
 	repo   providerModelUpdateStore
 	syncer providerModelSnapshotSyncer
+	users  adminUserStore
+	auth   *service.PromptAdminAuthService
 }
 
-func NewProviderModelUpdateHandler(repo *repository.ProviderModelUpdateRepo, syncer providerModelSnapshotSyncer) *ProviderModelUpdateHandler {
-	return &ProviderModelUpdateHandler{repo: repo, syncer: syncer}
+func NewProviderModelUpdateHandler(repo *repository.ProviderModelUpdateRepo, syncer providerModelSnapshotSyncer, users *repository.UserRepo) *ProviderModelUpdateHandler {
+	return &ProviderModelUpdateHandler{repo: repo, syncer: syncer, users: users, auth: service.NewPromptAdminAuthServiceFromEnv()}
 }
 
 func (h *ProviderModelUpdateHandler) ListRecent(w http.ResponseWriter, r *http.Request) {
@@ -93,13 +95,17 @@ func (h *ProviderModelUpdateHandler) ListSnapshots(w http.ResponseWriter, r *htt
 }
 
 func (h *ProviderModelUpdateHandler) SyncSnapshots(w http.ResponseWriter, r *http.Request) {
+	if !canRunAdminOperation(r, h.users, h.auth) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	if h.syncer == nil {
 		http.Error(w, "syncer is not configured", http.StatusInternalServerError)
 		return
 	}
 	result, err := h.syncer.SyncCommonProviders(r.Context(), "manual")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		http.Error(w, "provider model sync failed", http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, result)

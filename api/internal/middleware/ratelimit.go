@@ -88,6 +88,14 @@ func rateLimitTierForRequest(r *http.Request) *RateLimitTier {
 	if r.Method == http.MethodPost && r.URL != nil && r.URL.Path == "/api/ask" {
 		return &TierLLM
 	}
+	if r.Method == http.MethodGet && r.URL != nil {
+		path := r.URL.Path
+		if (strings.HasPrefix(path, "/api/items/") && strings.HasSuffix(path, "/navigator")) ||
+			path == "/api/sources/recommended" || path == "/api/sources/suggestions" ||
+			path == "/api/sources/navigator" || path == "/api/briefing/navigator" {
+			return &TierLLM
+		}
+	}
 	switch r.Method {
 	case http.MethodGet:
 		return &TierRead

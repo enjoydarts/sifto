@@ -120,6 +120,7 @@ type SummaryAudioView struct {
 type ObsidianExportView struct {
 	Enabled              bool       `json:"enabled"`
 	GitHubInstallationID *int64     `json:"github_installation_id"`
+	GitHubAuthorized     bool       `json:"github_authorized"`
 	GitHubRepoOwner      *string    `json:"github_repo_owner"`
 	GitHubRepoName       *string    `json:"github_repo_name"`
 	GitHubRepoBranch     string     `json:"github_repo_branch"`
@@ -313,6 +314,7 @@ func NewObsidianExportView(settings *model.ObsidianExportSettings, githubApp *Gi
 	v := ObsidianExportView{
 		Enabled:              settings.Enabled,
 		GitHubInstallationID: settings.GitHubInstallationID,
+		GitHubAuthorized:     settings.GitHubInstallationID != nil && len(settings.GitHubAuthorizedRepositories) > 0,
 		GitHubRepoOwner:      settings.GitHubRepoOwner,
 		GitHubRepoName:       settings.GitHubRepoName,
 		GitHubRepoBranch:     settings.GitHubRepoBranch,

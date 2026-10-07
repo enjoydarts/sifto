@@ -327,6 +327,9 @@ def _normalize_model_family(model: str) -> str:
         return ""
     if model_pricing(model) is not None:
         return model
+    match = re.fullmatch(r"(.+)-(?:\d{8}|latest)", model)
+    if match and model_pricing(match.group(1)) is not None:
+        return match.group(1)
     for family in sorted(_LEGACY_MODEL_PRICING.keys(), key=len, reverse=True):
         if model == family or model.startswith(family + "-"):
             return family
@@ -446,9 +449,9 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         execution_failures_all.extend(execution_failures or [])
         if message is not None:
             localized_facts = parse_facts_result(_message_text(message))
+            localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
             if localized_facts:
                 merged_facts = localized_facts
-                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
@@ -1226,9 +1229,9 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         execution_failures_all.extend(execution_failures or [])
         if message is not None:
             localized_facts = parse_facts_result(_message_text(message))
+            localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
             if localized_facts:
                 merged_facts = localized_facts
-                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
@@ -1855,6 +1858,7 @@ async def suggest_feed_seed_sites_async(
         _raise_execution_failure("source_suggestion", _execution_failures, "anthropic source_suggestion returned no message")
     text = _message_text(message)
     out = parse_seed_sites_result(text, task["existing_sources"])
+    usage_metas = [_llm_meta(message, "source_suggestion", used_model or resolved_model)]
     if len(out) == 0:
         rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
 {{
@@ -1867,7 +1871,7 @@ async def suggest_feed_seed_sites_async(
 興味トピック:
 {json.dumps(task["preferred_topics"], ensure_ascii=False)}
 """
-        rescue_message, _, _execution_failures = await _call_with_model_fallback_async(
+        rescue_message, rescue_model, _execution_failures = await _call_with_model_fallback_async(
             rescue_prompt,
             resolved_model,
             None,
@@ -1875,8 +1879,9 @@ async def suggest_feed_seed_sites_async(
             api_key=api_key,
         )
         if rescue_message is not None:
+            usage_metas.append(_llm_meta(rescue_message, "source_suggestion", rescue_model or resolved_model))
             out.extend(parse_seed_sites_result(_message_text(rescue_message), task["existing_sources"]))
     return {
         "items": out,
-        "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),
+        "llm": _merge_llm_metas(usage_metas, "source_suggestion"),
     }

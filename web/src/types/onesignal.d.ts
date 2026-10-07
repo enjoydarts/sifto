@@ -9,6 +9,7 @@ interface OneSignalPushSubscription {
 interface OneSignalLike {
   init: (options: Record<string, unknown>) => Promise<void>;
   login?: (externalId: string) => Promise<void>;
+  logout?: () => Promise<void>;
   Notifications?: {
     requestPermission?: () => Promise<void>;
   };

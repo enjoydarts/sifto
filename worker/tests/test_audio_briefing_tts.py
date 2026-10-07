@@ -2,6 +2,7 @@ import base64
 import io
 import json as jsonlib
 import unittest
+import os
 import wave
 from unittest.mock import patch
 
@@ -215,6 +216,7 @@ class GeminiTTSPromptTests(unittest.TestCase):
 
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
+    @patch.dict(os.environ, {"AUDIO_BRIEFING_HEARTBEAT_BASE_URL": "https://api.example.com"})
     def test_heartbeat_loop_posts_bearer_token(self):
         class FakeResponse:
             def raise_for_status(self):
@@ -236,7 +238,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
 
         fake_client = FakeClient()
         loop = AudioBriefingHeartbeatLoop(
-            heartbeat_url="https://api.example.com/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+            heartbeat_url="https://api.example.com/api/internal/audio-briefings/chunks/00000000-0000-4000-8000-000000000001/heartbeat",
             heartbeat_token="heartbeat-token",
             interval_sec=20.0,
             timeout_sec=10.0,
@@ -249,13 +251,13 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             fake_client.calls,
             [
                 (
-                    "https://api.example.com/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+                    "https://api.example.com/api/internal/audio-briefings/chunks/00000000-0000-4000-8000-000000000001/heartbeat",
                     {"Authorization": "Bearer heartbeat-token"},
                 )
             ],
         )
 
-    def test_build_aivis_payload_includes_user_dictionary_uuid_without_trailing_silence(self):
+    def test_build_aivis_payload_includes_user_dictionary_uuid_and_configured_trailing_silence(self):
         payload = audio_briefing_tts.build_aivis_payload(
             voice_model="model-uuid",
             voice_style="speaker-uuid:1",
@@ -271,7 +273,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["user_dictionary_uuid"], "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861")
-        self.assertEqual(payload["trailing_silence_seconds"], 0.0)
+        self.assertEqual(payload["trailing_silence_seconds"], 1.0)
 
     def test_build_aivis_payload_wraps_and_escapes_plain_text_for_ssml(self):
         payload = audio_briefing_tts.build_aivis_payload(
@@ -299,12 +301,14 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_resolve_bucket_prefers_explicit_bucket_override(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings-standard"
+        service.r2_ia_bucket = "briefings-ia"
 
         self.assertEqual(service.resolve_bucket("briefings-ia"), "briefings-ia")
 
     def test_presign_audio_url_uses_bucket_override(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings-standard"
+        service.r2_ia_bucket = "briefings-ia"
 
         class FakeClient:
             def generate_presigned_url(self, method, Params, ExpiresIn):
@@ -321,6 +325,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_delete_objects_uses_bucket_override(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings-standard"
+        service.r2_ia_bucket = "briefings-ia"
 
         class FakeClient:
             def __init__(self):
@@ -382,6 +387,8 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
 
     def test_copy_objects_copies_each_key_between_buckets(self):
         service = AudioBriefingTTSService()
+        service.r2_bucket = "briefings-standard"
+        service.r2_ia_bucket = "briefings-ia"
 
         class FakeClient:
             def __init__(self):

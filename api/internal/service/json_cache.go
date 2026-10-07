@@ -103,7 +103,11 @@ func (c *RedisJSONCache) GetJSON(ctx context.Context, key string, dst any) (bool
 	if c == nil || c.client == nil {
 		return false, nil
 	}
-	s, err := c.client.Get(ctx, c.key(key)).Result()
+	physicalKey, err := c.versionedKey(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	s, err := c.client.Get(ctx, physicalKey).Result()
 	if err == redis.Nil {
 		return false, nil
 	}
@@ -116,6 +120,37 @@ func (c *RedisJSONCache) GetJSON(ctx context.Context, key string, dst any) (bool
 	return true, nil
 }
 
+func invalidationPrefix(key string) string {
+	parts := strings.Split(key, ":")
+	if len(parts) < 3 || parts[0] != "v1" {
+		return ""
+	}
+	if parts[1] == "ask" {
+		return strings.Join(parts[:3], ":")
+	}
+	if len(parts) < 4 {
+		return ""
+	}
+	namespace := parts[1] + ":" + parts[2]
+	switch namespace {
+	case "items:list", "items:reading-plan", "items:focus-queue", "items:triage-queue", "items:triage-all", "briefing:today", "dashboard:snapshot", "dashboard:part":
+		return strings.Join(parts[:4], ":")
+	}
+	return ""
+}
+
+func (c *RedisJSONCache) versionedKey(ctx context.Context, key string) (string, error) {
+	prefix := invalidationPrefix(key)
+	if prefix == "" {
+		return c.key(key), nil
+	}
+	version, err := c.GetVersion(ctx, "cache_prefix_version:"+prefix)
+	if err != nil {
+		return "", err
+	}
+	return c.key(fmt.Sprintf("%s:iv=%d", key, version)), nil
+}
+
 func (c *RedisJSONCache) SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error {
 	if c == nil || c.client == nil {
 		return nil
@@ -124,7 +159,11 @@ func (c *RedisJSONCache) SetJSON(ctx context.Context, key string, value any, ttl
 	if err != nil {
 		return err
 	}
-	return c.client.Set(ctx, c.key(key), b, ttl).Err()
+	physicalKey, err := c.versionedKey(ctx, key)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, physicalKey, b, ttl).Err()
 }
 
 func (c *RedisJSONCache) GetVersion(ctx context.Context, key string) (int64, error) {
@@ -155,12 +194,18 @@ func (c *RedisJSONCache) DeleteByPrefix(ctx context.Context, prefix string, limi
 	if limit <= 0 {
 		limit = 1000
 	}
+	if invalidationPrefix(prefix) != "" {
+		return c.BumpVersion(ctx, "cache_prefix_version:"+invalidationPrefix(prefix))
+	}
+	// Other callers are bounded independently of match count.
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
 	pattern := c.key(prefix) + "*"
 	var (
 		cursor  uint64
 		deleted int64
 	)
-	for {
+	for scanned := 0; scanned < 4; scanned++ {
 		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 200).Result()
 		if err != nil {
 			return deleted, err

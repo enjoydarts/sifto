@@ -96,3 +96,12 @@ func TestNormalizeExecutionAttemptsForDetailPreservesPromptMetadata(t *testing.T
 func ptrInt(v int) *int {
 	return &v
 }
+
+func TestExecutionHistoryHasServerLimit(t *testing.T) {
+	for _, limit := range []int{0, -1, 10000} {
+		attempts := make([]model.ItemLLMExecutionAttempt, 1000)
+		if got := normalizeExecutionAttemptsForDetail(attempts, limit); len(got) > 100 {
+			t.Fatalf("limit %d returned %d attempts", limit, len(got))
+		}
+	}
+}

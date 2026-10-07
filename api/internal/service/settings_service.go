@@ -1300,6 +1300,16 @@ func (s *SettingsService) UpdateObsidianExport(ctx context.Context, userID strin
 	if keywordLinkMode != nil && *keywordLinkMode != "topics_only" {
 		return nil, ErrInvalidKeywordLinkMode
 	}
+	if in.Enabled {
+		cfg, err := s.obsidianRepo.GetByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		cfg.GitHubRepoOwner, cfg.GitHubRepoName = repoOwner, repoName
+		if !ObsidianRepositoryAuthorized(*cfg) {
+			return nil, fmt.Errorf("GitHub repository is not authorized; reconnect installation")
+		}
+	}
 	return s.obsidianRepo.UpsertConfig(ctx, userID, in.Enabled, repoOwner, repoName, repoBranch, vaultRootPath, keywordLinkMode)
 }
 
@@ -1315,7 +1325,7 @@ func (s *SettingsService) UpsertObsidianGitHubInstallation(ctx context.Context, 
 			owner = &v
 		}
 	}
-	return s.obsidianRepo.UpsertInstallation(ctx, userID, installationID, owner)
+	return s.obsidianRepo.UpsertInstallation(ctx, userID, installationID, owner, nil)
 }
 
 func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKey string) (*model.UserSettings, error) {

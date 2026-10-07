@@ -132,6 +132,24 @@ class DownloadDirectTests(unittest.TestCase):
 
 
 class TestConcatAudio(unittest.TestCase):
+    def test_concat_audio_honors_configured_gap_and_zero_disables_padding(self):
+        for gap in (0, 2.5):
+            with self.subTest(gap=gap), patch("app.concat_job.run_command") as run:
+                concat_audio([Path("first.mp3"), Path("second.mp3")], Path("out.mp3"), gap_seconds=gap)
+                command = run.call_args.args[0]
+                graph = command[command.index("-filter_complex") + 1]
+                if gap == 0:
+                    self.assertNotIn("apad", graph)
+                else:
+                    self.assertIn("apad=pad_dur=2.5", graph)
+
+    def test_concat_audio_rejects_invalid_gap_before_ffmpeg(self):
+        for gap in (-1, 6, float("nan"), float("inf")):
+            with self.subTest(gap=gap), patch("app.concat_job.run_command") as run:
+                with self.assertRaises(ValueError):
+                    concat_audio([Path("first.mp3")], Path("out.mp3"), gap_seconds=gap)
+                run.assert_not_called()
+
     def test_concat_audio_normalizes_inputs_and_inserts_one_second_gap_between_chunks(self):
         captured = {}
 

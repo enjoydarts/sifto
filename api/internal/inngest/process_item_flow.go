@@ -320,6 +320,17 @@ func fallbackFactsCheckWarning(err error) *service.FactsCheckResponse {
 	}
 }
 
+func fallbackFaithfulnessCheckWarning(err error) *service.SummaryFaithfulnessResponse {
+	if err == nil {
+		return nil
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "parse failed") && !strings.Contains(message, "short_comment missing") {
+		return nil
+	}
+	return &service.SummaryFaithfulnessResponse{Verdict: "warn", ShortComment: "要約の忠実性チェックの応答を読み取れなかったため要確認です。"}
+}
+
 func resolveProcessItemTitleForLLM(extractedTitle *string, fallbackTitle string) *string {
 	titleForLLM := extractedTitle
 	if titleForLLM == nil || strings.TrimSpace(*titleForLLM) == "" {
@@ -817,8 +828,9 @@ func summarizeAndPersistItem(
 						runtime.Model,
 					)
 				},
-				getLLM:     func(result *service.SummaryFaithfulnessResponse) *service.LLMUsage { return result.LLM },
-				getVerdict: func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
+				getLLM:           func(result *service.SummaryFaithfulnessResponse) *service.LLMUsage { return result.LLM },
+				getVerdict:       func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
+				onExecutionError: fallbackFaithfulnessCheckWarning,
 			})
 		}
 		if err != nil {

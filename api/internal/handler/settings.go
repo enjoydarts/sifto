@@ -242,32 +242,12 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 }
 
 func (h *SettingsHandler) ObsidianGitHubConnect(w http.ResponseWriter, r *http.Request) {
-	if h.github == nil || strings.TrimSpace(h.github.InstallURL()) == "" {
-		http.Error(w, "github app is not configured", http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, h.github.InstallURL(), http.StatusFound)
+	http.Error(w, "connect through the Web GitHub authorization flow", http.StatusForbidden)
 }
 
 func (h *SettingsHandler) ObsidianGitHubCallback(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	if h.github == nil || !h.github.Enabled() {
-		http.Redirect(w, r, "/settings?obsidian_github=error&reason=disabled", http.StatusFound)
-		return
-	}
-	installationID, err := service.ParseGitHubInstallationID(r.URL.Query().Get("installation_id"))
-	if err != nil || installationID <= 0 {
-		http.Redirect(w, r, "/settings?obsidian_github=error&reason=invalid_installation", http.StatusFound)
-		return
-	}
-	if _, err := h.settings.UpsertObsidianGitHubInstallation(r.Context(), userID, installationID); err != nil {
-		http.Redirect(w, r, "/settings?obsidian_github=error&reason=save_failed", http.StatusFound)
-		return
-	}
-	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
-		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
-	}
-	http.Redirect(w, r, "/settings?obsidian_github=connected", http.StatusFound)
+	// Only the Web OAuth callback can establish user repository authorization.
+	http.Error(w, "verified GitHub user authorization required", http.StatusForbidden)
 }
 
 func (h *SettingsHandler) resetChangedModelSplitUsage(ctx context.Context, userID string, before, after *model.UserSettings) {

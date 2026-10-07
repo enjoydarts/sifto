@@ -18,6 +18,7 @@ export function MarkdownText({
   return (
     <div className={`min-w-0 ${className}`.trim()}>
       <ReactMarkdown
+        disallowedElements={["img"]}
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }: BlockProps) => <p className="mb-3 last:mb-0">{children}</p>,

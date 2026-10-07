@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -30,40 +32,48 @@ var (
 )
 
 const (
-	sourceSuggestionMaxLatency            = 300 * time.Second
-	sourceSuggestionSeedGenerationTimeout = 120 * time.Second
-	sourceSuggestionRankTimeout           = 120 * time.Second
+	sourceSuggestionMaxLatency            = 60 * time.Second
+	sourceSuggestionSeedGenerationTimeout = 25 * time.Second
+	sourceSuggestionRankTimeout           = 25 * time.Second
 )
 
 func DiscoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, error) {
-	fp := gofeed.NewParser()
-	if feed, err := fp.ParseURLWithContext(rawURL, ctx); err == nil {
-		var t *string
-		if feed.Title != "" {
-			t = &feed.Title
-		}
-		return []FeedCandidate{{URL: rawURL, Title: t}}, nil
+	if err := ValidatePublicHTTPURL(ctx, rawURL); err != nil {
+		return nil, err
 	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Sifto/1.0")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := NewPublicHTTPClient(15 * time.Second)
+	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("feed HTTP status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return nil, err
 	}
 
-	base, err := url.Parse(rawURL)
+	if len(body) > 1<<20 {
+		return nil, errors.New("feed exceeds 1MB")
+	}
+	if feed, err := gofeed.NewParser().Parse(bytes.NewReader(body)); err == nil {
+		var title *string
+		if feed.Title != "" {
+			title = &feed.Title
+		}
+		return []FeedCandidate{{URL: resp.Request.URL.String(), Title: title}}, nil
+	}
+	base, err := url.Parse(resp.Request.URL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +87,9 @@ func DiscoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, erro
 			return
 		}
 		absURL := base.ResolveReference(ref).String()
+		if err := ValidatePublicHTTPURL(ctx, absURL); err != nil {
+			return
+		}
 		if seen[absURL] {
 			return
 		}
@@ -140,6 +153,7 @@ type SourceSuggestionService struct {
 	worker       *WorkerClient
 	cache        JSONCache
 	keyProvider  *UserKeyProvider
+	active       sync.Map
 }
 
 func NewSourceSuggestionService(
@@ -163,6 +177,12 @@ func NewSourceSuggestionService(
 }
 
 func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context, userID string, limit int) ([]SourceSuggestionResponse, map[string]any, error) {
+	if _, busy := s.active.LoadOrStore(userID, struct{}{}); busy {
+		return nil, nil, errors.New("source suggestions already running")
+	}
+	defer s.active.Delete(userID)
+	ctx, cancel := context.WithTimeout(ctx, sourceSuggestionMaxLatency)
+	defer cancel()
 	sources, err := s.repo.List(ctx, userID)
 	if err != nil {
 		return nil, nil, err
@@ -221,7 +241,8 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 			preferredTopics = topics
 		}
 	}
-	positiveExamples, negativeExamples := s.buildSourceSuggestionFewShotExamples(ctx, userID)
+	// Feed affinity and reading/favorite counts stay on the server.
+	var positiveExamples, negativeExamples []RankFeedSuggestionsExample
 
 	registered := map[string]bool{}
 	startAt := time.Now()
@@ -515,7 +536,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 			}
 		}
 		return map[string]any{
-			"error": err.Error(),
+			"error": "source suggestion generation failed",
 			"stage": "rank",
 		}
 	}
@@ -806,39 +827,6 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	return resolvedProviderKeys{}
 }
 
-func (s *SourceSuggestionService) buildSourceSuggestionFewShotExamples(
-	ctx context.Context,
-	userID string,
-) ([]RankFeedSuggestionsExample, []RankFeedSuggestionsExample) {
-	positiveRows, err := s.repo.RecommendedByUser(ctx, userID, 5)
-	if err != nil {
-		positiveRows = nil
-	}
-	negativeRows, err := s.repo.LowAffinityByUser(ctx, userID, 3)
-	if err != nil {
-		negativeRows = nil
-	}
-	positive := make([]RankFeedSuggestionsExample, 0, len(positiveRows))
-	for _, row := range positiveRows {
-		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
-		positive = append(positive, RankFeedSuggestionsExample{
-			URL:    row.URL,
-			Title:  row.Title,
-			Reason: reason,
-		})
-	}
-	negative := make([]RankFeedSuggestionsExample, 0, len(negativeRows))
-	for _, row := range negativeRows {
-		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
-		negative = append(negative, RankFeedSuggestionsExample{
-			URL:    row.URL,
-			Title:  row.Title,
-			Reason: reason,
-		})
-	}
-	return positive, negative
-}
-
 func (s *SourceSuggestionService) expandSourceSuggestionsWithLLMSeeds(
 	ctx context.Context,
 	userID string,
@@ -924,7 +912,7 @@ func (s *SourceSuggestionService) expandSourceSuggestionsWithLLMSeeds(
 		}
 		if err != nil {
 			return map[string]any{
-				"error": err.Error(),
+				"error": "source suggestion generation failed",
 				"stage": "seed_generation",
 			}, false
 		}

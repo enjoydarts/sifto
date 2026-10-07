@@ -26,9 +26,12 @@ type PoeModelsHandler struct {
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
 	activeTranslations sync.Map
 	processStartedAt   time.Time
+	users              adminUserStore
+	auth               *service.PromptAdminAuthService
+	syncMu             sync.Mutex
 }
 
-func NewPoeModelsHandler(repo *repository.PoeModelRepo, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService, usageSvc *service.PoeUsageService) *PoeModelsHandler {
+func NewPoeModelsHandler(repo *repository.PoeModelRepo, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService, usageSvc *service.PoeUsageService, users *repository.UserRepo) *PoeModelsHandler {
 	return &PoeModelsHandler{
 		repo:               repo,
 		settingsRepo:       settingsRepo,
@@ -37,6 +40,8 @@ func NewPoeModelsHandler(repo *repository.PoeModelRepo, settingsRepo *repository
 		service:            svc,
 		usageService:       usageSvc,
 		processStartedAt:   time.Now().UTC(),
+		users:              users,
+		auth:               service.NewPromptAdminAuthServiceFromEnv(),
 	}
 }
 
@@ -49,7 +54,6 @@ func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if models == nil {
 		models = make([]repository.PoeModelSnapshot, 0)
 	}
-	latestRun = h.resumeTranslationIfNeeded(latestRun, models)
 	var latestChangeSummary any
 	removedModels := make([]repository.PoeModelSnapshot, 0)
 	if h.providerUpdateRepo != nil {
@@ -81,16 +85,6 @@ func (h *PoeModelsHandler) Status(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeRepoError(w, err)
 		return
-	}
-	if run != nil {
-		models, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
-		if err != nil {
-			writeRepoError(w, err)
-			return
-		}
-		if latestRun != nil && latestRun.ID == run.ID {
-			run = h.resumeTranslationIfNeeded(run, models)
-		}
 	}
 	writeJSON(w, map[string]any{"run": run})
 }
@@ -147,6 +141,22 @@ func (h *PoeModelsHandler) SyncUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
+	if !canRunAdminOperation(r, h.users, h.auth) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if !h.syncMu.TryLock() {
+		http.Error(w, "sync already running", http.StatusConflict)
+		return
+	}
+	defer h.syncMu.Unlock()
+	if run, err := h.repo.GetLatestManualRunningSyncRun(r.Context()); err != nil {
+		writeRepoError(w, err)
+		return
+	} else if run != nil && !poeSyncRunIsStale(run, time.Now().UTC()) {
+		http.Error(w, "sync already running", http.StatusConflict)
+		return
+	}
 	if run, err := h.repo.GetLatestManualRunningSyncRun(r.Context()); err == nil && poeSyncRunIsStale(run, time.Now().UTC()) {
 		h.failSyncRun(run.ID, "Poe description translation interrupted by local restart")
 	}
@@ -307,7 +317,7 @@ func (h *PoeModelsHandler) startTranslation(syncRunID string, models []repositor
 	if _, loaded := h.activeTranslations.LoadOrStore(syncRunID, struct{}{}); loaded {
 		return
 	}
-	go h.translateDescriptions(syncRunID, models)
+	go h.translateDescriptions(syncRunID, append([]repository.PoeModelSnapshot(nil), models...))
 }
 
 func (h *PoeModelsHandler) resumeTranslationIfNeeded(run *repository.PoeSyncRun, models []repository.PoeModelSnapshot) *repository.PoeSyncRun {

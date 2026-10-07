@@ -17,6 +17,19 @@ import (
 
 const ObsidianExportTarget = "obsidian_github"
 
+func ObsidianRepositoryAuthorized(cfg model.ObsidianExportSettings) bool {
+	if cfg.GitHubRepoOwner == nil || cfg.GitHubRepoName == nil || cfg.GitHubInstallationID == nil {
+		return false
+	}
+	target := strings.ToLower(strings.TrimSpace(*cfg.GitHubRepoOwner) + "/" + strings.TrimSpace(*cfg.GitHubRepoName))
+	for _, repo := range cfg.GitHubAuthorizedRepositories {
+		if target == strings.ToLower(repo) {
+			return true
+		}
+	}
+	return false
+}
+
 type ObsidianExportService struct {
 	itemRepo     *repository.ItemRepo
 	exportRepo   *repository.ItemExportRepo
@@ -46,6 +59,9 @@ func (s *ObsidianExportService) RunUser(ctx context.Context, cfg model.ObsidianE
 	}
 	if cfg.GitHubInstallationID == nil || cfg.GitHubRepoOwner == nil || cfg.GitHubRepoName == nil || cfg.VaultRootPath == nil {
 		return nil, fmt.Errorf("obsidian export config incomplete")
+	}
+	if !ObsidianRepositoryAuthorized(cfg) {
+		return nil, fmt.Errorf("GitHub repository authorization required; reconnect installation")
 	}
 	items, err := s.itemRepo.FavoriteExportItems(ctx, cfg.UserID, 0, limit)
 	if err != nil {

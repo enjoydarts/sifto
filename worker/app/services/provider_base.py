@@ -365,9 +365,9 @@ class OpenAICompatProvider:
                 schema_name="facts_localized",
             )
             localized_facts = parse_facts_result(localized_text)
+            localization_llm = self._llm_meta(model, "facts_localization", localized_usage)
             if localized_facts:
                 facts = localized_facts
-                localization_llm = self._llm_meta(model, "facts_localization", localized_usage)
         return {"facts": facts, "llm": self._llm_meta(model, "facts", usage), "facts_localization_llm": localization_llm}
 
     def summarize(self, title: str | None, facts: list[str], source_text_chars: int | None = None, model: str = "", api_key: str = "") -> dict:
@@ -683,9 +683,9 @@ class OpenAICompatProvider:
                 schema_name="facts_localized",
             )
             localized_facts = parse_facts_result(localized_text)
+            localization_llm = self._llm_meta(model, "facts_localization", localized_usage)
             if localized_facts:
                 facts = localized_facts
-                localization_llm = self._llm_meta(model, "facts_localization", localized_usage)
         return {"facts": facts, "llm": self._llm_meta(model, "facts", usage), "facts_localization_llm": localization_llm}
 
     async def summarize_async(self, title: str | None, facts: list[str], source_text_chars: int | None = None, model: str = "", api_key: str = "") -> dict:

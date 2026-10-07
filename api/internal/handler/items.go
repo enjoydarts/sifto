@@ -39,6 +39,7 @@ type ItemHandler struct {
 	searchSuggest   *service.SearchSuggestionService
 	detail          *service.ItemDetailService
 	keyProvider     *service.UserKeyProvider
+	profileWork     service.BoundedBackground
 }
 
 const itemsListCacheTTL = 30 * time.Second
@@ -46,6 +47,17 @@ const focusQueueCacheTTL = 60 * time.Second
 const triageAllCacheTTL = 90 * time.Second
 const relatedItemsCacheTTL = 5 * time.Minute
 const itemDetailCacheTTL = 5 * time.Minute
+
+func decodeBulkRetryRequest(w http.ResponseWriter, r *http.Request, body *retryBulkRequest) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if err := json.NewDecoder(r.Body).Decode(body); err != nil {
+		return err
+	}
+	if len(body.ItemIDs) > 100 {
+		return errors.New("too many item IDs")
+	}
+	return nil
+}
 
 type retryBulkRequest struct {
 	ItemIDs []string `json:"item_ids"`
@@ -226,7 +238,7 @@ func (h *ItemHandler) CreateBulkJob(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) RetryBulk(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body retryBulkRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeBulkRetryRequest(w, r, &body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
@@ -1141,7 +1153,7 @@ func (h *ItemHandler) refreshPreferenceProfileAsync(userID, itemID string) {
 	if userID == "" || itemID == "" || h.prefProfileRepo == nil {
 		return
 	}
-	safeGo(func() {
+	h.profileWork.Submit(userID, itemID, func(itemIDs []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -1154,7 +1166,7 @@ func (h *ItemHandler) refreshPreferenceProfileAsync(userID, itemID string) {
 			log.Printf("preference profile upsert failed user_id=%s err=%v", userID, upsertErr)
 			return
 		}
-		if persistErr := h.repo.PersistPersonalScores(ctx, userID, []string{itemID}); persistErr != nil {
+		if persistErr := h.repo.PersistPersonalScores(ctx, userID, itemIDs); persistErr != nil {
 			log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, itemID, persistErr)
 		}
 	})
@@ -1718,6 +1730,15 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
+	detail, err := h.getItemDetail(r.Context(), userID, id, false)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if detail == nil {
+		http.NotFound(w, r)
+		return
+	}
 	cacheKey := cacheKeyRelated(userID, id, limit)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
@@ -1736,7 +1757,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var targetTopics []string
-	if detail, err := h.getItemDetail(r.Context(), userID, id, false); err == nil && detail != nil && detail.Summary != nil {
+	if detail.Summary != nil {
 		targetTopics = detail.Summary.Topics
 	}
 	items, err := h.repo.ListRelated(r.Context(), id, userID, limit)
@@ -2258,7 +2279,7 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) RetryFromFactsBulk(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body retryBulkRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeBulkRetryRequest(w, r, &body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}

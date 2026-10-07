@@ -1,6 +1,7 @@
 import os
 import logging
 import secrets
+from copy import deepcopy
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,14 +13,48 @@ from app.services.langfuse_client import flush as langfuse_flush, log_runtime_st
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 _log = logging.getLogger(__name__)
-if _SENTRY_DSN:
+
+
+def _scrub_sentry_event(event, hint):
+    # Provider exceptions and logging breadcrumbs can contain prompts and keys
+    # even with local-variable capture disabled. Keep stack locations and types.
+    event = deepcopy(event)
+    for key in ("request", "extra", "user", "breadcrumbs", "logentry", "message", "tags", "fingerprint"):
+        event.pop(key, None)
+    trace = event.get("contexts", {}).get("trace", {})
+    event["contexts"] = {
+        "trace": {key: trace[key] for key in ("trace_id", "span_id", "parent_span_id", "op", "status") if key in trace}
+    }
+    for span in event.get("spans", []):
+        span.pop("data", None)
+        span.pop("description", None)
+    for container in (event.get("exception", {}), event.get("threads", {})):
+        for value in container.get("values", []):
+            if "value" in value:
+                value["value"] = "[Filtered]"
+            for frame in value.get("stacktrace", {}).get("frames", []):
+                frame.pop("vars", None)
+    return event
+
+
+def _configure_sentry():
+    if not _SENTRY_DSN:
+        return
     sentry_sdk.init(
         dsn=_SENTRY_DSN,
         environment=os.getenv("SENTRY_ENVIRONMENT", "").strip() or None,
         release=os.getenv("APP_COMMIT_SHA", "").strip() or None,
         integrations=[FastApiIntegration()],
+        include_local_variables=False,
+        send_default_pii=False,
+        max_request_body_size="never",
+        before_send=_scrub_sentry_event,
+        before_send_transaction=_scrub_sentry_event,
         traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
     )
+
+
+_configure_sentry()
 
 
 @asynccontextmanager
@@ -38,10 +73,23 @@ app = FastAPI(title="sifto-worker", lifespan=lifespan)
 def _public_error_detail(request: Request, exc: Exception) -> str:
     internal_secret = _INTERNAL_WORKER_SECRET
     provided = str(request.headers.get("x-internal-worker-secret") or "").strip()
-    if internal_secret and provided == internal_secret:
-        detail = str(exc).strip()
-        if detail:
-            return detail[:1000]
+    if internal_secret and secrets.compare_digest(provided, internal_secret):
+        # Preserve fixed failure categories needed by API fallback/check handling.
+        # Provider exception bodies can contain prompts, keys and private output.
+        message = str(exc).lower()
+        categories = (
+            (("parse failed", "short_comment missing", "output_truncated"), "LLM response parse failed"),
+            (("status=429", "status 429", "rate limit"), "upstream rate limit"),
+            (("status=404", "status 404"), "upstream status 404"),
+            (("status=502", "status 502"), "upstream status 502"),
+            (("timeout", "timed out"), "upstream timeout"),
+            (("empty choices",), "upstream empty choices"),
+            (("overload", "temporarily unavailable"), "upstream temporarily unavailable"),
+            (("provider returned error",), "upstream provider returned error"),
+        )
+        for hints, detail in categories:
+            if any(hint in message for hint in hints):
+                return detail
     return "internal server error"
 
 
@@ -96,6 +144,9 @@ async def require_internal_worker_secret(request: Request, call_next):
 
 @app.middleware("http")
 async def langfuse_request_tracing(request: Request, call_next):
+    auth_error = _worker_auth_error_status(request.url.path, str(request.headers.get("x-internal-worker-secret") or "").strip(), _INTERNAL_WORKER_SECRET)
+    if auth_error is not None:
+        return JSONResponse(status_code=auth_error, content={"detail": "unauthorized"})
     if request.url.path == "/health":
         return await call_next(request)
     user_id = _normalize_string_for_trace(request.headers.get("x-sifto-user-id"))

@@ -3,7 +3,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from app.concat_job import run_job
+from app.concat_job import run_job, validate_gap_seconds
 
 
 class LocalConcatHandler(BaseHTTPRequestHandler):
@@ -44,6 +44,7 @@ class LocalConcatHandler(BaseHTTPRequestHandler):
                         "audio_object_key": key,
                         "gap_after": bool(raw_segment.get("gap_after", True)),
                     })
+            gap_seconds = validate_gap_seconds(payload.get("gap_seconds", 1))
             bgm_enabled = bool(payload.get("bgm_enabled"))
             bgm_r2_prefix = str(payload.get("bgm_r2_prefix") or "").strip() or None
             execution_name = f"local-{request_id}"
@@ -57,6 +58,7 @@ class LocalConcatHandler(BaseHTTPRequestHandler):
                     "output_object_key": output_object_key,
                     "audio_object_keys": [str(value).strip() for value in audio_object_keys],
                     "segments": normalized_segments,
+                    "gap_seconds": gap_seconds,
                     "provider_job_id": execution_name,
                     "bgm_enabled": bgm_enabled,
                     "bgm_r2_prefix": bgm_r2_prefix,

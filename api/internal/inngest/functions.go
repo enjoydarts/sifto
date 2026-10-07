@@ -1027,7 +1027,13 @@ func fetchRSSFeed(ctx context.Context, httpClient *http.Client, source model.Sou
 
 func headerValueOrPrevious(value string, previous *string) *string {
 	value = strings.TrimSpace(value)
+	if len(value) > 1024 || strings.ContainsAny(value, "\r\n\x00") {
+		return nil
+	}
 	if value == "" {
+		if previous != nil && (len(*previous) > 1024 || strings.ContainsAny(*previous, "\r\n\x00")) {
+			return nil
+		}
 		return previous
 	}
 	return &value

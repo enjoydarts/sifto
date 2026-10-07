@@ -4,6 +4,8 @@ import math
 import os
 import threading
 import wave
+import re
+from urllib.parse import urlparse
 
 import boto3
 import httpx
@@ -30,6 +32,13 @@ class AudioBriefingHeartbeatLoop:
     def __init__(self, heartbeat_url: str | None, heartbeat_token: str | None, interval_sec: float, timeout_sec: float) -> None:
         self.heartbeat_url = (heartbeat_url or "").strip()
         self.heartbeat_token = (heartbeat_token or "").strip()
+        if self.heartbeat_url:
+            base = (os.getenv("AUDIO_BRIEFING_HEARTBEAT_BASE_URL") or os.getenv("AUDIO_BRIEFING_LOCAL_CALLBACK_BASE_URL") or os.getenv("APP_BASE_URL") or "").strip()
+            target, trusted = urlparse(self.heartbeat_url), urlparse(base)
+            prefix = trusted.path.rstrip("/") + "/api/internal/audio-briefings/chunks/"
+            valid_path = re.fullmatch(re.escape(prefix) + r"[0-9a-fA-F-]{36}/heartbeat", target.path)
+            if trusted.scheme not in {"http", "https"} or not trusted.netloc or target.scheme != trusted.scheme or target.netloc != trusted.netloc or target.username or target.password or target.query or target.fragment or not valid_path:
+                raise ValueError("invalid heartbeat callback URL")
         self.interval_sec = max(float(interval_sec or 0), 1.0)
         self.timeout_sec = max(float(timeout_sec or 0), 1.0)
         self._stop = threading.Event()
@@ -330,6 +339,8 @@ class AudioBriefingTTSService:
         bucket = (bucket_override or "").strip() or self.standard_bucket()
         if not bucket:
             raise RuntimeError("audio briefing R2 bucket is not configured")
+        if bucket not in {self.standard_bucket(), self.ia_bucket()}:
+            raise ValueError("audio briefing R2 bucket is not allowed")
         return bucket
 
     def upload_bytes(self, object_key: str, payload: bytes, content_type: str, bucket_override: str | None = None) -> None:

@@ -197,6 +197,33 @@ func (o *AudioBriefingOrchestrator) createPendingJob(
 	if settings == nil {
 		return nil, fmt.Errorf("audio briefing settings are required")
 	}
+	if NormalizePersonaMode(&settings.DefaultPersonaMode) == PersonaModeRandom {
+		voices, err := o.repo.ListPersonaVoicesByUser(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		candidates := make([]string, 0, len(voices))
+		for _, voice := range voices {
+			if !audioBriefingVoiceConfigComplete(voice.TTSProvider, voice.VoiceModel, voice.VoiceStyle) {
+				continue
+			}
+			candidates = append(candidates, voice.Persona)
+		}
+		configured := false
+		for _, candidate := range candidates {
+			if candidate == persona {
+				configured = true
+				break
+			}
+		}
+		if !configured {
+			picked, ok := randomPersonaFromCandidates(candidates)
+			if !ok {
+				return nil, fmt.Errorf("audio briefing voice is not configured")
+			}
+			persona = picked
+		}
+	}
 	mode := normalizeAudioBriefingConversationModeValue(settings.ConversationMode)
 	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona, mode, audioBriefingInitialPipelineStageForMode(mode))
 }

@@ -79,6 +79,10 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		return err
 	}
 
+	bgmR2Prefix := ""
+	if settings != nil {
+		bgmR2Prefix = strings.TrimSpace(derefString(settings.BGMR2Prefix))
+	}
 	outputObjectKey := audioBriefingEpisodeObjectKey(userID, job.ID)
 	callbackURL := callbackBaseURL + "/api/internal/audio-briefings/" + job.ID + "/concat-complete"
 	runResp, err := s.runner.RunAudioConcat(ctx, AudioConcatRunRequest{
@@ -89,9 +93,10 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		CallbackToken:   callbackToken,
 		AudioObjectKeys: audioObjectKeys,
 		Segments:        segments,
+		GapSeconds:      audioBriefingSpeechParamsForChunk(nil, nil, nil, settings).ChunkTrailingSilenceSecond,
 		OutputObjectKey: outputObjectKey,
 		BGMEnabled:      settings != nil && settings.BGMEnabled,
-		BGMR2Prefix:     strings.TrimSpace(derefString(settings.BGMR2Prefix)),
+		BGMR2Prefix:     bgmR2Prefix,
 	})
 	if err != nil {
 		_, _ = s.repo.FailConcatLaunch(ctx, job.ID, "concat_launch_failed", err.Error())

@@ -170,6 +170,7 @@ export interface UserSettings {
     github_app_enabled?: boolean;
     github_app_install_url?: string | null;
     github_installation_id?: number | null;
+    github_authorized?: boolean;
     github_repo_owner?: string | null;
     github_repo_name?: string | null;
     github_repo_branch?: string | null;

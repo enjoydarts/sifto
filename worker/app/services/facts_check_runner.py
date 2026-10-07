@@ -15,6 +15,18 @@ def _parse_facts_check_response(text: str) -> dict:
     )
 
 
+def _sum_check_usage(first: dict | None, second: dict | None) -> dict | None:
+    if not first:
+        return second
+    if not second:
+        return first
+    result = dict(second)
+    for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "estimated_cost_usd"):
+        if key in first or key in second:
+            result[key] = first.get(key, 0) + second.get(key, 0)
+    return result
+
+
 def run_facts_check(
     primary_call: Callable[[], tuple[str, dict | None]],
     *,
@@ -32,7 +44,7 @@ def run_facts_check(
             result = None
             for _ in range(max(1, int(retry_attempts or 1))):
                 retry_text, retry_llm = retry_call()
-                llm = retry_llm
+                llm = _sum_check_usage(llm, retry_llm)
                 try:
                     result = _parse_facts_check_response(retry_text)
                     break

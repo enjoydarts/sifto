@@ -100,8 +100,7 @@ func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	windowEnd := time.Now()
-	windowStart := windowEnd.AddDate(0, 0, -30)
+	windowStart := time.Now().AddDate(0, 0, -30)
 	type optimizationItem struct {
 		SourceID       string                               `json:"source_id"`
 		Recommendation string                               `json:"recommendation"`
@@ -122,7 +121,6 @@ func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
 			NotificationOpenRate: metrics.NotificationOpenRate,
 			AverageSummaryScore:  metrics.AverageSummaryScore,
 		})
-		_ = h.sourceOptimizationRepo.InsertSnapshot(r.Context(), userID, source.ID, windowStart, windowEnd, metrics, decision.Recommendation, decision.Reason)
 		out = append(out, optimizationItem{SourceID: source.ID, Recommendation: decision.Recommendation, Reason: decision.Reason, Metrics: metrics})
 	}
 	writeJSON(w, sourceListItemsResponse{Items: out})

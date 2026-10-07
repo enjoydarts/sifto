@@ -352,7 +352,7 @@ def _resolve_persona_file() -> Path:
     llm_catalog = str(os.getenv("LLM_CATALOG_PATH") or "").strip()
     if llm_catalog:
         return Path(llm_catalog).resolve().parent / "ai_navigator_personas.json"
-    return Path(__file__).resolve().parents[2] / "shared" / "ai_navigator_personas.json"
+    return Path(__file__).resolve().parents[3] / "shared" / "ai_navigator_personas.json"
 
 
 _PERSONA_FILE = _resolve_persona_file()
@@ -1591,6 +1591,8 @@ def parse_audio_briefing_script_result(
             if returned_item_id != "" and returned_item_id != item_id:
                 _log_audio_briefing_segment_id_mismatch(index, item_id, returned_item_id)
             headline = str(raw.get("headline") or "").strip()
+            if not headline:
+                headline = str(article.get("translated_title") or article.get("title") or "").strip()
             if not headline:
                 raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
             summary_intro = _normalize_audio_briefing_generated_text(str(raw.get("summary_intro") or "").strip())

@@ -1436,7 +1436,7 @@ export function useSettingsPageData() {
     notificationBriefingEnabled: notificationPriority.briefing_enabled,
     notificationDailyCap: notificationPriority.daily_cap,
     hasInoreaderOAuth: settings.has_inoreader_oauth,
-    hasObsidianGithubInstallation: Boolean(settings.obsidian_export?.github_installation_id),
+    hasObsidianGithubInstallation: Boolean(settings.obsidian_export?.github_authorized),
     monthlyBudgetUSD: settings.monthly_budget_usd,
     remainingBudgetPct: settings.current_month.remaining_budget_pct,
   });
@@ -1799,7 +1799,7 @@ export function useSettingsPageData() {
     inoreaderTokenExpiresAt: settings.inoreader_token_expires_at,
     deletingInoreaderOAuth,
     obsidianEnabled,
-    obsidianGithubConnected: Boolean(settings.obsidian_export?.github_installation_id),
+    obsidianGithubConnected: Boolean(settings.obsidian_export?.github_authorized),
     obsidianRepoOwner,
     obsidianRepoName,
     obsidianRepoBranch,

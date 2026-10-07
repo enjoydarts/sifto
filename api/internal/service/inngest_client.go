@@ -81,7 +81,7 @@ func (rt *ingressHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 
 func (rt *ingressHeaderRoundTripper) shouldDecorate(target *url.URL) bool {
 	if rt.baseURL == nil || target == nil {
-		return true
+		return false
 	}
 	return strings.EqualFold(rt.baseURL.Scheme, target.Scheme) && strings.EqualFold(rt.baseURL.Host, target.Host)
 }
@@ -161,7 +161,7 @@ func parseInngestBaseURL() *url.URL {
 		return nil
 	}
 	u, err := url.Parse(base)
-	if err != nil {
+	if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil
 	}
 	return u

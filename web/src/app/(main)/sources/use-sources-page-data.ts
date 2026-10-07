@@ -90,6 +90,7 @@ export function useSourcesPageData() {
   const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
   const [sourcesDailyOverview, setSourcesDailyOverview] = useState<SourcesDailyOverview | null>(null);
   const [loadingDailyStats, setLoadingDailyStats] = useState(false);
+  const [hasLoadedDailyStats, setHasLoadedDailyStats] = useState(false);
   const [dailyStatsError, setDailyStatsError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -241,15 +242,16 @@ export function useSourcesPageData() {
       showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       if (seq !== dailyStatsSequenceRef.current) return;
+      setHasLoadedDailyStats(true);
       setLoadingDailyStats(false);
     }
   }, [showToast, t]);
 
   useEffect(() => {
-    if (activeSection === "overview" && !loadingDailyStats && Object.keys(sourceDailyStatsByID).length === 0) {
+    if (activeSection === "overview" && !loadingDailyStats && !hasLoadedDailyStats) {
       void loadDailyStats();
     }
-  }, [activeSection, loadDailyStats, loadingDailyStats, sourceDailyStatsByID]);
+  }, [activeSection, loadDailyStats, loadingDailyStats, hasLoadedDailyStats]);
 
   const registerSource = async (feedUrl: string) => {
     if (adding) return;

@@ -306,18 +306,19 @@ const (
 )
 
 type ObsidianExportSettings struct {
-	UserID               string     `json:"user_id"`
-	Enabled              bool       `json:"enabled"`
-	GitHubInstallationID *int64     `json:"github_installation_id,omitempty"`
-	GitHubRepoOwner      *string    `json:"github_repo_owner,omitempty"`
-	GitHubRepoName       *string    `json:"github_repo_name,omitempty"`
-	GitHubRepoBranch     string     `json:"github_repo_branch"`
-	VaultRootPath        *string    `json:"vault_root_path,omitempty"`
-	KeywordLinkMode      string     `json:"keyword_link_mode"`
-	LastRunAt            *time.Time `json:"last_run_at,omitempty"`
-	LastSuccessAt        *time.Time `json:"last_success_at,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	UserID                       string     `json:"user_id"`
+	Enabled                      bool       `json:"enabled"`
+	GitHubInstallationID         *int64     `json:"github_installation_id,omitempty"`
+	GitHubAuthorizedRepositories []string   `json:"-"`
+	GitHubRepoOwner              *string    `json:"github_repo_owner,omitempty"`
+	GitHubRepoName               *string    `json:"github_repo_name,omitempty"`
+	GitHubRepoBranch             string     `json:"github_repo_branch"`
+	VaultRootPath                *string    `json:"vault_root_path,omitempty"`
+	KeywordLinkMode              string     `json:"keyword_link_mode"`
+	LastRunAt                    *time.Time `json:"last_run_at,omitempty"`
+	LastSuccessAt                *time.Time `json:"last_success_at,omitempty"`
+	CreatedAt                    time.Time  `json:"created_at"`
+	UpdatedAt                    time.Time  `json:"updated_at"`
 }
 
 type ItemExportRecord struct {

@@ -112,10 +112,7 @@ def require_check_comment(result: dict, raw_text: str, *, error_prefix: str, val
             return result
     elif validator(short_comment):
         return result
-    snippet = (raw_text or "").strip().replace("\n", " ")
-    if not snippet:
-        snippet = "(empty)"
-    raise RuntimeError(f"{error_prefix} short_comment missing: response_snippet={snippet[:500]}")
+    raise RuntimeError(f"{error_prefix} short_comment missing: parse failed")
 
 
 def record_check_score(score_name: str, result: dict) -> None:

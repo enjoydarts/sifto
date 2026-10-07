@@ -203,15 +203,16 @@ func (h *InternalHandler) UpsertObsidianGitHubInstallation(w http.ResponseWriter
 	}
 
 	var body struct {
-		UserID         string `json:"user_id"`
-		InstallationID int64  `json:"installation_id"`
+		UserID                 string   `json:"user_id"`
+		InstallationID         int64    `json:"installation_id"`
+		AuthorizedRepositories []string `json:"authorized_repositories"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 	body.UserID = strings.TrimSpace(body.UserID)
-	if body.UserID == "" || body.InstallationID <= 0 {
+	if body.UserID == "" || body.InstallationID <= 0 || len(body.AuthorizedRepositories) == 0 || len(body.AuthorizedRepositories) > 1000 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -228,7 +229,7 @@ func (h *InternalHandler) UpsertObsidianGitHubInstallation(w http.ResponseWriter
 			owner = &v
 		}
 	}
-	settings, err := h.obsidianRepo.UpsertInstallation(r.Context(), body.UserID, body.InstallationID, owner)
+	settings, err := h.obsidianRepo.UpsertInstallation(r.Context(), body.UserID, body.InstallationID, owner, body.AuthorizedRepositories)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("save installation failed: %v", err), http.StatusInternalServerError)
 		return

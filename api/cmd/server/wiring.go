@@ -438,7 +438,7 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterModelOverrideRepo, providerModelUpdateRepo, openRouterCatalogSvc, d.cache)
 	poeCatalogSvc := service.NewPoeCatalogService()
 	poeUsageSvc := service.NewPoeUsageService(poeUsageRepo)
-	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
+	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc, d.userRepo)
 	featherlessCatalogSvc := service.NewFeatherlessCatalogService()
 	featherlessModelsH := handler.NewFeatherlessModelsHandler(featherlessModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, featherlessCatalogSvc)
 	deepinfraCatalogSvc := service.NewDeepInfraCatalogService()
@@ -459,7 +459,7 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	openAITTSVoicesH := handler.NewOpenAITTSVoicesHandler(openAITTSVoiceRepo, providerModelUpdateRepo, openAITTSVoiceCatalogSvc)
 	geminiTTSVoiceCatalogSvc := service.NewGeminiTTSVoiceCatalogService()
 	geminiTTSVoicesH := handler.NewGeminiTTSVoicesHandler(geminiTTSVoiceCatalogSvc)
-	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo, providerModelSnapshotSyncSvc)
+	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo, providerModelSnapshotSyncSvc, d.userRepo)
 
 	return appModule{
 		registerAPI: func(r chi.Router) {

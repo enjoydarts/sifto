@@ -70,6 +70,7 @@ def run_responses_json(
     body: dict = {
         "model": normalize_model_name(model),
         "input": prompt,
+        "store": False,
         "max_output_tokens": max_output_tokens,
     }
     if system_instruction:
@@ -168,6 +169,7 @@ async def run_responses_json_async(
     body: dict = {
         "model": normalize_model_name(model),
         "input": prompt,
+        "store": False,
         "max_output_tokens": max_output_tokens,
     }
     if system_instruction:

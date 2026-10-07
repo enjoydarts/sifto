@@ -359,6 +359,7 @@ function ThumbnailArtwork({ item, className }: { item: Item; className?: string 
       <div className={`relative overflow-hidden bg-zinc-100 ${className ?? ""}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          referrerPolicy="no-referrer"
           src={item.thumbnail_url}
           alt={item.translated_title || item.title || item.url}
           className="h-full w-full object-cover"

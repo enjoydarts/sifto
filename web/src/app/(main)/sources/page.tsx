@@ -106,7 +106,7 @@ export default function SourcesPage() {
                   key={section.key}
                   type="button"
                   onClick={() => {
-                    if (section.key === "add") {
+                    if (section.key === "add" && !hasLoadedSuggestions && !loadingSuggestions) {
                       loadSuggestions();
                     }
                     setActiveSection(section.key);

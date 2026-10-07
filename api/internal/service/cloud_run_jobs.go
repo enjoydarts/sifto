@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -64,6 +65,7 @@ func (c *CloudRunJobsClient) RunAudioConcat(ctx context.Context, req AudioConcat
 					{Name: "AUDIO_BRIEFING_CALLBACK_TOKEN", Value: req.CallbackToken},
 					{Name: "AUDIO_BRIEFING_AUDIO_OBJECT_KEYS_JSON", Value: marshalAudioObjectKeysForEnv(req.AudioObjectKeys)},
 					{Name: "AUDIO_BRIEFING_SEGMENTS_JSON", Value: marshalAudioConcatSegmentsForEnv(req.Segments)},
+					{Name: "AUDIO_BRIEFING_GAP_SECONDS", Value: strconv.FormatFloat(req.GapSeconds, 'f', -1, 64)},
 					{Name: "AUDIO_BRIEFING_OUTPUT_OBJECT_KEY", Value: req.OutputObjectKey},
 					{Name: "AUDIO_BRIEFING_BGM_ENABLED", Value: boolEnvValue(req.BGMEnabled)},
 					{Name: "AUDIO_BRIEFING_BGM_R2_PREFIX", Value: req.BGMR2Prefix},

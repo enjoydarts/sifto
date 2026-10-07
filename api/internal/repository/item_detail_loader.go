@@ -9,6 +9,7 @@ import (
 )
 
 func normalizeExecutionAttemptsForDetail(attempts []model.ItemLLMExecutionAttempt, limit int) []model.ItemLLMExecutionAttempt {
+	limit = boundedExecutionHistoryLimit(limit)
 	if len(attempts) == 0 {
 		return nil
 	}
@@ -23,6 +24,7 @@ func normalizeExecutionAttemptsForDetail(attempts []model.ItemLLMExecutionAttemp
 }
 
 func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID string, purposes []string, limit int) ([]model.ItemLLMExecutionAttempt, error) {
+	limit = boundedExecutionHistoryLimit(limit)
 	if len(purposes) == 0 {
 		return nil, nil
 	}
@@ -80,6 +82,13 @@ func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID
 		return nil, err
 	}
 	return normalizeExecutionAttemptsForDetail(out, limit), nil
+}
+
+func boundedExecutionHistoryLimit(limit int) int {
+	if limit <= 0 || limit > 100 {
+		return 100
+	}
+	return limit
 }
 
 func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *model.ItemDetail) error {

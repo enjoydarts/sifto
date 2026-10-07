@@ -1,11 +1,12 @@
 import os
+import re
 import time
 
 import anthropic
 
 
 def supports_sampling_parameters(model: str) -> bool:
-    return str(model or "").strip() not in {
+    return re.sub(r"-(?:latest|\d{8})$", "", str(model or "").strip()) not in {
         "claude-opus-4-7",
         "claude-opus-4-8",
         "claude-opus-5",

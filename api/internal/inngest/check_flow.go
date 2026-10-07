@@ -80,7 +80,9 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 		}
 		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, failedModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, err)
 		if cfg.onExecutionError != nil {
-			return cfg.onExecutionError(err), false, nil
+			if warning := cfg.onExecutionError(err); warning != nil {
+				return warning, false, nil
+			}
 		}
 		return nil, false, err
 	}

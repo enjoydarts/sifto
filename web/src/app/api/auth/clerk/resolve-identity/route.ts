@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { getInternalAPISecret, getInternalAPISecretError } from "@/lib/internal-secret";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
+import { verifiedPrimaryEmail } from "@/lib/verified-primary-email";
 
 function resolveDisplayName(user: Awaited<ReturnType<typeof currentUser>>) {
   const fullName = user?.fullName?.trim();
@@ -19,10 +20,7 @@ export async function POST() {
   }
 
   const user = await currentUser();
-  const email =
-    user?.emailAddresses.find((entry) => entry.id === user.primaryEmailAddressId)?.emailAddress ??
-    user?.emailAddresses[0]?.emailAddress ??
-    "";
+  const email = user?.id === clerkAuth.userId ? verifiedPrimaryEmail(user) : null;
   if (!email) {
     return NextResponse.json({ error: "email missing" }, { status: 400 });
   }

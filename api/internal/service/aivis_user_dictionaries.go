@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
@@ -39,7 +40,7 @@ func NewAivisUserDictionaryService(repo *repository.UserSettingsRepo, cipher *Se
 	return &AivisUserDictionaryService{
 		repo:    repo,
 		cipher:  cipher,
-		http:    &http.Client{},
+		http:    &http.Client{Timeout: 20 * time.Second},
 		baseURL: baseURL,
 	}
 }

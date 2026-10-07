@@ -1,0 +1,1 @@
+ALTER TABLE user_obsidian_exports DROP COLUMN github_authorized_repositories;

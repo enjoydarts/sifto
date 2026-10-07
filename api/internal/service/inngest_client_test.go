@@ -3,9 +3,31 @@ package service
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestInngestTokensNeverSentWithoutValidOrigin(t *testing.T) {
+	for _, origin := range []string{"", ":::", "relative/path", "file:///tmp/test"} {
+		t.Run(origin, func(t *testing.T) {
+			t.Setenv("INNGEST_BASE_URL", origin)
+			t.Setenv(inngestCloudflareAccessClientIDEnv, "private-id")
+			t.Setenv(inngestCloudflareAccessClientSecretEnv, "private-secret")
+			base := inngestTestRoundTripper(func(req *http.Request) (*http.Response, error) {
+				if req.Header.Get("CF-Access-Client-Secret") != "" || req.Header.Get("CF-Access-Client-Id") != "" {
+					t.Fatal("Cloudflare credentials sent to unrelated URL")
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+			})
+			resp, err := newInngestInstrumentedTransport(base).RoundTrip(httptest.NewRequest("GET", "https://attacker.example/feed", nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+		})
+	}
+}
 
 type inngestTestRoundTripper func(*http.Request) (*http.Response, error)
 

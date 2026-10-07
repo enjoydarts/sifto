@@ -113,8 +113,9 @@ func TestAudioBriefingConcatStarterPassesBGMConfigToRunner(t *testing.T) {
 			Status: "voiced",
 		},
 		settings: &model.AudioBriefingSettings{
-			BGMEnabled:  true,
-			BGMR2Prefix: stringPtr("audio/bgm"),
+			BGMEnabled:                  true,
+			BGMR2Prefix:                 stringPtr("audio/bgm"),
+			ChunkTrailingSilenceSeconds: 2.5,
 		},
 		chunks: []model.AudioBriefingScriptChunk{
 			{R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/chunk-1.mp3")},
@@ -141,6 +142,9 @@ func TestAudioBriefingConcatStarterPassesBGMConfigToRunner(t *testing.T) {
 	}
 	if runner.req.BGMR2Prefix != "audio/bgm" {
 		t.Fatalf("runner.req.BGMR2Prefix = %q, want audio/bgm", runner.req.BGMR2Prefix)
+	}
+	if runner.req.GapSeconds != 2.5 {
+		t.Fatalf("runner.req.GapSeconds = %v, want 2.5", runner.req.GapSeconds)
 	}
 }
 

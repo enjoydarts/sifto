@@ -15,7 +15,7 @@ func NewObsidianExportRepo(db *pgxpool.Pool) *ObsidianExportRepo { return &Obsid
 func (r *ObsidianExportRepo) GetByUserID(ctx context.Context, userID string) (*model.ObsidianExportSettings, error) {
 	var v model.ObsidianExportSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, enabled, github_installation_id, github_repo_owner, github_repo_name,
+		SELECT user_id, enabled, github_installation_id, github_authorized_repositories, github_repo_owner, github_repo_name,
 		       github_repo_branch, vault_root_path, keyword_link_mode, last_run_at, last_success_at,
 		       created_at, updated_at
 		FROM user_obsidian_exports
@@ -24,6 +24,7 @@ func (r *ObsidianExportRepo) GetByUserID(ctx context.Context, userID string) (*m
 		&v.UserID,
 		&v.Enabled,
 		&v.GitHubInstallationID,
+		&v.GitHubAuthorizedRepositories,
 		&v.GitHubRepoOwner,
 		&v.GitHubRepoName,
 		&v.GitHubRepoBranch,
@@ -77,15 +78,16 @@ func (r *ObsidianExportRepo) UpsertConfig(
 	return r.GetByUserID(ctx, userID)
 }
 
-func (r *ObsidianExportRepo) UpsertInstallation(ctx context.Context, userID string, installationID int64, repoOwner *string) (*model.ObsidianExportSettings, error) {
+func (r *ObsidianExportRepo) UpsertInstallation(ctx context.Context, userID string, installationID int64, repoOwner *string, authorizedRepositories []string) (*model.ObsidianExportSettings, error) {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO user_obsidian_exports (user_id, github_installation_id, github_repo_owner)
-		VALUES ($1, $2, $3)
+		INSERT INTO user_obsidian_exports (user_id, github_installation_id, github_repo_owner, github_authorized_repositories)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) DO UPDATE
 		SET github_installation_id = EXCLUDED.github_installation_id,
+ github_authorized_repositories = EXCLUDED.github_authorized_repositories,
 		    github_repo_owner = COALESCE(EXCLUDED.github_repo_owner, user_obsidian_exports.github_repo_owner),
 		    updated_at = NOW()`,
-		userID, installationID, repoOwner,
+		userID, installationID, repoOwner, authorizedRepositories,
 	)
 	if err != nil {
 		return nil, err
@@ -95,7 +97,7 @@ func (r *ObsidianExportRepo) UpsertInstallation(ctx context.Context, userID stri
 
 func (r *ObsidianExportRepo) ListEnabled(ctx context.Context) ([]model.ObsidianExportSettings, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, enabled, github_installation_id, github_repo_owner, github_repo_name,
+		SELECT user_id, enabled, github_installation_id, github_authorized_repositories, github_repo_owner, github_repo_name,
 		       github_repo_branch, vault_root_path, keyword_link_mode, last_run_at, last_success_at,
 		       created_at, updated_at
 		FROM user_obsidian_exports
@@ -116,6 +118,7 @@ func (r *ObsidianExportRepo) ListEnabled(ctx context.Context) ([]model.ObsidianE
 			&v.UserID,
 			&v.Enabled,
 			&v.GitHubInstallationID,
+			&v.GitHubAuthorizedRepositories,
 			&v.GitHubRepoOwner,
 			&v.GitHubRepoName,
 			&v.GitHubRepoBranch,

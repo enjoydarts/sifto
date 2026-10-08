@@ -52,7 +52,16 @@ type LLMModelCapabilities struct {
 }
 
 type LLMModelPricing struct {
-	PricingSource        string  `json:"pricing_source"`
+	PricingSource        string                 `json:"pricing_source"`
+	InputPerMTokUSD      float64                `json:"input_per_mtok_usd"`
+	OutputPerMTokUSD     float64                `json:"output_per_mtok_usd"`
+	CacheWritePerMTokUSD float64                `json:"cache_write_per_mtok_usd"`
+	CacheReadPerMTokUSD  float64                `json:"cache_read_per_mtok_usd"`
+	LongContext          *LLMLongContextPricing `json:"long_context,omitempty"`
+}
+
+type LLMLongContextPricing struct {
+	InputTokenThreshold  int     `json:"input_token_threshold"`
 	InputPerMTokUSD      float64 `json:"input_per_mtok_usd"`
 	OutputPerMTokUSD     float64 `json:"output_per_mtok_usd"`
 	CacheWritePerMTokUSD float64 `json:"cache_write_per_mtok_usd"`

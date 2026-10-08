@@ -336,7 +336,7 @@ def _normalize_model_family(model: str) -> str:
     return model
 
 
-def _pricing_for_model(model: str, purpose: str) -> dict:
+def _pricing_for_model(model: str, purpose: str, usage: dict | None = None) -> dict:
     family = _normalize_model_family(model)
     base = dict(
         model_pricing(family)
@@ -351,6 +351,13 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
             },
         )
     )
+    long_context = base.get("long_context")
+    if isinstance(long_context, dict) and usage is not None:
+        prompt_tokens = sum(int(usage.get(key, 0) or 0) for key in (
+            "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+        ))
+        if prompt_tokens > int(long_context["input_token_threshold"]):
+            base.update({key: value for key, value in long_context.items() if key != "input_token_threshold"})
     source = str(base.get("pricing_source") or _ANTHROPIC_PRICING_SOURCE_VERSION)
     # Optional per-purpose overrides for temporary pricing changes without deploy.
     prefix = f"ANTHROPIC_{purpose.upper()}_"
@@ -370,7 +377,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
 
 
 def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
-    p = _pricing_for_model(model, purpose)
+    p = _pricing_for_model(model, purpose, usage)
     total = 0.0
     total += usage["input_tokens"] / 1_000_000 * p["input_per_mtok_usd"]
     total += usage["output_tokens"] / 1_000_000 * p["output_per_mtok_usd"]
@@ -382,7 +389,7 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
 def _llm_meta(message, purpose: str, model: str, provider: str = "anthropic") -> dict:
     usage = _message_usage(message) if message is not None else _message_usage(None)
     actual_model = str(getattr(message, "model", None) or model)
-    pricing = _pricing_for_model(actual_model, purpose)
+    pricing = _pricing_for_model(actual_model, purpose, usage)
     return {
         "provider": provider,
         "model": actual_model,

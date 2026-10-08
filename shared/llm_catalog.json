@@ -1186,6 +1186,44 @@
       }
     },
     {
+      "id": "claude-haiku-5-5",
+      "provider": "anthropic",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["latest", "fast", "long-context"],
+      "comment": "Claude Haiku 5.5。事実抽出・分類・要約向けの高速で低価格な候補。入力10万token超では長文料金が適用される。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "anthropic_docs_2026_10",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.5,
+        "cache_write_per_mtok_usd": 0.125,
+        "cache_read_per_mtok_usd": 0.01,
+        "long_context": {
+          "input_token_threshold": 100000,
+          "input_per_mtok_usd": 0.5,
+          "output_per_mtok_usd": 2.5,
+          "cache_write_per_mtok_usd": 0.625,
+          "cache_read_per_mtok_usd": 0.05
+        }
+      }
+    },
+    {
       "id": "claude-haiku-4-5",
       "provider": "anthropic",
       "available_purposes": [

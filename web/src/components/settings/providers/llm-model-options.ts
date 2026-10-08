@@ -62,7 +62,7 @@ export function toModelOption(item: LLMCatalogModel, t: (key: string, fallback?:
     value: item.id,
     label: formatModelDisplayName(item.id),
     selectedLabel: formatProviderModelLabel(providerLabel, item.id),
-    note: formatModelOptionNote(item),
+    note: formatModelOptionNote(item, t),
     provider: providerLabel,
     disabled: unavailableOpenRouter || (item.provider === "featherless" && !featherlessState.selectable),
     badge: badge ?? undefined,

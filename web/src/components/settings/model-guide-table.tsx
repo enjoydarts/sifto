@@ -46,9 +46,21 @@ export default function ModelGuideTable({
             </td>
             <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-zinc-600">
               {formatModelPriceCell(entry.pricing, "input")}
+              {entry.pricing?.long_context && (
+                <div className="mt-1 text-xs text-zinc-500">
+                  {t("settings.modelGuide.longContextThreshold").replace("{threshold}", entry.pricing.long_context.input_token_threshold.toLocaleString("en-US"))}
+                  {" "}{formatModelPriceCell({ ...entry.pricing, ...entry.pricing.long_context }, "input")}
+                </div>
+              )}
             </td>
             <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-zinc-600">
               {formatModelPriceCell(entry.pricing, "output")}
+              {entry.pricing?.long_context && (
+                <div className="mt-1 text-xs text-zinc-500">
+                  {t("settings.modelGuide.longContextThreshold").replace("{threshold}", entry.pricing.long_context.input_token_threshold.toLocaleString("en-US"))}
+                  {" "}{formatModelPriceCell({ ...entry.pricing, ...entry.pricing.long_context }, "output")}
+                </div>
+              )}
             </td>
             <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap">
               <span

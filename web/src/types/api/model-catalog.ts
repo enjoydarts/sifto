@@ -362,6 +362,13 @@ export interface LLMCatalogModelPricing {
   output_per_mtok_usd: number;
   cache_write_per_mtok_usd: number;
   cache_read_per_mtok_usd: number;
+  long_context?: {
+    input_token_threshold: number;
+    input_per_mtok_usd: number;
+    output_per_mtok_usd: number;
+    cache_write_per_mtok_usd: number;
+    cache_read_per_mtok_usd: number;
+  } | null;
 }
 
 export interface LLMCatalogModel {

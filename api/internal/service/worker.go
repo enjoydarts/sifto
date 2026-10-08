@@ -495,6 +495,7 @@ type LLMUsage struct {
 	CacheCreationInputTokens int                   `json:"cache_creation_input_tokens"`
 	CacheReadInputTokens     int                   `json:"cache_read_input_tokens"`
 	EstimatedCostUSD         float64               `json:"estimated_cost_usd"`
+	Calls                    int                   `json:"calls,omitempty"`
 	ExecutionFailures        []LLMExecutionFailure `json:"execution_failures,omitempty"`
 }
 

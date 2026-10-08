@@ -13,6 +13,7 @@ def supports_sampling_parameters(model: str) -> bool:
         "claude-opus-5-5",
         "claude-sonnet-5",
         "claude-sonnet-5-5",
+        "claude-haiku-5-5",
     }
 
 
@@ -33,6 +34,12 @@ def message_text(message) -> str:
         if isinstance(text, str) and text.strip():
             parts.append(text.strip())
     return "\n".join(parts).strip()
+
+
+def _validate_answer_text(message, model: str):
+    if str(model or "").strip() == "claude-haiku-5-5" and not message_text(message):
+        raise RuntimeError(f"anthropic Haiku 5.5 returned no text (stop_reason={getattr(message, 'stop_reason', None)})")
+    return message
 
 
 def env_timeout_seconds(name: str, default: float) -> float:
@@ -120,6 +127,10 @@ def messages_create(
     }
     if str(model or "").strip() == "claude-sonnet-5-5":
         kwargs["extra_body"] = {"thinking": {"type": "between_tools"}}
+    if str(model or "").strip() == "claude-haiku-5-5":
+        # Keep small JSON/translation budgets for answer text, using the newer tokenizer.
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        kwargs["max_tokens"] = min((max_tokens * 13 + 9) // 10, 128000)
     if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
     if top_p is not None and supports_sampling_parameters(model):
@@ -133,7 +144,7 @@ def messages_create(
         kwargs["messages"] = [{"role": "user", "content": user_prompt or prompt}]
     else:
         kwargs["messages"] = [{"role": "user", "content": prompt}]
-    return client.messages.create(**kwargs)
+    return _validate_answer_text(client.messages.create(**kwargs), model)
 
 
 def is_rate_limit_error(err: Exception) -> bool:
@@ -294,6 +305,9 @@ async def messages_create_async(
     }
     if str(model or "").strip() == "claude-sonnet-5-5":
         kwargs["extra_body"] = {"thinking": {"type": "between_tools"}}
+    if str(model or "").strip() == "claude-haiku-5-5":
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        kwargs["max_tokens"] = min((max_tokens * 13 + 9) // 10, 128000)
     if temperature is not None and supports_sampling_parameters(model):
         kwargs["temperature"] = temperature
     if top_p is not None and supports_sampling_parameters(model):
@@ -307,7 +321,7 @@ async def messages_create_async(
         kwargs["messages"] = [{"role": "user", "content": user_prompt or prompt}]
     else:
         kwargs["messages"] = [{"role": "user", "content": prompt}]
-    return await client.messages.create(**kwargs)
+    return _validate_answer_text(await client.messages.create(**kwargs), model)
 
 
 async def call_with_retries_async(

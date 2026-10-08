@@ -12,7 +12,7 @@ export function formatUSDPerMTok(value: number): string {
   return `$${rounded.replace(/\.?0+$/, "")}`;
 }
 
-export function formatModelOptionNote(item: LLMCatalogModel): string | undefined {
+export function formatModelOptionNote(item: LLMCatalogModel, t: Translate): string | undefined {
   if (!item.pricing) return undefined;
   const parts: string[] = [];
   if (item.pricing.cache_read_per_mtok_usd > 0) {
@@ -23,6 +23,14 @@ export function formatModelOptionNote(item: LLMCatalogModel): string | undefined
     parts.push(`out ${formatUSDPerMTok(item.pricing.output_per_mtok_usd)}`);
   }
   parts.push("1M tok");
+  const longContext = item.pricing.long_context;
+  if (longContext) {
+    parts.push(t("settings.modelGuide.longContextPrice")
+      .replace("{threshold}", longContext.input_token_threshold.toLocaleString("en-US"))
+      .replace("{input}", formatUSDPerMTok(longContext.input_per_mtok_usd))
+      .replace("{output}", formatUSDPerMTok(longContext.output_per_mtok_usd))
+      .replace("{cacheRead}", formatUSDPerMTok(longContext.cache_read_per_mtok_usd)));
+  }
   return parts.join(" / ");
 }
 

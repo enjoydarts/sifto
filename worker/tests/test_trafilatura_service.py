@@ -198,12 +198,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = html
         captured = {}
-            "<html><head>"
-            + ("a" * 3900)
-            + '<meta charset="utf-8" />'
-            + "丂乽仜仜偩偗偳幙栤偁傞丠乿乽仜仜偟偨傗偮偑桪彑乿偲偄偭偨僗儗僞僀乮尒弌偟乯偲丄嵟弶偺僐儊儞僩"
-            + "</head></html>"
-        )
 
         def fake_bare_extraction(downloaded, **kwargs):
             captured["downloaded"] = downloaded
@@ -234,12 +228,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = html
         captured = {}
-            "<html><head>"
-            + ("a" * 3900)
-            + '<meta charset="utf-8" />'
-            + "ü@Ľ─NASAé═4îÄ1ô˙üiî╗ĺnÄ×ŐďüjüAŚLÉlëFĺłĹDüuâIâŐâIâôüvéôőŹ┌éÁéŻĹňî^âŹâPâbâgüuSLSüvé╠Ĺ┼é┐ĆŃé░é╔ÉČî¸éÁéŻüB"
-            + "</head></html>"
-        )
 
         def fake_bare_extraction(downloaded, **kwargs):
             captured["downloaded"] = downloaded

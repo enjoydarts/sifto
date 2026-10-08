@@ -5,6 +5,12 @@ from app.services.trafilatura_service import extract_body, is_pdf_response
 
 
 class TrafilaturaServiceTests(unittest.TestCase):
+    def setUp(self):
+        # Extraction unit tests must not depend on external DNS.
+        validator = patch("app.services.trafilatura_service.validate_public_http_url", side_effect=lambda url: url)
+        validator.start()
+        self.addCleanup(validator.stop)
+
     def test_is_pdf_response_accepts_content_type(self):
         self.assertTrue(is_pdf_response("https://example.com/file", "application/pdf", b"%PDF-1.7"))
 
@@ -20,9 +26,9 @@ class TrafilaturaServiceTests(unittest.TestCase):
 
     def test_extract_body_propagates_refetch_failure(self):
         with patch.dict("os.environ", {"ALLOW_DEV_EXTRACT_PLACEHOLDER": "false"}), patch(
-            "app.services.trafilatura_service.trafilatura.fetch_url", return_value=None
+            "app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")
         ), patch(
-            "app.services.trafilatura_service.httpx.get", side_effect=TimeoutError("refetch timed out")
+            "app.services.trafilatura_service.download_response", side_effect=TimeoutError("refetch timed out")
         ):
             with self.assertRaisesRegex(TimeoutError, "refetch timed out"):
                 extract_body("https://example.com/start")
@@ -34,8 +40,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.content = b"%PDF-1.7 fake"
         response.url = "https://example.com/final"
         response.text = ""
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.extract_pdf_body_from_bytes",
             return_value={"title": "doc", "content": "pdf text", "published_at": None, "image_url": None},
@@ -59,8 +65,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
             captured["downloaded"] = downloaded
             return {"title": "50歳独身男性のインシデント対応を分析", "text": "GoogleがM-Trends 2026公開", "date": None}
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -71,7 +77,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "50歳独身男性のインシデント対応を分析")
         self.assertEqual(result["content"], "GoogleがM-Trends 2026公開")
 
-    def test_extract_body_refetches_when_fetch_url_result_is_mojibake(self):
+    def test_extract_body_decodes_legacy_html_without_unsafe_fetch(self):
         html = "<html><head><title>映画『CUBA JAZZ』始動</title></head><body>キューバの音楽文化を追う</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -85,8 +91,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
             captured["downloaded"] = downloaded
             return {"title": "映画『CUBA JAZZ』始動", "text": "キューバの音楽文化を追う", "date": None}
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value="�����T��ē̐V"), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -97,7 +103,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "映画『CUBA JAZZ』始動")
         self.assertEqual(result["content"], "キューバの音楽文化を追う")
 
-    def test_extract_body_refetches_when_shift_jis_page_contains_sparse_mojibake(self):
+    def test_extract_body_decodes_shift_jis_html_with_sparse_mojibake(self):
         html = "<html><head><title>高橋慎一監督の新作映画『ハバナの奇跡』</title></head><body>社会主義国でのジャズクラブ誕生を追う</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -106,14 +112,13 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = response.content.decode("utf-8", errors="replace")
         captured = {}
-        fetched = "<html><head>" + ("a" * 3900) + '<meta charset="Shift_JIS" />' + "�����T��ē̐V" + "</head></html>"
 
         def fake_bare_extraction(downloaded, **kwargs):
             captured["downloaded"] = downloaded
             return {"title": "高橋慎一監督の新作映画『ハバナの奇跡』", "text": "社会主義国でのジャズクラブ誕生を追う", "date": None}
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -124,7 +129,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "高橋慎一監督の新作映画『ハバナの奇跡』")
         self.assertEqual(result["content"], "社会主義国でのジャズクラブ誕生を追う")
 
-    def test_extract_body_always_refetches_declared_shift_jis_pages(self):
+    def test_extract_body_decodes_declared_shift_jis_pages(self):
         html = "<html><head><title>TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発</title></head><body>ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -133,7 +138,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = response.content.decode("utf-8", errors="replace")
         captured = {}
-        fetched = "<html><head><meta charset=\"Shift_JIS\" /><title>敾撉崲擄側乽拞悽僊儕僔儍岅乿傪撉傒庢傝</title></head></html>"
 
         def fake_bare_extraction(downloaded, **kwargs):
             captured["downloaded"] = downloaded
@@ -143,8 +147,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
                 "date": None,
             }
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -155,7 +159,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発")
         self.assertEqual(result["content"], "ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。")
 
-    def test_extract_body_refetches_when_utf8_page_is_decoded_as_legacy_japanese_encoding(self):
+    def test_extract_body_corrects_utf8_page_decoded_as_legacy_japanese_encoding(self):
         html = "<html><head><meta charset=\"utf-8\"><title>涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信</title></head><body>ABEMAが周年アニメ特集を始める。</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -164,7 +168,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = html
         captured = {}
-        fetched = "<html><head>" + ("a" * 3900) + '<meta charset="utf-8" />' + "w—ء‹{ƒnƒ‹ƒq‚ج—JںT" + "</head></html>"
 
         def fake_bare_extraction(downloaded, **kwargs):
             captured["downloaded"] = downloaded
@@ -174,8 +177,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
                 "date": None,
             }
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -186,7 +189,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信")
         self.assertEqual(result["content"], "ABEMAが周年アニメ特集を始める。")
 
-    def test_extract_body_refetches_when_utf8_page_is_decoded_as_cjk_mojibake(self):
+    def test_extract_body_corrects_utf8_page_decoded_as_cjk_mojibake(self):
         html = "<html><head><meta charset=\"utf-8\"><title>「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場</title></head><body>スレタイと最初のコメントを入力するとAIがレスを生成する。</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -195,7 +198,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = html
         captured = {}
-        fetched = (
             "<html><head>"
             + ("a" * 3900)
             + '<meta charset="utf-8" />'
@@ -211,8 +213,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
                 "date": None,
             }
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -223,7 +225,7 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場")
         self.assertEqual(result["content"], "スレタイと最初のコメントを入力するとAIがレスを生成する。")
 
-    def test_extract_body_refetches_when_utf8_page_is_decoded_as_latin_box_mojibake(self):
+    def test_extract_body_corrects_utf8_page_decoded_as_latin_box_mojibake(self):
         html = "<html><head><meta charset=\"utf-8\"><title>NASAは4年1か月ぶりに有人月探査へ向けたロケット『SLS』の打ち上げを目指す。</title></head><body>アルテミス計画の進捗をまとめる。</body></html>"
         response = Mock()
         response.raise_for_status.return_value = None
@@ -232,7 +234,6 @@ class TrafilaturaServiceTests(unittest.TestCase):
         response.url = "https://example.com/final"
         response.text = html
         captured = {}
-        fetched = (
             "<html><head>"
             + ("a" * 3900)
             + '<meta charset="utf-8" />'
@@ -248,8 +249,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
                 "date": None,
             }
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,
@@ -278,8 +279,8 @@ class TrafilaturaServiceTests(unittest.TestCase):
                 "date": None,
             }
 
-        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
-            "app.services.trafilatura_service.httpx.get", return_value=response
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", side_effect=AssertionError("unsafe fetch_url called")), patch(
+            "app.services.trafilatura_service.download_response", return_value=response
         ), patch(
             "app.services.trafilatura_service.trafilatura.bare_extraction",
             side_effect=fake_bare_extraction,

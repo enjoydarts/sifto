@@ -9,6 +9,23 @@ class UnsafeURLError(ValueError):
     pass
 
 
+def resolve_public_addresses(host: str, port: int) -> list[str]:
+    try:
+        addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise UnsafeURLError("URL host could not be resolved") from exc
+    if not addresses:
+        raise UnsafeURLError("URL host has no addresses")
+    resolved = []
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if not ip.is_global or (ip.version == 6 and ip.ipv4_mapped and not ip.ipv4_mapped.is_global):
+            raise UnsafeURLError("URL resolves to a non-public address")
+        if str(ip) not in resolved:
+            resolved.append(str(ip))
+    return resolved
+
+
 def validate_public_http_url(url: str) -> str:
     normalized = str(url or "").strip()
     parsed = urlparse(normalized)
@@ -16,16 +33,7 @@ def validate_public_http_url(url: str) -> str:
         raise UnsafeURLError("URL must use http or https and include a host")
     if parsed.username is not None or parsed.password is not None:
         raise UnsafeURLError("URL credentials are not allowed")
-    try:
-        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise UnsafeURLError("URL host could not be resolved") from exc
-    if not addresses:
-        raise UnsafeURLError("URL host has no addresses")
-    for address in addresses:
-        ip = ipaddress.ip_address(address[4][0])
-        if not ip.is_global:
-            raise UnsafeURLError("URL resolves to a non-public address")
+    resolve_public_addresses(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
     return normalized
 
 

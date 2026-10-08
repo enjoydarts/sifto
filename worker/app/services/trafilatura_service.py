@@ -8,7 +8,8 @@ from urllib.parse import urljoin
 import httpx
 import trafilatura
 from app.services.pdf_service import extract_pdf_body, extract_pdf_body_from_bytes
-from app.services.url_security import ensure_response_size, validate_public_http_url
+from app.services.bounded_download import download_response
+from app.services.url_security import validate_public_http_url
 from trafilatura.settings import use_config
 
 _log = logging.getLogger(__name__)
@@ -147,11 +148,7 @@ def _decode_html_response(resp: httpx.Response) -> str:
 
 
 def _refetch_html(url: str) -> tuple[str | None, httpx.Response | None]:
-    validate_public_http_url(url)
-    resp = httpx.get(url, timeout=30.0, follow_redirects=True)
-    resp.raise_for_status()
-    validate_public_http_url(str(resp.url))
-    ensure_response_size(resp.content, 10 * 1024 * 1024)
+    resp = download_response(url, 10 * 1024 * 1024)
     if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
         return None, resp
     return _decode_html_response(resp), resp
@@ -235,23 +232,24 @@ def extract_body(url: str) -> dict | None:
         config = use_config()
         config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
 
-        downloaded = trafilatura.fetch_url(url)
-        if _needs_refetch(downloaded):
-            try:
-                downloaded, resp = _refetch_html(url)
-                if resp is not None and downloaded is None:
-                    return extract_pdf_body_from_bytes(resp.content, str(resp.url))
-            except Exception as e:
-                _log.warning("extract fetch failed url=%s err=%s", url, e)
-                if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
-                    return {
-                        "title": None,
-                        "content": f"[dev placeholder] Failed to fetch content for URL: {url}",
-                        "published_at": None,
-                        "image_url": None,
-                    }
-                refetch_failed = True
-                raise
+        # Trafilatura remains the parser; all networking uses our bounded fetcher.
+        try:
+            downloaded, resp = _refetch_html(url)
+            if resp is not None and downloaded is None:
+                return extract_pdf_body_from_bytes(resp.content, str(resp.url))
+            if resp is not None:
+                url = str(resp.url)
+        except Exception as e:
+            _log.warning("extract fetch failed url=%s err=%s", url, e)
+            if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
+                return {
+                    "title": None,
+                    "content": f"[dev placeholder] Failed to fetch content for URL: {url}",
+                    "published_at": None,
+                    "image_url": None,
+                }
+            refetch_failed = True
+            raise
 
         try:
             # `output_format="python"` is only supported by bare_extraction().

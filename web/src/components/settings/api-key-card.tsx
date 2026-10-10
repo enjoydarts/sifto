@@ -71,7 +71,7 @@ export default function ApiKeyCard({
             {secondaryStatusText ? (
               <>
                 {" "}
-                <span className="text-xs text-[var(--color-editorial-ink-faint)]">{labels.region}: {secondaryStatusText}</span>
+                <span className="text-xs text-[var(--color-editorial-ink-faint)]">{secondaryLabel ?? labels.region}: {secondaryStatusText}</span>
               </>
             ) : null}
           </>

@@ -69,6 +69,7 @@ func initDeps(ctx context.Context) (*appDeps, service.JSONCache, error) {
 	}
 
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	worker.SetAlibabaWorkspaceResolver(userSettingsRepo.GetAlibabaWorkspaceID)
 	itemRepo := repository.NewItemRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	userRepo := repository.NewUserRepo(db)

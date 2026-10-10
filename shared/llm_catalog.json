@@ -105,10 +105,10 @@
       "match_prefixes": [],
       "default_models": {
         "facts": "qwen3.8-flash",
-        "summary": "qwen3.5-plus",
+        "summary": "qwen3.7-plus",
         "digest_cluster_draft": "qwen3.8-max",
         "digest": "qwen3.8-max",
-        "ask": "qwen3.5-plus",
+        "ask": "qwen3.7-plus",
         "source_suggestion": "qwen3.8-flash"
       },
       "settings_field_base": "Alibaba"
@@ -1198,7 +1198,11 @@
       ],
       "recommendation": "strong",
       "best_for": "facts",
-      "highlights": ["latest", "fast", "long-context"],
+      "highlights": [
+        "latest",
+        "fast",
+        "long-context"
+      ],
       "comment": "Claude Haiku 5.5。事実抽出・分類・要約向けの高速で低価格な候補。入力10万token超では長文料金が適用される。",
       "capabilities": {
         "supports_structured_output": true,
@@ -2307,19 +2311,20 @@
       "highlights": [
         "latest"
       ],
-      "comment": "Alibaba Model Studio Global / Virginia の qwen3.8-max。難しい整理、長文要約、ダイジェスト向けの最新上位 Qwen 枠として扱う。",
+      "comment": "Alibaba Model Studio Global / Tokyo の qwen3.8-max。難しい整理、長文要約、ダイジェスト向けの最新上位 Qwen 枠として扱う。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_modelstudio_qwen3_8_2026_08",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 1.65,
-        "output_per_mtok_usd": 4.951
+        "output_per_mtok_usd": 4.951,
+        "cache_read_per_mtok_usd": 0.206
       }
     },
     {
@@ -2341,19 +2346,20 @@
         "long-context",
         "jsonStable"
       ],
-      "comment": "Alibaba Model Studio Global / Virginia の qwen3.8-flash。1M context と低価格を活かし、事実抽出、候補生成、要約を高スループットで回す最新の軽量 Qwen 枠。",
+      "comment": "Alibaba Model Studio Global / Tokyo の qwen3.8-flash。1M context と低価格を活かし、事実抽出、候補生成、要約を高スループットで回す最新の軽量 Qwen 枠。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "user_provided_alibaba_virginia_qwen3_8_flash_2026_08",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 0.113,
-        "output_per_mtok_usd": 0.382
+        "output_per_mtok_usd": 0.382,
+        "cache_read_per_mtok_usd": 0.014
       }
     },
     {
@@ -2373,7 +2379,7 @@
         "experimental",
         "jsonStable"
       ],
-      "comment": "Alibaba Model Studio Global / Virginia のロールプレイ特化モデル。人格や語り口の一貫性を活かした AI ナビゲーター、対話、音声ブリーフィング台本の比較候補。",
+      "comment": "Alibaba Model Studio Global / Tokyo のロールプレイ特化モデル。人格や語り口の一貫性を活かした AI ナビゲーター、対話、音声ブリーフィング台本の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2383,7 +2389,7 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_modelstudio_character_virginia_2026_09",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 0.115,
         "output_per_mtok_usd": 0.287
       }
@@ -2391,14 +2397,7 @@
     {
       "id": "qwen-flash-character",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "experimental",
       "best_for": "ask",
       "highlights": [
@@ -2406,7 +2405,7 @@
         "fast",
         "jsonStable"
       ],
-      "comment": "Alibaba Model Studio Global / Virginia の軽量ロールプレイ特化モデル。自然な会話調を低コストで生成でき、AI ナビゲーターや音声ブリーフィング台本の試行に向く。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2445,7 +2444,7 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_modelstudio_qwen3_7_2026_05",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 1.65,
         "output_per_mtok_usd": 4.951
       }
@@ -2473,30 +2472,30 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "user_provided_alibaba_qwen3_7_plus_2026_06",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 0.276,
-        "output_per_mtok_usd": 1.101
+        "output_per_mtok_usd": 1.101,
+        "long_context": {
+          "input_token_threshold": 256000,
+          "input_per_mtok_usd": 0.826,
+          "output_per_mtok_usd": 3.301,
+          "cache_read_per_mtok_usd": 0.166
+        },
+        "cache_read_per_mtok_usd": 0.056
       }
     },
     {
       "id": "qwen3-max",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
-      "comment": "Virginia の Global endpoint 前提の上位 Qwen3 枠。難しめの整理や長めのダイジェストで比較候補になる。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2537,9 +2536,14 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_modelstudio_qwen3_6_2026_04",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 0.276,
-        "output_per_mtok_usd": 1.651
+        "output_per_mtok_usd": 1.651,
+        "long_context": {
+          "input_token_threshold": 256000,
+          "input_per_mtok_usd": 1.101,
+          "output_per_mtok_usd": 6.602
+        }
       }
     },
     {
@@ -2559,7 +2563,7 @@
         "fast",
         "jsonStable"
       ],
-      "comment": "Qwen3.6-35B-A3B 系を Alibaba Model Studio API で呼ぶ軽量エントリ。公式ブログと Model Studio doc group は確認できるが価格は未確認のため、まずは比較候補として載せる。",
+      "comment": "Alibaba Model Studio Global / Tokyo の軽量 Qwen3.6 枠。通常単価と256K入力token超の長文単価は東京の公式価格に基づく。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2569,29 +2573,27 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_modelstudio_qwen3_6_2026_04",
+        "pricing_source": "alibaba_modelstudio_tokyo_global_2026_10_10",
         "input_per_mtok_usd": 0.165,
-        "output_per_mtok_usd": 0.99
+        "output_per_mtok_usd": 0.99,
+        "long_context": {
+          "input_token_threshold": 256000,
+          "input_per_mtok_usd": 0.66,
+          "output_per_mtok_usd": 3.961
+        }
       }
     },
     {
       "id": "qwen3.6-35b-a3b",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": [
         "fast",
         "jsonStable"
       ],
-      "comment": "Qwen3.6 の 35B/3B MoE open model 名称。Model Studio の group-qwen3.6 系ドキュメントに合わせて選択肢へ追加し、価格は未確認のため暫定扱いにする。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2609,20 +2611,13 @@
     {
       "id": "qwen3.5-plus",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "recommended",
       "best_for": "balanced",
       "highlights": [
         "fast"
       ],
-      "comment": "Virginia の Global endpoint 前提の標準候補。要約や質問応答を安定して回しやすい。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2640,21 +2635,14 @@
     {
       "id": "qwen3.5-flash",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "facts",
       "highlights": [
         "lowestCost",
         "fast"
       ],
-      "comment": "Qwen 3.5 系の軽量枠。Virginia の Global endpoint 前提で、大量の抽出や候補生成を低コストで回したい時に向く。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2672,18 +2660,11 @@
     {
       "id": "qwen3.5-397b-a17b",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "summary",
       "highlights": [],
-      "comment": "Virginia の Global endpoint 前提の大規模 MoE 枠。品質重視の比較候補として扱いやすい。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2701,20 +2682,13 @@
     {
       "id": "qwen3.5-35b-a3b",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": [
         "fast"
       ],
-      "comment": "Virginia の Global endpoint 前提の中量級 MoE 枠。速度と品質のバランスを取りやすい。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -2732,20 +2706,13 @@
     {
       "id": "qwen3.5-27b",
       "provider": "alibaba",
-      "available_purposes": [
-        "facts",
-        "summary",
-        "digest_cluster_draft",
-        "digest",
-        "ask",
-        "source_suggestion"
-      ],
+      "available_purposes": [],
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": [
         "fast"
       ],
-      "comment": "Virginia の Global endpoint 前提の密結合 27B 枠。軽さと安定性を優先した比較候補。",
+      "comment": "東京 Global での提供と価格を公式資料で確認できないため、新規選択から除外。過去の設定・利用履歴の識別用に従来の価格を保持する。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,

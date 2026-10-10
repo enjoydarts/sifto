@@ -4,10 +4,49 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func workerTestStringPtr(v string) *string { return &v }
+
+func TestWorkerSendsAlibabaWorkspaceForRequestUser(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		want := "ws-" + r.Header.Get("X-Sifto-User-Id")
+		if got := r.Header.Get("X-Alibaba-Workspace-Id"); r.Header.Get("X-Sifto-LLM-Provider") != "anthropic" && got != want {
+			t.Errorf("workspace=%q want=%q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := &WorkerClient{baseURL: server.URL, http: server.Client()}
+	client.SetAlibabaWorkspaceResolver(func(ctx context.Context, userID string) (*string, error) {
+		if userID == "missing" {
+			return nil, nil
+		}
+		return workerTestStringPtr("ws-" + userID), nil
+	})
+	for _, userID := range []string{"first", "second"} {
+		ctx := WithWorkerTraceMetadata(context.Background(), "ask", &userID, nil, nil, nil)
+		if _, err := postWithHeaders[map[string]any](ctx, client, "/ask", nil, map[string]string{"X-Alibaba-Api-Key": "user-key"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	userID := "missing"
+	ctx := WithWorkerTraceMetadata(context.Background(), "ask", &userID, nil, nil, nil)
+	if _, err := postWithHeaders[map[string]any](ctx, client, "/ask", nil, map[string]string{"X-Alibaba-Api-Key": "user-key"}); err == nil || !strings.Contains(err.Error(), "workspace") {
+		t.Fatalf("missing workspace error=%v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests=%d want=2", requests)
+	}
+	if _, err := postWithHeaders[map[string]any](ctx, client, "/summary", nil, map[string]string{"X-Alibaba-Api-Key": "unused-key", "X-Anthropic-Api-Key": "chosen-key", "X-Sifto-LLM-Provider": "anthropic"}); err != nil {
+		t.Fatalf("another provider must not require Alibaba workspace: %v", err)
+	}
+}
 
 func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 	togetherKey := workerTestStringPtr("together-key")

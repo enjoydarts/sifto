@@ -219,7 +219,7 @@ sifto/
 ポイント:
 
 - ユーザーごとに API キーを保存します。サーバー共通キー前提ではありません。
-- Alibaba (Qwen) は現在 Virginia の Global endpoint を前提にしています。Singapore / International 用ではなく、Virginia 側で発行した API key を使ってください。
+- Alibaba (Qwen) は東京リージョンの Global ワークスペースを前提にしています。各ユーザーが設定画面で東京の API key と、そのキーを発行した Workspace ID を保存します。接続先は `https://{WorkspaceId}.ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1` として自動生成され、サーバー共通の接続先より優先されます。既存ユーザーも Workspace ID の追加が必要です。保存済み API key を使う場合はキー欄を空にして保存できますが、バージニアのキーは東京のキーへの交換が必要です。
 - OpenRouter、Poe、Featherless、DeepInfra はモデルカタログを定期同期し、動的にモデル一覧を更新します。
 - SiliconFlow は固定モデル群で、静的カタログで管理します。
 - 用途別にモデルを選択できます。

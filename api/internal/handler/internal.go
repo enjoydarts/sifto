@@ -816,7 +816,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, fireworksKey, openAIKey, model)
+			workerCtx := service.WithWorkerTraceMetadata(r.Context(), "title_translation", &t.UserID, nil, &t.ItemID, nil)
+			resp, err := h.worker.TranslateTitleWithModel(workerCtx, t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, fireworksKey, openAIKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {

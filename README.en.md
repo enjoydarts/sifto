@@ -217,7 +217,7 @@ The current implementation supports 20 providers:
 Key points:
 
 - API keys are stored per user. Server-wide keys are not assumed.
-- Alibaba (Qwen) currently uses the Virginia Global endpoint. Use API keys issued from the Virginia side, not Singapore / International.
+- Alibaba (Qwen) uses Global workspaces in the Tokyo region. Each user saves a Tokyo API key and its Workspace ID in Settings. The endpoint is generated as `https://{WorkspaceId}.ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1` and takes precedence over server-wide configuration. Existing users must add their Workspace ID. Leave the key field blank to retain a saved Tokyo key; Virginia keys must be replaced with Tokyo keys.
 - OpenRouter, Poe, Featherless, and DeepInfra periodically sync their model catalogs and update the model list dynamically.
 - SiliconFlow uses a fixed set of models managed via a static catalog.
 - Models can be selected per purpose:

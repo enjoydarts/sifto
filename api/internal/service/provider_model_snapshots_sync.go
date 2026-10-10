@@ -256,7 +256,13 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 			keys.DeepSeek = s.loadUserKey(ctx, user.ID, s.settings.GetDeepSeekAPIKeyEncrypted)
 		}
 		if keys.Alibaba == "" {
-			keys.Alibaba = s.loadUserKey(ctx, user.ID, s.settings.GetAlibabaAPIKeyEncrypted)
+			workspace, err := s.settings.GetAlibabaWorkspaceID(ctx, user.ID)
+			if err == nil && workspace != nil && alibabaWorkspaceIDPattern.MatchString(*workspace) {
+				keys.Alibaba = s.loadUserKey(ctx, user.ID, s.settings.GetAlibabaAPIKeyEncrypted)
+				if keys.Alibaba != "" {
+					keys.AlibabaWorkspaceID = *workspace
+				}
+			}
 		}
 		if keys.Mistral == "" {
 			keys.Mistral = s.loadUserKey(ctx, user.ID, s.settings.GetMistralAPIKeyEncrypted)

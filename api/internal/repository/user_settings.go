@@ -125,6 +125,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       deepseek_api_key_last4,
 		       alibaba_api_key_enc,
 		       alibaba_api_key_last4,
+		       alibaba_workspace_id,
 		       mistral_api_key_enc,
 		       mistral_api_key_last4,
 		       moonshot_api_key_enc,
@@ -240,6 +241,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.DeepSeekAPIKeyLast4,
 		&alibabaAPIKeyEnc,
 		&v.AlibabaAPIKeyLast4,
+		&v.AlibabaWorkspaceID,
 		&mistralAPIKeyEnc,
 		&v.MistralAPIKeyLast4,
 		&moonshotAPIKeyEnc,
@@ -894,6 +896,30 @@ func (r *UserSettingsRepo) GetAlibabaAPIKeyEncrypted(ctx context.Context, userID
 		return nil, nil
 	}
 	return v, nil
+}
+
+func (r *UserSettingsRepo) GetAlibabaWorkspaceID(ctx context.Context, userID string) (*string, error) {
+	var workspace *string
+	err := r.db.QueryRow(ctx, `SELECT alibaba_workspace_id FROM user_settings WHERE user_id = $1`, userID).Scan(&workspace)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return workspace, err
+}
+
+func (r *UserSettingsRepo) SetAlibabaConfig(ctx context.Context, userID, encryptedKey, last4, workspaceID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, alibaba_api_key_enc, alibaba_api_key_last4, alibaba_workspace_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE SET
+		    alibaba_api_key_enc = EXCLUDED.alibaba_api_key_enc,
+		    alibaba_api_key_last4 = EXCLUDED.alibaba_api_key_last4,
+		    alibaba_workspace_id = EXCLUDED.alibaba_workspace_id,
+		    updated_at = NOW()`, userID, encryptedKey, last4, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
 }
 
 func (r *UserSettingsRepo) GetMistralAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
@@ -1937,6 +1963,7 @@ func (r *UserSettingsRepo) ClearAlibabaAPIKey(ctx context.Context, userID string
 		ON CONFLICT (user_id) DO UPDATE
 		SET alibaba_api_key_enc = NULL,
 		    alibaba_api_key_last4 = NULL,
+		    alibaba_workspace_id = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

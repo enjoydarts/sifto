@@ -12,6 +12,24 @@ from app.services.provider_pricing import (
 
 
 class ProviderPricingTests(unittest.TestCase):
+    def test_long_context_rate_applies_to_the_entire_prompt_above_boundary(self):
+        pricing = {
+            "input_per_mtok_usd": 0.276,
+            "output_per_mtok_usd": 1.101,
+            "cache_read_per_mtok_usd": 0.056,
+            "long_context": {
+                "input_token_threshold": 256000,
+                "input_per_mtok_usd": 0.826,
+                "output_per_mtok_usd": 3.301,
+                "cache_read_per_mtok_usd": 0.166,
+            },
+        }
+        for tokens, expected in ((256000, 0.070656), (256001, 0.21145683)):
+            with self.subTest(tokens=tokens):
+                self.assertEqual(estimate_cost_usd("model", "summary", {"input_tokens": tokens}, pricing_for_model_func=lambda *_: pricing), expected)
+        self.assertEqual(estimate_cost_usd("model", "summary", {"input_tokens": 300000, "cache_read_input_tokens": 100000, "output_tokens": 10000}, pricing_for_model_func=lambda *_: pricing), 0.21481)
+        self.assertEqual(pricing["input_per_mtok_usd"], 0.276)
+
     def test_normalize_model_name_can_resolve_catalog_alias(self):
         self.assertEqual(
             normalize_model_name(" openrouter::anthropic/claude-sonnet-4-5 ", use_resolve_model_id=True),

@@ -35,6 +35,7 @@ type ProviderModelDiscoveryKeys struct {
 	Groq                string
 	DeepSeek            string
 	Alibaba             string
+	AlibabaWorkspaceID  string
 	Mistral             string
 	MiniMax             string
 	Moonshot            string
@@ -857,8 +858,15 @@ func (s *ProviderModelDiscoveryService) fetchAlibabaModels(ctx context.Context) 
 		return nil, fmt.Errorf("api key is required")
 	}
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("ALIBABA_API_BASE_URL")), "/")
+	if strings.TrimSpace(s.keys.Alibaba) != "" {
+		workspace := strings.TrimSpace(s.keys.AlibabaWorkspaceID)
+		if !alibabaWorkspaceIDPattern.MatchString(workspace) {
+			return nil, fmt.Errorf("Alibaba workspace ID is required for user model discovery")
+		}
+		base = "https://" + workspace + ".ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1"
+	}
 	if base == "" {
-		base = "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
+		return nil, fmt.Errorf("ALIBABA_API_BASE_URL is required; configure the Tokyo workspace endpoint")
 	} else if strings.HasSuffix(base, "/chat/completions") {
 		base = strings.TrimSuffix(base, "/chat/completions")
 	}

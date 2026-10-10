@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,46 @@ type SettingsService struct {
 	uiFontCatalog           *UIFontCatalogService
 	cipher                  *SecretCipher
 	githubApp               *GitHubAppClient
+}
+
+var alibabaWorkspaceIDPattern = regexp.MustCompile(`^ws-[a-z0-9]{1,60}$`)
+var ErrInvalidAlibabaConfig = errors.New("valid Alibaba workspace ID and API key are required")
+
+func (s *SettingsService) SetAlibabaConfig(ctx context.Context, userID, apiKey, workspaceID string) (*model.UserSettings, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if !alibabaWorkspaceIDPattern.MatchString(workspaceID) {
+		return nil, ErrInvalidAlibabaConfig
+	}
+	if s.cipher == nil || !s.cipher.Enabled() {
+		return nil, ErrSecretEncryptionNotConfigured
+	}
+	key := strings.TrimSpace(apiKey)
+	var enc, last4 string
+	if key == "" {
+		settings, err := s.repo.GetByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		stored, err := s.repo.GetAlibabaAPIKeyEncrypted(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if stored == nil || settings.AlibabaAPIKeyLast4 == nil {
+			return nil, ErrInvalidAlibabaConfig
+		}
+		enc, last4 = *stored, *settings.AlibabaAPIKeyLast4
+	} else {
+		var err error
+		enc, err = s.cipher.EncryptString(key)
+		if err != nil {
+			return nil, err
+		}
+		last4 = key
+		if len(last4) > 4 {
+			last4 = last4[len(last4)-4:]
+		}
+	}
+	return s.repo.SetAlibabaConfig(ctx, userID, enc, last4, workspaceID)
 }
 
 // APIKeyStatus is the keyed representation for a provider's key presence info.
@@ -97,6 +138,7 @@ type SettingsGetPayload struct {
 	HasAzureSpeechAPIKey    bool    `json:"has_azure_speech_api_key"`
 	AzureSpeechAPIKeyLast4  *string `json:"azure_speech_api_key_last4,omitempty"`
 	AzureSpeechRegion       *string `json:"azure_speech_region,omitempty"`
+	AlibabaWorkspaceID      *string `json:"alibaba_workspace_id,omitempty"`
 	HasAivisAPIKey          bool    `json:"has_aivis_api_key"`
 	AivisAPIKeyLast4        *string `json:"aivis_api_key_last4,omitempty"`
 	HasFishAudioAPIKey      bool    `json:"has_fish_api_key"`
@@ -474,6 +516,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		HasAzureSpeechAPIKey:    settings.HasAzureSpeechAPIKey,
 		AzureSpeechAPIKeyLast4:  settings.AzureSpeechAPIKeyLast4,
 		AzureSpeechRegion:       settings.AzureSpeechRegion,
+		AlibabaWorkspaceID:      settings.AlibabaWorkspaceID,
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
 		HasFishAudioAPIKey:      settings.HasFishAudioAPIKey,

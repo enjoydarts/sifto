@@ -1,13 +1,46 @@
+import os
+import re
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from .provider_base import ProviderConfig, OpenAICompatProvider
+
+
+_REQUEST_WORKSPACE = ContextVar("alibaba_request_workspace", default=None)
+
+
+@contextmanager
+def alibaba_workspace_context(workspace_id: str):
+    token = _REQUEST_WORKSPACE.set(str(workspace_id or "").strip())
+    try:
+        yield
+    finally:
+        _REQUEST_WORKSPACE.reset(token)
+
+
+class AlibabaProvider(OpenAICompatProvider):
+    def _get_chat_url(self) -> str:
+        workspace = _REQUEST_WORKSPACE.get()
+        if workspace is not None:
+            if not re.fullmatch(r"ws-[a-z0-9]{1,60}", workspace):
+                raise RuntimeError("valid Alibaba workspace ID is required for the Tokyo endpoint")
+            return f"https://{workspace}.ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+        base = os.getenv(self.config.api_base_url_env, "").strip().rstrip("/")
+        if not base:
+            raise RuntimeError("ALIBABA_API_BASE_URL is required; configure the Tokyo workspace endpoint")
+        if base.endswith("/chat/completions"):
+            return base
+        return base + "/chat/completions"
+
 
 _config = ProviderConfig(
     provider_name="alibaba",
     env_prefix="ALIBABA",
-    pricing_source_version="alibaba_dashscope_static_2026_05",
-    api_base_url="https://dashscope-us.aliyuncs.com/compatible-mode/v1/chat/completions",
+    pricing_source_version="alibaba_modelstudio_tokyo_global_2026_10_10",
+    api_base_url="",
     api_base_url_env="ALIBABA_API_BASE_URL",
 )
-_p = OpenAICompatProvider(_config)
+_p = AlibabaProvider(_config)
 
 extract_facts = _p.extract_facts
 summarize = _p.summarize

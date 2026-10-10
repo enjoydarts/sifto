@@ -47,6 +47,7 @@ type UserSettings struct {
 	HasDeepSeekAPIKey                bool       `json:"has_deepseek_api_key"`
 	AlibabaAPIKeyLast4               *string    `json:"alibaba_api_key_last4,omitempty"`
 	HasAlibabaAPIKey                 bool       `json:"has_alibaba_api_key"`
+	AlibabaWorkspaceID               *string    `json:"alibaba_workspace_id,omitempty"`
 	MistralAPIKeyLast4               *string    `json:"mistral_api_key_last4,omitempty"`
 	HasMistralAPIKey                 bool       `json:"has_mistral_api_key"`
 	MoonshotAPIKeyLast4              *string    `json:"moonshot_api_key_last4,omitempty"`

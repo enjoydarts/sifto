@@ -1081,10 +1081,10 @@ export const api = {
       "/settings/deepseek-key",
       { method: "DELETE" }
     ),
-  setAlibabaApiKey: (apiKey: string) =>
+  setAlibabaApiKey: (apiKey: string, workspaceId: string) =>
     apiFetch<{ user_id: string; has_alibaba_api_key: boolean; alibaba_api_key_last4: string | null }>(
       "/settings/alibaba-key",
-      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+      { method: "POST", body: JSON.stringify({ api_key: apiKey, workspace_id: workspaceId }) }
     ),
   deleteAlibabaApiKey: () =>
     apiFetch<{ user_id: string; has_alibaba_api_key: boolean; alibaba_api_key_last4: string | null }>(

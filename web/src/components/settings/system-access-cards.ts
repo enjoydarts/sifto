@@ -167,6 +167,9 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     descriptionKey: "settings.alibabaDescription",
     notSetKey: "settings.alibabaNotSet",
     placeholder: "sk-...",
+    secondaryLabelKey: "settings.alibabaWorkspaceId",
+    secondaryPlaceholder: "ws-...",
+    selectSecondaryStatus: (settings) => settings.alibaba_workspace_id ?? null,
     selectStatus: (settings) => ({ configured: settings.has_alibaba_api_key, last4: settings.alibaba_api_key_last4 }),
   },
   {

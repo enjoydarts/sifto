@@ -1049,9 +1049,32 @@ func (h *SettingsHandler) DeleteDeepSeekAPIKey(w http.ResponseWriter, r *http.Re
 }
 
 func (h *SettingsHandler) SetAlibabaAPIKey(w http.ResponseWriter, r *http.Request) {
-	h.setAPIKey(w, r, "alibaba", map[string]func(*model.UserSettings) any{
-		"has_alibaba_api_key":   func(s *model.UserSettings) any { return s.HasAlibabaAPIKey },
-		"alibaba_api_key_last4": func(s *model.UserSettings) any { return s.AlibabaAPIKeyLast4 },
+	userID := middleware.GetUserID(r)
+	var body struct {
+		APIKey      string `json:"api_key"`
+		WorkspaceID string `json:"workspace_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.SetAlibabaConfig(r.Context(), userID, body.APIKey, body.WorkspaceID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, service.ErrInvalidAlibabaConfig) {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":               settings.UserID,
+		"has_alibaba_api_key":   settings.HasAlibabaAPIKey,
+		"alibaba_api_key_last4": settings.AlibabaAPIKeyLast4,
+		"alibaba_workspace_id":  settings.AlibabaWorkspaceID,
 	})
 }
 
@@ -1059,6 +1082,7 @@ func (h *SettingsHandler) DeleteAlibabaAPIKey(w http.ResponseWriter, r *http.Req
 	h.deleteAPIKey(w, r, "alibaba", map[string]func(*model.UserSettings) any{
 		"has_alibaba_api_key":   func(s *model.UserSettings) any { return s.HasAlibabaAPIKey },
 		"alibaba_api_key_last4": func(s *model.UserSettings) any { return s.AlibabaAPIKeyLast4 },
+		"alibaba_workspace_id":  func(s *model.UserSettings) any { return s.AlibabaWorkspaceID },
 	})
 }
 

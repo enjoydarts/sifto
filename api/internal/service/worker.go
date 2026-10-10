@@ -51,12 +51,17 @@ func WithWorkerTraceMetadata(ctx context.Context, purpose string, userID, source
 }
 
 type WorkerClient struct {
-	baseURL              string
-	http                 *http.Client
-	composeDigestTimeout time.Duration
-	askTimeout           time.Duration
-	audioBriefingTimeout time.Duration
-	internalSecret       string
+	baseURL                  string
+	http                     *http.Client
+	composeDigestTimeout     time.Duration
+	askTimeout               time.Duration
+	audioBriefingTimeout     time.Duration
+	internalSecret           string
+	alibabaWorkspaceResolver func(context.Context, string) (*string, error)
+}
+
+func (w *WorkerClient) SetAlibabaWorkspaceResolver(resolve func(context.Context, string) (*string, error)) {
+	w.alibabaWorkspaceResolver = resolve
 }
 
 type AudioBriefingDeleteObjectsResponse struct {
@@ -1592,6 +1597,21 @@ func applyWorkerTraceHeaders(ctx context.Context, headers map[string]string) map
 }
 
 func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, body any, headers map[string]string) (*T, error) {
+	provider := headers["X-Sifto-LLM-Provider"]
+	if w.alibabaWorkspaceResolver != nil && headers["X-Alibaba-Api-Key"] != "" && (provider == "" || provider == "alibaba") {
+		userID, _ := ctx.Value(workerTraceUserIDKey).(string)
+		if userID == "" {
+			return nil, fmt.Errorf("Alibaba workspace requires a request user")
+		}
+		workspace, err := w.alibabaWorkspaceResolver(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("load Alibaba workspace: %w", err)
+		}
+		if workspace == nil || !alibabaWorkspaceIDPattern.MatchString(*workspace) {
+			return nil, fmt.Errorf("Alibaba workspace ID is required; configure it in settings")
+		}
+		headers["X-Alibaba-Workspace-Id"] = *workspace
+	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, err

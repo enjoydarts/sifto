@@ -83,7 +83,13 @@ def estimate_cost_usd(
     *,
     pricing_for_model_func: Callable[[str, str], dict],
 ) -> float:
-    pricing = pricing_for_model_func(model, purpose)
+    pricing = dict(pricing_for_model_func(model, purpose))
+    long_context = pricing.get("long_context")
+    # OpenAI-compatible input_tokens includes cache hits. The selected tier
+    # applies to the whole request, including output and cached input.
+    if isinstance(long_context, dict) and pricing.get("pricing_source") != "env_override":
+        if int(usage.get("input_tokens", 0) or 0) > int(long_context["input_token_threshold"]):
+            pricing.update({key: value for key, value in long_context.items() if key != "input_token_threshold"})
     non_cached_input_tokens = max(0, int(usage.get("input_tokens", 0) or 0) - int(usage.get("cache_read_input_tokens", 0) or 0))
     total = 0.0
     total += non_cached_input_tokens / 1_000_000 * pricing["input_per_mtok_usd"]

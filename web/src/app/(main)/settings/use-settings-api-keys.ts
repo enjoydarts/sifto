@@ -57,6 +57,8 @@ export function useSettingsApiKeys({
 
   // Azure region is special (non-LLM map for now)
   const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
+  const [alibabaWorkspaceInput, setAlibabaWorkspaceInput] = useState<string | null>(null);
+  const alibabaWorkspaceId = alibabaWorkspaceInput ?? settings?.alibaba_workspace_id ?? "";
 
   const [savingAzureSpeechConfig, setSavingAzureSpeechConfig] = useState(false);
   const [deletingAzureSpeechConfig, setDeletingAzureSpeechConfig] = useState(false);
@@ -65,6 +67,7 @@ export function useSettingsApiKeys({
   // Plain catalog LLM providers require ZERO entries here thanks to generic + i18n convention.
   const llmSpecialCallbacks: Record<string, { afterSave?: () => void; afterDelete?: () => void }> = {
     xai: { afterSave: onResetXAIVoices, afterDelete: onResetXAIVoices },
+    alibaba: { afterDelete: () => setAlibabaWorkspaceInput("") },
   };
 
   // Convert catalog id (e.g. xiaomi_mimo_token_plan) to the camelCase used in i18n dictionaries
@@ -85,7 +88,7 @@ export function useSettingsApiKeys({
         setValue: setInputFor(id),
         setSaving: setSavingFor(id),
         setDeleting: setDeletingFor(id),
-        save: (k: string) => api.setLlmApiKey(id, k),
+        save: (k: string) => id === "alibaba" ? api.setAlibabaApiKey(k, alibabaWorkspaceId.trim()) : api.setLlmApiKey(id, k),
         remove: () => api.deleteLlmApiKey(id),
         deleteTitle: t(`settings.${base}DeleteTitle`),
         deleteMessage: t(`settings.${base}DeleteMessage`),
@@ -192,6 +195,26 @@ export function useSettingsApiKeys({
 
   const apiKeyCardLabels = useMemo(() => buildApiKeyCardLabels(t), [t]);
 
+  const submitAlibabaConfig = async (event: FormEvent) => {
+    event.preventDefault();
+    setSavingFor("alibaba")(true);
+    try {
+      const workspaceId = alibabaWorkspaceId.trim();
+      if (!/^ws-[a-z0-9]{1,60}$/.test(workspaceId)) throw new Error(t("settings.alibabaWorkspaceRequired"));
+      const apiKey = getInput("alibaba").trim();
+      if (!apiKey && !settings?.has_alibaba_api_key) throw new Error(t("settings.error.enterApiKey"));
+      await api.setAlibabaApiKey(apiKey, workspaceId);
+      setInputFor("alibaba")("");
+      setAlibabaWorkspaceInput(null);
+      await reload();
+      showToast(t("settings.toast.alibabaSaved"), "success");
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      setSavingFor("alibaba")(false);
+    }
+  };
+
   // State registry built purely from llm ids in data (catalog-driven) + fixed TTS list.
   // No fallback to specs; new LLM from llm_api_keys just works (no edit to this file).
   const llmStateRegistry: Record<string, {value: string; setValue: (v: string) => void; saving: boolean; deleting: boolean}> = (() => {
@@ -212,6 +235,9 @@ export function useSettingsApiKeys({
     const h = (apiKeyHandlers as unknown as Record<string, { submit: (e: FormEvent) => Promise<void>; remove: () => Promise<void> }>)[id];
     if (st && h) {
       llmCardConfig[id] = createAccessCardRuntime(st.value, st.setValue, h.submit, h.remove, st.saving, st.deleting);
+      if (id === "alibaba") {
+        llmCardConfig[id] = createAccessCardRuntime(st.value, st.setValue, submitAlibabaConfig, h.remove, st.saving, st.deleting, alibabaWorkspaceId, setAlibabaWorkspaceInput);
+      }
     }
   });
 

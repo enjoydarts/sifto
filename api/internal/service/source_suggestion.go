@@ -177,6 +177,7 @@ func NewSourceSuggestionService(
 }
 
 func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context, userID string, limit int) ([]SourceSuggestionResponse, map[string]any, error) {
+	ctx = WithWorkerTraceMetadata(ctx, "source_suggestion", &userID, nil, nil, nil)
 	if _, busy := s.active.LoadOrStore(userID, struct{}{}); busy {
 		return nil, nil, errors.New("source suggestions already running")
 	}

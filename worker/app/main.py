@@ -10,6 +10,7 @@ import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import ai_navigator_brief, ask, ask_navigator, audio_briefing_script, audio_briefing_tts, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, item_navigator, source_navigator, summary_audio_player, summarize, summary_faithfulness, translate_title, tts_markup_preprocess
 from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current, update_current_trace as langfuse_update_current_trace
+from app.services.alibaba_service import alibaba_workspace_context
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 _log = logging.getLogger(__name__)
@@ -139,7 +140,8 @@ async def require_internal_worker_secret(request: Request, call_next):
         return JSONResponse(status_code=401, content={"detail": "unauthorized"})
     if auth_error is not None:
         return JSONResponse(status_code=auth_error, content={"detail": "unauthorized"})
-    return await call_next(request)
+    with alibaba_workspace_context(request.headers.get("x-alibaba-workspace-id", "")):
+        return await call_next(request)
 
 
 @app.middleware("http")

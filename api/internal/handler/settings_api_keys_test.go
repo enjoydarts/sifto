@@ -130,6 +130,64 @@ func TestSettingsHandlerSetMiniMaxAPIKey(t *testing.T) {
 	}
 }
 
+func TestAlibabaSettingsWorkspaceSaveAndDelete(t *testing.T) {
+	h := newSettingsHandlerForAPIKeyTest(t)
+	userID := "00000000-0000-4000-8000-000000000051"
+	call := func(body string, remove bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/settings/alibaba-key", bytes.NewBufferString(body))
+		req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+		rec := httptest.NewRecorder()
+		if remove {
+			h.DeleteAlibabaAPIKey(rec, req)
+		} else {
+			h.SetAlibabaAPIKey(rec, req)
+		}
+		return rec
+	}
+	for _, body := range []string{`{"api_key":"first-key"}`, `{"api_key":"first-key","workspace_id":"ws-a.evil"}`} {
+		if rec := call(body, false); rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid workspace: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	}
+	rec := call(`{"api_key":"first-key","workspace_id":" ws-first "}`, false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["alibaba_workspace_id"] != "ws-first" {
+		t.Fatalf("workspace=%v", payload["alibaba_workspace_id"])
+	}
+	// Workspace changes can reuse the stored key, and invalid changes are rejected.
+	if rec = call(`{"workspace_id":"ws-second"}`, false); rec.Code != http.StatusOK {
+		t.Fatalf("reuse: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec = call(`{"api_key":"replacement-9999","workspace_id":"https://evil"}`, false); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid update status=%d", rec.Code)
+	}
+	if rec = call(`{"workspace_id":"ws-second"}`, false); rec.Code != http.StatusOK {
+		t.Fatalf("after invalid update status=%d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["alibaba_api_key_last4"] != "-key" || payload["alibaba_workspace_id"] != "ws-second" {
+		t.Fatalf("unexpected update=%v", payload)
+	}
+	rec = call("", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["has_alibaba_api_key"] != false || payload["alibaba_workspace_id"] != nil {
+		t.Fatalf("delete payload=%v", payload)
+	}
+}
+
 func TestSettingsHandlerDeleteMiniMaxAPIKey(t *testing.T) {
 	handler := newSettingsHandlerForAPIKeyTest(t)
 	userID := "00000000-0000-4000-8000-000000000051"

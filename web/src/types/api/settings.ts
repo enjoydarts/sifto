@@ -73,6 +73,7 @@ export interface UserSettings {
   deepseek_api_key_last4: string | null;
   has_alibaba_api_key: boolean;
   alibaba_api_key_last4: string | null;
+  alibaba_workspace_id?: string | null;
   has_mistral_api_key: boolean;
   mistral_api_key_last4: string | null;
   has_cerebras_api_key?: boolean;

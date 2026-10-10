@@ -637,6 +637,43 @@ func TestProviderModelDiscoveryFetchAlibabaModelsRetriesTransientServerError(t *
 	}
 }
 
+type alibabaEndpointCaptureTransport struct {
+	calls int
+}
+
+func (t *alibabaEndpointCaptureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.calls++
+	return nil, fmt.Errorf("unexpected discovery request")
+}
+
+func TestAlibabaModelDiscoveryRequiresConfiguredWorkspaceEndpoint(t *testing.T) {
+	t.Setenv("ALIBABA_API_KEY", "test-key")
+	t.Setenv("ALIBABA_API_BASE_URL", "")
+	transport := &alibabaEndpointCaptureTransport{}
+	svc := NewProviderModelDiscoveryService()
+	svc.http.Transport = transport
+	_, err := svc.fetchAlibabaModels(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "ALIBABA_API_BASE_URL") {
+		t.Fatalf("error = %v, want missing workspace endpoint", err)
+	}
+	if transport.calls != 0 {
+		t.Fatalf("requests = %d, want no fallback request to Virginia", transport.calls)
+	}
+}
+
+func TestAlibabaUserDiscoveryDoesNotUseSharedWorkspace(t *testing.T) {
+	t.Setenv("ALIBABA_API_BASE_URL", "https://other.ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1")
+	transport := &alibabaEndpointCaptureTransport{}
+	svc := &ProviderModelDiscoveryService{http: &http.Client{Transport: transport}, keys: ProviderModelDiscoveryKeys{Alibaba: "user-key"}}
+	_, err := svc.fetchAlibabaModels(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "workspace") {
+		t.Fatalf("error=%v", err)
+	}
+	if transport.calls != 0 {
+		t.Fatalf("network requests=%d", transport.calls)
+	}
+}
+
 func TestProviderModelDiscoveryFetchFireworksModelsRetriesTransientServerError(t *testing.T) {
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

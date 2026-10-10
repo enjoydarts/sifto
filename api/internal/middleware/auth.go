@@ -23,6 +23,7 @@ func Auth(identityRepo *repository.UserIdentityRepo, clerkVerifier *service.Cler
 			if os.Getenv("INNGEST_DEV") == "true" && os.Getenv("ALLOW_DEV_AUTH_BYPASS") == "true" {
 				if userID := devUserID(r); userID != "" {
 					ctx := context.WithValue(r.Context(), UserIDKey, userID)
+					ctx = service.WithWorkerTraceMetadata(ctx, "", &userID, nil, nil, nil)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -51,6 +52,7 @@ func Auth(identityRepo *repository.UserIdentityRepo, clerkVerifier *service.Cler
 			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, identity.UserID)
+			ctx = service.WithWorkerTraceMetadata(ctx, "", &identity.UserID, nil, nil, nil)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

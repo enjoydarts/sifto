@@ -8,6 +8,7 @@ import time
 import tarfile
 import sys
 import stat
+import signal
 import unittest
 from unittest.mock import patch
 
@@ -118,6 +119,85 @@ class ReadinessTests(unittest.TestCase):
     def assert_old(self):
         self.assertEqual(json.loads(self.config.read_text()), self.original)
         self.assertFalse(list(self.state.glob("evidence/offhost-*.json")))
+
+    def subprocess_family(self, action, *, detached_output=False):
+        pidfile = self.state / "descendant.pid"
+        child = ("import os, pathlib, signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                 + ("os.close(1); os.close(2); " if detached_output else "")
+                 + "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)")
+        parent = ("import pathlib, subprocess, sys, time, os; "
+                  "subprocess.Popen([sys.executable, '-c', " + repr(child) + ", sys.argv[1]]); "
+                  "pidfile = pathlib.Path(sys.argv[1]); "
+                  "\nwhile not pidfile.exists(): time.sleep(0.01)\n" + action)
+        def cleanup():
+            if pidfile.exists():
+                pid = int(pidfile.read_text())
+                cmdline = Path("/proc") / str(pid) / "cmdline"
+                if cmdline.exists() and str(pidfile).encode() in cmdline.read_bytes():
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+        self.addCleanup(cleanup)
+        return [sys.executable, "-c", parent, str(pidfile)], pidfile
+
+    def assert_descendant_stopped(self, pidfile):
+        self.assertTrue(pidfile.exists(), "real descendant must start before the supervision case")
+        pid = int(pidfile.read_text())
+        status = Path("/proc") / str(pid) / "stat"
+        deadline = time.monotonic() + 1
+        while status.exists() and status.read_text().split()[2] != "Z" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(not status.exists() or status.read_text().split()[2] == "Z", "subprocess descendant remains running")
+
+    def test_run_allows_producer_to_create_dump_larger_than_output_limit(self):
+        target = self.state / "synthetic-large.dump"
+        try:
+            result = self.m.run([sys.executable, "-c", "import pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(b'x' * (3*1024*1024)); print('created')", str(target)])
+        except self.m.BackupError:
+            self.fail("producer ordinary file must exceed the stdout-only limit; file stopped at " + str(target.stat().st_size))
+        self.assertEqual(result, "created\n")
+        self.assertEqual(target.stat().st_size, 3*1024*1024)
+
+    def test_run_bounds_combined_stdout_stderr_without_truncating_valid_output(self):
+        result = self.m.run([sys.executable, "-c", "import os; os.write(1,b'o'*2048); os.write(2,b'e'*2048)"], limit=4096)
+        self.assertEqual(result, "o"*2048 + "e"*2048)
+
+    def test_run_output_overflow_promptly_kills_descendants_without_exposing_output(self):
+        command, pidfile = self.subprocess_family("os.write(2, b'synthetic-private-output');\nwhile True: os.write(1, b'x'*4096)")
+        before = time.monotonic()
+        with self.assertRaises(self.m.BackupError) as error:
+            self.m.run(command, timeout=3, limit=4096)
+        self.assertLess(time.monotonic()-before, 2)
+        self.assertNotIn("synthetic-private-output", str(error.exception))
+        self.assert_descendant_stopped(pidfile)
+
+    def test_run_timeout_kills_descendants_without_exposing_stderr(self):
+        command, pidfile = self.subprocess_family("os.write(2, b'synthetic-private-output'); time.sleep(30)")
+        before = time.monotonic()
+        with self.assertRaises(self.m.BackupError) as error:
+            self.m.run(command, timeout=0.6)
+        self.assertLess(time.monotonic()-before, 3)
+        self.assertNotIn("synthetic-private-output", str(error.exception))
+        self.assert_descendant_stopped(pidfile)
+
+    def test_run_times_out_when_exited_parent_leaves_descendant_holding_output_pipe(self):
+        command, pidfile = self.subprocess_family("sys.exit(0)")
+        with self.assertRaises(self.m.BackupError):
+            self.m.run(command, timeout=0.6)
+        self.assert_descendant_stopped(pidfile)
+
+    def test_run_success_also_cleans_up_descendant_with_closed_output(self):
+        command, pidfile = self.subprocess_family("print('complete')", detached_output=True)
+        self.assertEqual(self.m.run(command, timeout=3), "complete\n")
+        self.assert_descendant_stopped(pidfile)
+
+    def test_run_nonzero_exit_and_invalid_utf8_fail_without_echoing_child_output(self):
+        for code in ("import os,sys; os.write(2,b'synthetic-private-output'); sys.exit(7)",
+                     "import os; os.write(1,b'\\xff')"):
+            with self.assertRaises(self.m.BackupError) as error:
+                self.m.run([sys.executable, "-c", code])
+            self.assertNotIn("synthetic-private-output", str(error.exception))
 
     def test_retrieved_full_restore_publishes_preserving_all_config_fields(self):
         self.run_backup()

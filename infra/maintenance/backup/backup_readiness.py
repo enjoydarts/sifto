@@ -16,6 +16,8 @@ from pathlib import Path
 import pwd
 import re
 import resource
+import selectors
+import signal
 import shutil
 import stat
 import subprocess
@@ -144,18 +146,43 @@ def approved_destination(config, role):
 
 
 def run(command, *, env=None, timeout=6 * 3600, limit=2 * 1024 * 1024):
-    def bound_output():
-        resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
-    with tempfile.TemporaryFile(dir=STATE) as output:
-        try:
-            result = subprocess.run(command, env=env or SAFE_ENV, stdin=subprocess.DEVNULL,
-                                    stdout=output, stderr=output, timeout=timeout,
-                                    preexec_fn=bound_output, check=False)
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            raise BackupError("backup subprocess failed or timed out") from exc
-        require(result.returncode == 0 and output.tell() <= limit, "backup subprocess failed")
-        output.seek(0)
-        return output.read().decode("utf-8", errors="strict")
+    # RLIMIT_FSIZE also caps producer dump/archive files. Bound only the output
+    # pipe, while retaining the fixed timeout and cleaning up this child group.
+    process = None
+    deadline = time.monotonic() + timeout
+    try:
+        process = subprocess.Popen(command, env=env or SAFE_ENV, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        output = bytearray()
+        os.set_blocking(process.stdout.fileno(), False)
+        with selectors.DefaultSelector() as reader:
+            reader.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                require(remaining > 0 and reader.select(remaining), "backup subprocess timed out")
+                block = os.read(process.stdout.fileno(), min(65536, limit - len(output) + 1))
+                if not block:
+                    break
+                output.extend(block)
+                require(len(output) <= limit, "backup subprocess output limit exceeded")
+        require(process.wait(timeout=max(0, deadline - time.monotonic())) == 0, "backup subprocess failed")
+        return output.decode("utf-8", errors="strict")
+    except (subprocess.TimeoutExpired, OSError, UnicodeError):
+        # Do not attach captured output or inherited credentials to errors.
+        raise BackupError("backup subprocess failed or timed out") from None
+    finally:
+        if process is not None:
+            # Session isolation limits termination to our own command family.
+            # Kill surviving descendants even when their parent already exited.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.stdout.close()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                raise BackupError("backup subprocess cleanup timed out") from None
 
 
 def compose(service, arguments):

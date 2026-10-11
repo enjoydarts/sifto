@@ -1,5 +1,7 @@
 """Japanese advisory report. AI output is never accepted as execution input."""
 import json
+import re
+import time
 import urllib.request
 
 from .plan import canonical_json, plan_sha256, require, validate_plan
@@ -8,6 +10,58 @@ REFERENCES = ["https://documentation.ubuntu.com/server/how-to/software/package-m
               "https://ubuntu.com/security/notices", "https://docs.docker.com/engine/release-notes/",
               "https://www.postgresql.org/docs/release/"]
 MAX_AI = 32768
+COOLIFY_LATEST_API = "https://api.github.com/repos/coollabsio/coolify/releases/latest"
+MAX_RELEASE = 256 * 1024
+STABLE_VERSION = r"(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})"
+
+
+def observe_coolify(inventory, *, now=None):
+    """Official release observation only, never an executable maintenance plan."""
+    result = {"status": "unknown", "reason": "collection_unavailable", "current_version": None,
+              "latest_version": None, "release_url": None, "fetched_at": None}
+    try:
+        require(type(inventory) is dict and type(inventory["runtime"]["containers"]) is list,
+                "invalid inventory")
+        images = [container["image"] for container in inventory["runtime"]["containers"]
+                  if container.get("status") == "running" and isinstance(container.get("image"), str)
+                  and re.match(r"(?:ghcr\.io/|docker\.io/)?coollabsio/coolify(?=[:@]|$)", container["image"])]
+        if not images:
+            result.update(status="not_present", reason="no_running_coolify_container")
+            return result
+        result["reason"] = "current_version_unavailable"
+        versions = set()
+        for image in images:
+            match = re.fullmatch(r"(?:ghcr\.io/|docker\.io/)?coollabsio/coolify:v?(" + STABLE_VERSION +
+                                 r")(?:@sha256:[0-9a-f]{64})?", image)
+            require(match is not None, "stable image version unavailable")
+            versions.add(match.group(1))
+        require(len(versions) == 1, "ambiguous running version")
+        result["current_version"] = versions.pop()
+        result["reason"] = "official_release_unavailable"
+        request = urllib.request.Request(COOLIFY_LATEST_API,
+            headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
+                     "User-Agent": "Sifto-Maintenance-ReadOnly"}, method="GET")
+        with urllib.request.urlopen(request, timeout=20) as response:
+            require(response.geturl() == COOLIFY_LATEST_API, "unexpected release redirect")
+            raw = response.read(MAX_RELEASE + 1)
+        require(len(raw) <= MAX_RELEASE, "release response exceeds limit")
+        from .host import strict_json
+        release = strict_json(raw)
+        require(type(release) is dict and release.get("draft") is False and release.get("prerelease") is False,
+                "release is not stable")
+        tag = release.get("tag_name")
+        require(isinstance(tag, str) and re.fullmatch(r"v?" + STABLE_VERSION, tag), "invalid stable release tag")
+        url = "https://github.com/coollabsio/coolify/releases/tag/" + tag
+        require(release.get("html_url") == url, "unexpected official release URL")
+        latest = tag.removeprefix("v")
+        current_tuple = tuple(map(int, result["current_version"].split(".")))
+        latest_tuple = tuple(map(int, latest.split(".")))
+        status = "update_available" if current_tuple < latest_tuple else "current" if current_tuple == latest_tuple else "ahead"
+        result.update(status=status, reason="report_only_manual_review", latest_version=latest,
+                      release_url=url, fetched_at=int(time.time()) if now is None else now)
+        return result
+    except Exception:
+        return result
 
 
 def ai_payload(plan):
@@ -54,7 +108,7 @@ def ai_advice(plan, key, model="claude-haiku-4-5"):
         return {"status": "unavailable", "warning_ja": "AI 解析を利用できません。AI による解析は完了していません。決定的な変更一覧を確認してください。"}
 
 
-def render(result, advice):
+def render(result, advice, coolify=None):
     plan = result.get("plan")
     lines = ["# ホストメンテナンス確認", "", "状態: " + result["status"],
              "理由コード: " + result["reason"], "",
@@ -66,6 +120,14 @@ def render(result, advice):
                   "復旧後の実行は新しい計画と別の人間承認が必要です。"]
     if result["reason"] == "execution_history_incomplete":
         lines += ["root 実行履歴を完全に確認できないため承認を停止しています。完全な集計がない履歴切り詰めも unknown として扱います。"]
+    if coolify is not None:
+        lines += ["", "Coolify リリース監視: " + coolify["status"],
+                  "実行中コンテナ image の固定バージョン: " + (coolify["current_version"] or "不明"),
+                  "公式最新安定版: " + (coolify["latest_version"] or "取得できませんでした"),
+                  "公式リリース取得時刻 (Unix UTC): " + str(coolify["fetched_at"]),
+                  "この情報はレポート専用です。Coolify の更新は別途手動で確認・承認する必要があります。APT 計画には含まれません。"]
+        if coolify["release_url"]:
+            lines += ["公式リリース: " + coolify["release_url"]]
     if plan:
         lines += ["", "固定 executor SHA: " + plan["workflow_sha"], "計画 SHA256: " + plan_sha256(plan),
                   "計画期限 (Unix UTC): " + str(plan["expires_at"]), "操作: " + plan["action"],

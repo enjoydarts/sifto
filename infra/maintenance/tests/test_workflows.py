@@ -63,6 +63,22 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue(task['no_log'])
             self.assertEqual(task['ansible.builtin.command']['argv'], ['python', '-B', '-m', 'maintenance.cli', operation])
 
+    def test_always_audit_has_only_writer_and_no_execution_credentials_or_lock(self):
+        _, apply, _ = self.workflows()
+        self.assertIn('audit', apply['jobs'], 'durable audit workflow job missing')
+        audit = apply['jobs']['audit']
+        self.assertEqual(audit['needs'], ['prepare', 'approve', 'execute'])
+        self.assertIn('always()', audit['if'])
+        self.assertIn("github.ref == 'refs/heads/main'", audit['if'])
+        self.assertEqual(audit['environment'], 'maintenance-audit')
+        self.assertNotIn('concurrency', audit)
+        text = str(audit)
+        self.assertIn('MAINTENANCE_OPS_WRITE_KEY', text)
+        for name in ('MAINTENANCE_OPS_READ_KEY', 'MAINTENANCE_APPLY_SSH_KEY', 'MAINTENANCE_SCAN_SSH_KEY', 'MAINTENANCE_APPROVAL_PRIVATE_KEY', 'MAINTENANCE_HOSTS_JSON', 'GH_TOKEN'):
+            self.assertNotIn(name, text)
+        self.assertIn('needs.execute.result', text)
+        self.assertIn('needs.approve.outputs.approval_commit', text)
+
 
 class ReceiptTests(unittest.TestCase):
     def setUp(self):

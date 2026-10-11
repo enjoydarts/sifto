@@ -3,7 +3,7 @@
 set -eu
 umask 077
 operation=${1:-}
-case "$operation" in scan|prepare|authorize|execute) ;; *) echo maintenance_invalid_operation >&2; exit 1 ;; esac
+case "$operation" in scan|prepare|authorize|execute|audit) ;; *) echo maintenance_invalid_operation >&2; exit 1 ;; esac
 test "${GITHUB_REF:-}" = refs/heads/main
 case "${MAINTENANCE_EXECUTOR_SHA:-}" in *[!0-9a-f]*|'') exit 1 ;; esac
 test "${#MAINTENANCE_EXECUTOR_SHA}" -eq 40
@@ -33,13 +33,15 @@ secrets = {'known_hosts': 'MAINTENANCE_KNOWN_HOSTS'}
 if operation in ('scan', 'execute'):
     secrets['hosts.json'] = 'MAINTENANCE_HOSTS_JSON'
     secrets['host_key'] = 'MAINTENANCE_SCAN_SSH_KEY' if operation == 'scan' else 'MAINTENANCE_APPLY_SSH_KEY'
-secrets['ops_key'] = 'MAINTENANCE_OPS_WRITE_KEY' if operation in ('scan', 'authorize') else 'MAINTENANCE_OPS_READ_KEY'
+secrets['ops_key'] = 'MAINTENANCE_OPS_WRITE_KEY' if operation in ('scan', 'authorize', 'audit') else 'MAINTENANCE_OPS_READ_KEY'
 if operation == 'scan':
     secrets['anthropic_key'] = 'MAINTENANCE_ANTHROPIC_API_KEY'
 if operation == 'authorize':
     secrets['approval_key'] = 'MAINTENANCE_APPROVAL_PRIVATE_KEY'
 if operation == 'execute' and any(os.environ.get(key) for key in ('MAINTENANCE_APPROVAL_PRIVATE_KEY', 'MAINTENANCE_OPS_WRITE_KEY')):
     raise SystemExit('maintenance_executor_scope_invalid')
+if operation == 'audit' and any(os.environ.get(key) for key in ('MAINTENANCE_SCAN_SSH_KEY', 'MAINTENANCE_APPLY_SSH_KEY', 'MAINTENANCE_HOSTS_JSON', 'MAINTENANCE_APPROVAL_PRIVATE_KEY', 'MAINTENANCE_OPS_READ_KEY', 'MAINTENANCE_ANTHROPIC_API_KEY', 'GH_TOKEN')):
+    raise SystemExit('maintenance_audit_scope_invalid')
 for filename, variable in secrets.items():
     with (root / filename).open('x') as stream:
         stream.write(os.environ.get(variable, '') + '\n')
@@ -48,8 +50,13 @@ inputs = {key: os.environ.get('INPUT_' + key.upper(), '') for key in ('private_c
 for key in ('force_request', 'dry_run'):
     raw = os.environ.get('INPUT_' + key.upper(), 'false') or 'false'
     if raw not in ('true', 'false'):
-        raise SystemExit('maintenance_boolean_invalid')
-    inputs[key] = raw == 'true'
+        if operation != 'audit':
+            raise SystemExit('maintenance_boolean_invalid')
+        inputs[key] = None
+    else:
+        inputs[key] = raw == 'true'
+if operation == 'audit':
+    inputs['job_results'] = {job: os.environ.get('NEEDS_' + job.upper() + '_RESULT', '') for job in ('prepare', 'approve', 'execute')}
 (root / 'inputs.json').write_text(json.dumps(inputs))
 (root / 'inputs.json').chmod(0o600)
 PY

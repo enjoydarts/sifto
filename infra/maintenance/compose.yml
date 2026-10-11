@@ -29,6 +29,7 @@ services:
     environment:
       GITHUB_REF:
       GITHUB_RUN_ID:
+      GITHUB_RUN_ATTEMPT:
       GH_TOKEN:
       MAINTENANCE_EXECUTOR_SHA:
       MAINTENANCE_CHECKED_OUT_SHA:

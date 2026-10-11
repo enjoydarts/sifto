@@ -119,3 +119,35 @@ jobs:
           MAINTENANCE_HOSTS_JSON: ${{ secrets.MAINTENANCE_HOSTS_JSON }}
           MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
         run: sh infra/maintenance/run-controller.sh execute
+  audit:
+    if: always() && github.ref == 'refs/heads/main'
+    needs: [prepare, approve, execute]
+    environment: maintenance-audit
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Persist private outcome even when preflight fails
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_APPROVAL_COMMIT: ${{ needs.approve.outputs.approval_commit }}
+          INPUT_APPROVAL_SHA256: ${{ needs.approve.outputs.approval_sha256 }}
+          NEEDS_PREPARE_RESULT: ${{ needs.prepare.result }}
+          NEEDS_APPROVE_RESULT: ${{ needs.approve.result }}
+          NEEDS_EXECUTE_RESULT: ${{ needs.execute.result }}
+          MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-controller.sh audit

@@ -11,9 +11,15 @@ from pathlib import Path
 from .host import strict_json
 from .plan import (HASH, SHA, MaintenanceError, build_plan, canonical_json, matches,
                    normalize_closure, plan_sha256, require, sign_plan, validate_approval, validate_plan)
-from .report import ai_advice, render
+from .report import ai_advice, observe_coolify, render
 from .ssh import Client, parse_hosts
 from .store import GitStore, private_write, repo_url, validate_ref
+
+AUDIT_FIELDS = {"schema_version", "run_id", "run_attempt", "recorded_at", "pipeline_sha", "executor_sha",
+                "private_commit", "plan_id", "plan_sha256", "approval_commit", "approval_sha256",
+                "requested_mode", "signed_mode", "job_results", "phase", "invalid_fields",
+                "plan_integrity", "approval_integrity", "host_receipt_pending"}
+JOB_RESULTS = {"success", "failure", "skipped", "cancelled"}
 
 
 def assess(inventory, executor, *, now=None):
@@ -157,11 +163,12 @@ def configuration(operation):
     repo = os.environ.get("MAINTENANCE_OPS_REPO", "")
     repo_url(repo)
     inputs = strict_json(Path("/secrets/inputs.json").read_bytes())
-    require(type(inputs) is dict and set(inputs) == {"private_commit", "plan_id", "plan_sha256", "executor_sha",
-                                                     "approval_commit", "approval_sha256", "force_request", "dry_run"},
+    input_fields = {"private_commit", "plan_id", "plan_sha256", "executor_sha", "approval_commit", "approval_sha256", "force_request", "dry_run"}
+    require(type(inputs) is dict and set(inputs) == input_fields | ({"job_results"} if operation == "audit" else set()),
             "invalid_input_fields")
-    require(type(inputs["force_request"]) is bool and type(inputs["dry_run"]) is bool, "invalid boolean inputs")
-    if operation != "scan":
+    if operation != "audit":
+        require(type(inputs["force_request"]) is bool and type(inputs["dry_run"]) is bool, "invalid boolean inputs")
+    if operation in ("prepare", "authorize", "execute"):
         validate_ref(inputs["private_commit"], "plans/" + inputs["plan_id"] + "/plan.json")
         try:
             require(str(uuid.UUID(inputs["plan_id"])) == inputs["plan_id"], "invalid_plan_id")
@@ -171,8 +178,14 @@ def configuration(operation):
     if operation == "execute":
         require(not Path("/secrets/approval_key").exists(), "executor_cannot_hold_signer")
         require(not Path("/secrets/ops_write_key").exists(), "executor_cannot_hold_writer")
+    if operation == "audit":
+        forbidden_files = ("host_key", "hosts.json", "approval_key", "anthropic_key", "ops_read_key")
+        forbidden_env = ("MAINTENANCE_SCAN_SSH_KEY", "MAINTENANCE_APPLY_SSH_KEY", "MAINTENANCE_HOSTS_JSON",
+                         "MAINTENANCE_APPROVAL_PRIVATE_KEY", "MAINTENANCE_OPS_READ_KEY", "MAINTENANCE_ANTHROPIC_API_KEY", "GH_TOKEN")
+        require(not any(Path("/secrets", name).exists() for name in forbidden_files)
+                and not any(os.environ.get(name) for name in forbidden_env), "audit_credentials_scope_invalid")
     store = GitStore("/private/git", repo, Path("/secrets/ops_key"), Path("/secrets/known_hosts"),
-                     writer=operation in ("scan", "authorize"))
+                     writer=operation in ("scan", "authorize", "audit"))
     return executor, repo, inputs, store
 
 
@@ -195,17 +208,20 @@ def scan(executor, repo, inputs, store):
     for host in hosts:
         prefix = "scans/" + scan_id + "/" + host["host_id"]
         result = {"status": "unknown", "reason": "collection_failed", "update_count": None, "plan": None, "changes": []}
+        collected = None
         try:
             inventory = client.call(host, "scan")
             files[prefix + "/inventory.json"] = inventory
             require(inventory["host_id"] == host["host_id"], "host_identity_mismatch")
             require(inventory["maintenance_policy"]["host_role"] == host["role"], "host_role_mismatch")
+            collected = inventory
             if inventory["metadata"].get("fresh") is not True:
                 client.call(host, "refresh")
                 inventory = client.call(host, "scan")
                 require(inventory["host_id"] == host["host_id"]
                         and inventory["maintenance_policy"]["host_role"] == host["role"], "host_identity_mismatch")
                 files[prefix + "/inventory.json"] = inventory
+                collected = inventory
             history = client.call(host, "report")
             require(history.get("host_id") == host["host_id"], "receipt_identity_mismatch")
             files[prefix + "/root-receipts.json"] = history
@@ -221,11 +237,13 @@ def scan(executor, repo, inputs, store):
         counts[result["status"]] += 1
         roles[host["role"]][result["status"]] += 1
         plan = result["plan"]
+        coolify = observe_coolify(collected)
+        files[prefix + "/coolify-observation.json"] = coolify
         advice = ai_advice(plan, Path("/secrets/anthropic_key").read_text().strip(),
                            os.environ.get("MAINTENANCE_AI_MODEL") or "claude-haiku-4-5") if plan else {
                            "status": "unavailable", "warning_ja": "承認可能な計画がありません。AI 解析は実施していません。"}
         files[prefix + "/assessment.json"] = result
-        files[prefix + "/report.md"] = render(result, advice).encode()
+        files[prefix + "/report.md"] = render(result, advice, coolify).encode()
         if plan and reserve_candidate(ledger, plan, force=inputs["force_request"]):
             files["plans/" + plan["plan_id"] + "/plan.json"] = plan
             files["plans/" + plan["plan_id"] + "/report.md"] = files[prefix + "/report.md"]
@@ -312,10 +330,116 @@ def execute(executor, repo, inputs, store):
     summary("Maintenance result: " + result["status"] + ". Plan SHA256: " + plan_sha256(plan) + "\nRoot receipt will be audited by the next private scanner.\n")
 
 
+def audit(executor, repo, inputs, store):
+    """Durable workflow outcome only; this operation cannot contact a host.
+
+    Cancellation/runner outages can prevent an always() job from executing.
+    This is best effort workflow evidence, never proof that a host did/did not
+    mutate. Root receipts collected by the next scanner remain authoritative.
+    """
+    import re
+    run_id, attempt = os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", "")
+    require(re.fullmatch(r"[0-9]{1,30}", run_id) is not None and int(run_id) > 0
+            and re.fullmatch(r"[0-9]{1,10}", attempt) is not None and int(attempt) > 0, "invalid_audit_run")
+    require(matches(SHA, executor), "invalid_audit_executor")
+    invalid = []
+    record = {"schema_version": 1, "run_id": run_id, "run_attempt": attempt,
+              "recorded_at": int(time.time()), "executor_sha": executor, "signed_mode": None,
+              "plan_integrity": "unavailable", "approval_integrity": "absent", "host_receipt_pending": True}
+    pipeline = os.environ.get("MAINTENANCE_PIPELINE_SHA", "")
+    record["pipeline_sha"] = pipeline if matches(SHA, pipeline) else None
+    if record["pipeline_sha"] is None:
+        invalid.append("pipeline_sha")
+    for key, pattern in (("private_commit", SHA), ("plan_sha256", HASH), ("approval_commit", SHA), ("approval_sha256", HASH)):
+        value = inputs.get(key)
+        record[key] = value if matches(pattern, value) else None
+        if record[key] is None and (value or key in ("private_commit", "plan_sha256")):
+            invalid.append(key)
+    try:
+        identifier = inputs.get("plan_id")
+        require(str(uuid.UUID(identifier)) == identifier, "invalid_plan_id")
+        record["plan_id"] = identifier
+    except (ValueError, TypeError, AttributeError, MaintenanceError):
+        record["plan_id"] = None
+        invalid.append("plan_id")
+    if inputs.get("executor_sha") != executor:
+        invalid.append("requested_executor_sha")
+    record["requested_mode"] = ("dry_run" if inputs["dry_run"] else "apply") if type(inputs.get("dry_run")) is bool else None
+    if record["requested_mode"] is None:
+        invalid.append("requested_mode")
+    results = inputs.get("job_results")
+    record["job_results"] = {}
+    for job in ("prepare", "approve", "execute"):
+        value = results.get(job) if type(results) is dict else None
+        record["job_results"][job] = value if isinstance(value, str) and value in JOB_RESULTS else "unknown"
+        if record["job_results"][job] == "unknown":
+            invalid.append(job + "_result")
+    record["phase"] = next((job for job in ("prepare", "approve", "execute")
+                            if record["job_results"][job] != "success"), "completed")
+    plan = None
+    if all(record[key] is not None for key in ("private_commit", "plan_id", "plan_sha256")):
+        try:
+            raw = store.fetch(record["private_commit"], "plans/" + record["plan_id"] + "/plan.json", digest=record["plan_sha256"])
+            plan = validate_plan(strict_json(raw))
+            require(plan["plan_id"] == record["plan_id"] and plan_sha256(plan) == record["plan_sha256"]
+                    and plan["workflow_sha"] == executor, "audit_plan_mismatch")
+            record["plan_integrity"] = "matched"
+        except Exception:
+            plan = None
+            invalid.append("plan_unavailable_or_mismatch")
+    else:
+        record["plan_integrity"] = "invalid_reference"
+    if record["approval_commit"] is not None or record["approval_sha256"] is not None:
+        record["approval_integrity"] = "unavailable"
+        if plan is not None and record["approval_commit"] is not None and record["approval_sha256"] is not None:
+            try:
+                raw = store.fetch(record["approval_commit"], "approvals/" + record["plan_id"] + "/" + run_id + ".json", digest=record["approval_sha256"])
+                envelope = strict_json(raw)
+                require(type(envelope) is dict and set(envelope) == {"plan", "approval", "signature"}
+                        and envelope["plan"] == plan, "audit_envelope_mismatch")
+                validate_approval(plan, envelope["approval"])
+                require(envelope["approval"]["run_id"] == run_id, "audit_run_mismatch")
+                record["signed_mode"] = envelope["approval"]["execution_mode"]
+                record["approval_integrity"] = "metadata_matched"
+                if record["signed_mode"] != record["requested_mode"]:
+                    invalid.append("execution_mode_mismatch")
+            except Exception:
+                invalid.append("approval_unavailable_or_mismatch")
+        else:
+            invalid.append("approval_reference_incomplete")
+    record["invalid_fields"] = sorted(set(invalid))
+    require(set(record) == AUDIT_FIELDS, "invalid_audit_fields")
+    path = "executions/" + run_id + "-" + attempt + ".json"
+    previous = None
+    # Retry ONLY the private evidence append when another writer advanced main.
+    # Never call the executor and never overwrite an existing run/attempt record.
+    for index in range(3):
+        parent = store.head()
+        require(parent != previous, "audit_write_failed_without_new_parent")
+        existing = store.read_at(parent, path, optional=True)
+        if existing:
+            persisted = strict_json(existing)
+            require(type(persisted) is dict and set(persisted) == AUDIT_FIELDS
+                    and type(persisted["recorded_at"]) is int and persisted["recorded_at"] > 0
+                    and {k: v for k, v in persisted.items() if k != "recorded_at"} ==
+                    {k: v for k, v in record.items() if k != "recorded_at"}, "immutable_audit_conflict")
+            commit = parent
+            break
+        try:
+            commit = store.write(parent, {path: record})
+            break
+        except MaintenanceError:
+            require(index < 2, "audit_write_retries_exhausted")
+            previous = parent
+    summary("Private maintenance audit recorded. Phase: " + record["phase"] +
+            "\nhttps://github.com/" + repo + "/blob/" + commit + "/" + path +
+            "\nAudit is best effort: cancellation or runner outage can prevent this job. Host outcome requires the next root receipt scan.\n")
+
+
 def main():
     os.umask(0o077)
     try:
-        require(len(sys.argv) == 2 and sys.argv[1] in ("scan", "prepare", "authorize", "execute"), "invalid_operation")
+        require(len(sys.argv) == 2 and sys.argv[1] in ("scan", "prepare", "authorize", "execute", "audit"), "invalid_operation")
         operation = sys.argv[1]
         executor, repo, inputs, store = configuration(operation)
         if operation == "prepare":
@@ -324,7 +448,7 @@ def main():
                     ". Plan SHA256: " + plan_sha256(plan) + "\nPrivate report: https://github.com/" + repo +
                     "/blob/" + inputs["private_commit"] + "/plans/" + plan["plan_id"] + "/report.md\n")
         else:
-            {"scan": scan, "authorize": authorize, "execute": execute}[operation](executor, repo, inputs, store)
+            {"scan": scan, "authorize": authorize, "execute": execute, "audit": audit}[operation](executor, repo, inputs, store)
         return 0
     except Exception:
         # Never interpolate an exception, argv, inventory or secret into CI logs.

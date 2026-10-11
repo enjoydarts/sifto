@@ -181,6 +181,8 @@ class PlanTests(unittest.TestCase):
     def test_pooler_packages_require_their_own_whitelisted_service(self):
         for name in ["pgbouncer", "pgpool2"]:
             inv = self.critical_inventory(name, {"allowed_restart_services": [name + ".service"]})
+            if name == "pgbouncer":
+                inv["runtime"]["pgbouncer_version"] = "1.0.0"
             with self.subTest(name=name):
                 self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], [name + ".service"])
 

@@ -1,0 +1,13 @@
+{
+  "host_id": "database-prod",
+  "host_role": "database",
+  "approved_workflow_sha": "0000000000000000000000000000000000000000",
+  "trusted_public_key": "REPLACE_WITH_BASE64_RAW_ED25519_PUBLIC_KEY",
+  "state_path": "/var/lib/sifto-maintenance",
+  "allowed_approvers": [],
+  "allowed_restart_services": ["docker.service", "containerd.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
+  "monitored_services": ["docker.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
+  "database_restart_services": ["postgresql@16-main.service"],
+  "pgbouncer_health": {"database": "sifto", "user": "sifto"},
+  "database_enabled": false
+}

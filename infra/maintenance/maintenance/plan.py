@@ -108,6 +108,8 @@ def state_sha256(inventory):
         identities["postgres_version_num"] = runtime["postgres_version_num"]
     if "containerd_version" in runtime:
         identities["containerd_version"] = runtime["containerd_version"]
+    if "pgbouncer_version" in runtime:
+        identities["pgbouncer_version"] = runtime["pgbouncer_version"]
     identities["containers"] = sorted(
         [{"id": x["id"], "image_id": x["image_id"], "image": x["image"]}
          for x in runtime["containers"]], key=lambda x: x["id"])
@@ -136,7 +138,7 @@ def validate_plan(plan):
     require(type(plan["packages"]) is list and len(plan["packages"]) <= 10000, "invalid packages")
     expected = plan["expected_runtime"]
     require(type(expected) is dict and {"running_kernel", "docker_version"} <= set(expected)
-            and set(expected) <= {"running_kernel", "docker_version", "containerd_version", "postgres_version_num"}, "invalid expected runtime fields")
+            and set(expected) <= {"running_kernel", "docker_version", "containerd_version", "postgres_version_num", "pgbouncer_version"}, "invalid expected runtime fields")
     require(isinstance(expected["running_kernel"], str) and re.fullmatch(r"[A-Za-z0-9_.+-]{1,128}", expected["running_kernel"])
             and isinstance(expected["docker_version"], str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[+.-][A-Za-z0-9_.+-]+)?", expected["docker_version"]), "invalid expected runtime")
     require("postgres_version_num" not in expected or (isinstance(expected["postgres_version_num"], str)
@@ -144,6 +146,9 @@ def validate_plan(plan):
     require("containerd_version" not in expected or (isinstance(expected["containerd_version"], str)
             and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[+.-][A-Za-z0-9_.+-]+)?", expected["containerd_version"])),
             "invalid expected containerd version")
+    require("pgbouncer_version" not in expected or (isinstance(expected["pgbouncer_version"], str)
+            and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", expected["pgbouncer_version"])),
+            "invalid expected PgBouncer version")
     names = set()
     for package in plan["packages"]:
         require(type(package) is dict and set(package) == {"name", "installed", "target"}, "invalid package fields")
@@ -173,6 +178,11 @@ def expected_runtime(inventory, packages, action, restart_services=()):
         expected["postgres_version_num"] = runtime["postgres_version_num"]
     if "containerd_version" in runtime:
         expected["containerd_version"] = runtime["containerd_version"]
+    if "pgbouncer_version" in runtime:
+        require(isinstance(runtime["pgbouncer_version"], str)
+                and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", runtime["pgbouncer_version"]),
+                "PgBouncer running version is unavailable")
+        expected["pgbouncer_version"] = runtime["pgbouncer_version"]
     native = inventory["platform"]["architecture"]
     effective = {}
     for package in inventory["packages"]:
@@ -186,8 +196,11 @@ def expected_runtime(inventory, packages, action, restart_services=()):
         if not separator or architecture in (native, "all"):
             effective[name] = package["target"]
             changed.add(name)
+    require("pgbouncer" not in effective or "pgbouncer_version" in expected,
+            "PgBouncer running version is unavailable")
     for key, names, unit in (("docker_version", {"docker-ce", "docker.io", "moby-engine"}, "docker.service"),
-                             ("containerd_version", {"containerd", "containerd.io"}, "containerd.service")):
+                             ("containerd_version", {"containerd", "containerd.io"}, "containerd.service"),
+                             ("pgbouncer_version", {"pgbouncer"}, "pgbouncer.service")):
         if action == "reboot" or unit in restart_services or names & changed:
             candidates = [version for name, version in effective.items() if name in names]
             require(len(candidates) <= 1, "ambiguous daemon runtime package")

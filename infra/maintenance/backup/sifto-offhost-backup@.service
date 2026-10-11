@@ -12,4 +12,3 @@ ExecStart=/bin/bash /opt/sifto-maintenance/backup/run-backup.sh %i
 TimeoutStartSec=infinity
 Nice=10
 IOSchedulingClass=idle
-

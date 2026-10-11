@@ -49,6 +49,12 @@ def assess(inventory, executor, *, now=None):
         if database_change and not (policy["database_enabled"] and policy["backup_ready"]):
             result.update(status="blocked", reason="database_backup_or_enable_missing")
             return result
+        if database_change:
+            pool = inventory["runtime"].get("database_pool_health", {})
+            if pool.get("status") != "healthy":
+                result.update(status="unknown" if pool.get("status") == "unknown" else "blocked",
+                              reason="database_pool_unconfigured" if pool.get("status") == "unknown" else "database_pool_unhealthy")
+                return result
         if not result["changes"] and not inventory["reboot_required"]:
             result.update(status="current", reason="no_updates")
             return result

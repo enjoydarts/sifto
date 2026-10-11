@@ -47,7 +47,7 @@ class FakeRunner:
         self.package_architectures = {}
         self.new_multiarch_packages = set()
 
-    def __call__(self, argv, *, timeout=60, check=True):
+    def __call__(self, argv, *, timeout=60, check=True, env=None, pass_fds=()):
         self.calls.append(list(argv))
         self.timeouts.append((list(argv), timeout))
         if argv[0] == "dpkg-query":
@@ -102,6 +102,8 @@ class FakeRunner:
         if argv[0] == "apt-get" and "update" in argv:
             return "done"
         if "psql" in " ".join(argv):
+            if argv[0] == "/usr/bin/psql":
+                return "1|fixture_db\n"
             if "server_version_num" in " ".join(argv):
                 return self.pg_version_num + "\n"
             return "1\n"
@@ -389,6 +391,13 @@ class HostTests(unittest.TestCase):
                 "host_id": "sifto-app", "offhost_object": "s3://private-backups/db/backup-1.dump",
                 "offhost_sha256": "e" * 64, "offhost_verified_at": 900}
 
+    def configure_pool_health(self):
+        self.config["pgbouncer_health"] = {"database": "fixture_db", "user": "fixture_user"}
+        credential = Path("/etc/sifto-maintenance/pgbouncer-health.pgpass")
+        credential.write_text("127.0.0.1:6432:fixture_db:fixture_user:fixture-password\n")
+        credential.chmod(0o600)
+        self.addCleanup(credential.unlink, missing_ok=True)
+
     def test_database_role_rejects_library_upgrade_without_backup_even_when_enabled(self):
         self.config["host_role"] = "database"
         self.config["database_enabled"] = True
@@ -421,6 +430,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(self.mutations(), [])
 
     def test_database_role_valid_backup_allows_preflight_and_read_only_query(self):
+        self.configure_pool_health()
         self.config["host_role"] = "database"
         self.config["database_enabled"] = True
         self.config["backup_readiness"] = self.readiness()
@@ -439,6 +449,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(json.loads(next((self.root / "state" / "plans").glob("*.json")).read_text())["status"], "failed")
 
     def test_postgres_upgrade_cannot_complete_with_old_running_server(self):
+        self.configure_pool_health()
         self.config.update(host_role="database", database_enabled=True, backup_readiness=self.readiness())
         self.runner.extra_packages = "postgresql-16\t16.4-1\tinstalled\n"
         self.runner.simulation = "Inst postgresql-16 [16.4-1] (16.5-1 Ubuntu:24.04/noble [arm64])\n"

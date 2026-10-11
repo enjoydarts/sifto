@@ -6,7 +6,12 @@ Root config at /etc/sifto-maintenance/config.json:
   host_role (application/database), database_enabled (maintenance enable bool),
   allowed_approvers (GitHub logins; empty denies apply),
   monitored_services (optional unit names), database_restart_services (explicit
-  native PG cluster units, required for server/common/library updates).
+  native PG cluster units, required for server/common/library updates),
+  pgbouncer_health (optional {database, user}; identifiers only).
+DB maintenance also requires the fixed root-owned 0600 credential file
+/etc/sifto-maintenance/pgbouncer-health.pgpass and a successful read-only query
+through 127.0.0.1:6432 into the configured application database. Credentials are
+provisioned separately by root; they never travel through scan/apply requests.
 Database readiness is root-maintained backup_readiness = {backup_id, host_id,
   verified_at (Unix seconds <=24h old), restore_tested_at (<=30 days old),
   offhost_object (s3:// or gs:// reference), offhost_sha256 (64 hex),
@@ -42,6 +47,13 @@ APT_OPTIONS = ["-o", "DPkg::Lock::Timeout=0", "-o", "Acquire::Retries=0",
 CONTAINER_FORMAT = ('{"id":{{json .Id}},"image_id":{{json .Image}},'
                     '"image":{{json .Config.Image}},"status":{{json .State.Status}},'
                     '"health":{{with index .State "Health"}}{{json .Status}}{{else}}"none"{{end}}}')
+POOL_PASSFILE = "/etc/sifto-maintenance/pgbouncer-health.pgpass"
+POOL_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,62}\Z")
+
+
+def valid_pool_config(value):
+    return (type(value) is dict and set(value) == {"database", "user"}
+            and all(matches(POOL_IDENTIFIER, value[key]) for key in ("database", "user")))
 
 
 def strict_json(data):
@@ -108,6 +120,8 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     for key in ("allowed_restart_services", "monitored_services", "database_restart_services"):
         if key in config:
             require(type(config[key]) is list and all(matches(SERVICE, x) for x in config[key]), "invalid configured services")
+    require("pgbouncer_health" not in config or valid_pool_config(config["pgbouncer_health"]),
+            "invalid pool health config")
     try:
         require(len(base64.b64decode(config["trusted_public_key"], validate=True)) == 32, "invalid public key length")
     except (TypeError, ValueError) as exc:
@@ -120,9 +134,10 @@ class SubprocessRunner:
     ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "LANG": "C",
            "DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_MODE": "l"}
 
-    def __call__(self, argv, *, timeout=60, check=True):
+    def __call__(self, argv, *, timeout=60, check=True, env=None, pass_fds=()):
         try:
-            result = subprocess.run(argv, shell=False, env=self.ENV, stdin=subprocess.DEVNULL,
+            result = subprocess.run(argv, shell=False, env=self.ENV if env is None else env,
+                                    pass_fds=pass_fds, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=timeout, check=False, encoding="utf-8", errors="strict")
         except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:
@@ -137,6 +152,52 @@ class SubprocessRunner:
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         require(result.returncode in (0, 1), "version comparison failed")
         return result.returncode == 0
+
+
+def probe_running_pgbouncer(runner):
+    """Version of the executable actually backing the fixed systemd MainPID.
+
+    Keep an open executable fd so upgrades that unlink the running old binary do
+    not accidentally report the installed replacement. Fail if the process or
+    executable identity changes while probing. No admin database auth is needed.
+    """
+    def main_pid():
+        value = runner(["systemctl", "show", "--property=MainPID", "--value", "pgbouncer.service"], timeout=10).strip()
+        require(re.fullmatch(r"[1-9][0-9]{0,6}", value) is not None and int(value) <= 4194304,
+                "PgBouncer running PID is unavailable")
+        return value
+
+    pid = main_pid()
+    executable = "/proc/" + pid + "/exe"
+    process_stat = Path("/proc/" + pid + "/stat")
+
+    def start_identity():
+        fields = process_stat.read_text().rsplit(")", 1)[-1].split()
+        require(len(fields) >= 20 and fields[19].isdigit(), "invalid PgBouncer process identity")
+        return fields[19]
+
+    try:
+        started = start_identity()
+        require(os.readlink(executable) in ("/usr/sbin/pgbouncer", "/usr/sbin/pgbouncer (deleted)"),
+                "unexpected PgBouncer running executable")
+        descriptor = os.open(executable, os.O_RDONLY | os.O_CLOEXEC)
+        try:
+            info = os.fstat(descriptor)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_mode & 0o022 == 0,
+                    "PgBouncer executable must be root-owned and protected")
+            output = runner(["/proc/self/fd/" + str(descriptor), "--version"], timeout=10, pass_fds=(descriptor,))
+            after = os.stat(executable)
+            require(main_pid() == pid and start_identity() == started
+                    and (after.st_dev, after.st_ino) == (info.st_dev, info.st_ino),
+                    "PgBouncer running process changed during probe")
+        finally:
+            os.close(descriptor)
+    except OSError as exc:
+        raise MaintenanceError("PgBouncer running executable is unavailable") from exc
+    first = output.splitlines()[0] if output.splitlines() else ""
+    match = re.fullmatch(r"PgBouncer ([0-9]+\.[0-9]+\.[0-9]+)", first)
+    require(match is not None, "invalid PgBouncer running version")
+    return match.group(1)
 
 
 def probe_apt_locks():
@@ -306,6 +367,13 @@ class HostAgent:
             value = self._postgres_query("current_setting('server_version_num')")
             require(re.fullmatch(r"[0-9]{6}", value) is not None, "invalid PostgreSQL runtime version")
             runtime["postgres_version_num"] = value
+        if any(x["name"].split(":")[0] == "pgbouncer" for x in packages):
+            try:
+                runtime["pgbouncer_version"] = probe_running_pgbouncer(self.runner)
+            except MaintenanceError:
+                runtime["pgbouncer_version"] = None
+        if self._database_host(packages) or "pgbouncer_version" in runtime:
+            runtime["database_pool_health"] = self._pool_health()
         require(runtime["boot_id"] and runtime["running_kernel"] and runtime["docker_version"], "missing runtime identity")
         locks = self.lock_probe()
         simulated = ""
@@ -342,6 +410,38 @@ class HostAgent:
                         and actual["health"] in ("none", "healthy"), "container health check failed")
         if self._database_host(inventory["packages"]):
             require(self._postgres_query("1") == "1", "database read-only health check failed")
+        if self._database_host(inventory["packages"]) or "pgbouncer_version" in inventory["runtime"]:
+            require(inventory["runtime"].get("database_pool_health", {}).get("status") == "healthy",
+                    "application database pool read-only health check failed or unconfigured")
+        if "pgbouncer_version" in inventory["runtime"]:
+            require(isinstance(inventory["runtime"]["pgbouncer_version"], str), "PgBouncer running version is unavailable")
+
+    def _pool_health(self):
+        config = self.config.get("pgbouncer_health")
+        if config is None:
+            return {"status": "unknown", "reason": "unconfigured"}
+        if not valid_pool_config(config):
+            return {"status": "unknown", "reason": "invalid_configuration"}
+        try:
+            secure_path(POOL_PASSFILE)
+            info = Path(POOL_PASSFILE).lstat()
+            require(stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1, "invalid pool credentials")
+        except (MaintenanceError, OSError):
+            return {"status": "unknown", "reason": "credentials_unavailable"}
+        # A clean environment prevents inherited passwords, services, options or
+        # endpoint overrides. Identifiers cannot contain libpq conninfo/URIs.
+        env = {**SubprocessRunner.ENV, "PGPASSFILE": POOL_PASSFILE, "PGCONNECT_TIMEOUT": "5"}
+        try:
+            result = self.runner(["/usr/bin/psql", "--no-psqlrc", "--no-password", "--quiet", "--tuples-only",
+                                  "--no-align", "--set=ON_ERROR_STOP=1", "--host=127.0.0.1", "--port=6432",
+                                  "--username=" + config["user"], "--dbname=" + config["database"], "--command",
+                                  "BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; SELECT 1, current_database(); COMMIT;"],
+                                 timeout=15, env=env).strip()
+        except MaintenanceError:
+            return {"status": "failed", "reason": "probe_failed"}
+        if result != "1|" + config["database"]:
+            return {"status": "failed", "reason": "route_mismatch"}
+        return {"status": "healthy", "reason": "read_only_route_verified"}
 
     def _postgres_query(self, expression):
         # Expressions come only from code constants, never request data/config.
@@ -372,7 +472,7 @@ class HostAgent:
     def _runtime_targets(plan, inventory):
         actual = inventory["runtime"]
         require(all(actual.get(key) == value for key, value in plan["expected_runtime"].items()),
-                "running kernel, Docker or PostgreSQL version does not match approved target")
+                "running kernel or daemon version does not match approved target")
 
     def _wait_healthy(self, before):
         deadline = self.monotonic() + self.config.get("health_wait_seconds", 120)
@@ -407,6 +507,8 @@ class HostAgent:
         if db_change or self._database_host(inventory["packages"]):
             require(self.config["database_enabled"] and self._backup_ready(),
                     "database maintenance requires enable, verified offhost backup and isolated restore evidence")
+            require(inventory["runtime"].get("database_pool_health", {}).get("status") == "healthy",
+                    "database maintenance requires verified application pool health")
 
     def _record_path(self, plan_id):
         try:

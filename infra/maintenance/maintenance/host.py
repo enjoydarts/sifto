@@ -296,13 +296,21 @@ class HostAgent:
             runtime["postgres_version_num"] = value
         require(runtime["boot_id"] and runtime["running_kernel"] and runtime["docker_version"], "missing runtime identity")
         locks = self.lock_probe()
-        require(not simulation or not locks, "apt/dpkg is busy")
-        simulated = self.runner(["apt-get", "-s", "--no-remove", "--with-new-pkgs", "upgrade", *APT_OPTIONS], timeout=120) if simulation else ""
+        simulated = ""
+        simulation_available = False
+        simulation_error = "apt_locked" if simulation and locks else None
+        if simulation and not locks:
+            try:
+                simulated = self.runner(["apt-get", "-s", "--no-remove", "--with-new-pkgs", "upgrade", *APT_OPTIONS], timeout=120)
+                simulation_available = True
+            except MaintenanceError:
+                simulation_error = "apt_simulation_failed"
         return {"schema_version": 1, "host_id": self.config["host_id"], "platform": actual_platform,
                 "packages": sorted(packages, key=lambda x: x["name"]), "runtime": runtime,
                 "maintenance_policy": {"host_role": "database" if self._database_host(packages) else "application",
                                        "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready()},
-                "collected_at": int(self.clock()), "simulation": simulated, "metadata": self._metadata(),
+                "collected_at": int(self.clock()), "simulation": simulated, "simulation_available": simulation_available,
+                "simulation_error": simulation_error, "metadata": self._metadata(),
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
                 "reboot_required_packages": self.read_file("/var/run/reboot-required.pkgs").splitlines()}
 

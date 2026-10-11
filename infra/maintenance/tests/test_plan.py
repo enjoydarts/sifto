@@ -112,6 +112,13 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(p.MaintenanceError):
             p.validate_plan(plan)
 
+    def test_unavailable_simulation_is_unknown_and_cannot_build_upgrade_plan(self):
+        inv = inventory()
+        inv["simulation_available"] = False
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inv, self.sha, now=1000)
+        self.assertEqual(p.build_plan(inv, self.sha, action="reboot", allow_reboot=True, now=1000)["packages"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

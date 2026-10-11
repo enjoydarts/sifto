@@ -164,6 +164,8 @@ def expected_runtime(inventory, packages, action):
 def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboot=False, *, now=None, action="apt_upgrade"):
     now = int(time.time()) if now is None else now
     require(inventory["platform"] == {"id": "ubuntu", "version": "24.04", "architecture": "arm64"}, "unsupported platform")
+    require(action != "apt_upgrade" or inventory.get("simulation_available", True) is True,
+            "update availability is unknown; no upgrade plan can be built")
     packages = normalize_closure(inventory["simulation"], inventory["packages"]) if action == "apt_upgrade" else []
     plan = {"schema_version": 1, "plan_id": str(uuid.uuid4()), "host_id": inventory["host_id"],
             "created_at": now, "expires_at": now + 86400, "workflow_sha": workflow_sha,

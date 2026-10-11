@@ -148,6 +148,37 @@ class HostTests(unittest.TestCase):
         self.config["backup_readiness"]["offhost_verified_at"] = -90000
         self.assertFalse(self.agent.run("scan", {})["maintenance_policy"]["backup_ready"])
 
+    def test_scan_returns_inventory_and_unknown_updates_when_apt_is_locked(self):
+        self.agent.lock_probe = lambda: ["/var/lib/dpkg/lock-frontend"]
+        try:
+            inventory = self.agent.run("scan", {})
+        except p.MaintenanceError as exc:
+            self.fail(f"scan discarded readable inventory because apt was locked: {exc}")
+        self.assertEqual(inventory["apt_locks"], ["/var/lib/dpkg/lock-frontend"])
+        self.assertFalse(inventory["simulation_available"])
+        self.assertEqual(inventory["simulation_error"], "apt_locked")
+        self.assertEqual(inventory["simulation"], "")
+        self.assertTrue(inventory["packages"])
+        self.assertFalse(any(cmd[0] == "apt-get" for cmd in self.runner.calls))
+
+    def test_scan_simulation_error_retains_inventory_and_blocks_planning(self):
+        runner = self.runner
+
+        def fail_simulation(argv, **kwargs):
+            if argv[0] == "apt-get" and "-s" in argv:
+                raise p.MaintenanceError("simulation unavailable")
+            return runner(argv, **kwargs)
+
+        self.agent.runner = fail_simulation
+        try:
+            inventory = self.agent.run("scan", {})
+        except p.MaintenanceError as exc:
+            self.fail(f"scan discarded readable inventory after simulation error: {exc}")
+        self.assertFalse(inventory["simulation_available"])
+        self.assertEqual(inventory["simulation_error"], "apt_simulation_failed")
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inventory, self.config["approved_workflow_sha"], now=1000)
+
     def test_apply_consumes_plan_before_exact_version_install_and_rejects_reuse(self):
         request = self.request()
         plan_id = request["envelope"]["plan"]["plan_id"]

@@ -255,15 +255,18 @@ class HostAgent:
                            "architecture": self.runner(["dpkg", "--print-architecture"]).strip()}
         require(actual_platform == {"id": "ubuntu", "version": "24.04", "architecture": "arm64"}, "unsupported host platform")
         packages = []
-        output = self.runner(["dpkg-query", "-W", "-f=${binary:Package}\t${Version}\t${db:Status-Status}\n"])
+        pending_packages = []
+        output = self.runner(["dpkg-query", "-W", "-f=${Package}:${Architecture}\t${Version}\t${db:Status-Status}\n"])
         names = set()
         for line in output.splitlines():
             parts = line.split("\t")
             require(len(parts) == 3, "malformed dpkg inventory")
             name, version, status_value = parts
+            if status_value not in ("installed", "config-files", "not-installed"):
+                pending_packages.append({"name": name, "version": version, "status": status_value})
             if status_value != "installed":
                 continue
-            require(matches(PACKAGE, name) and matches(VERSION, version) and name not in names, "invalid installed package")
+            require(matches(PACKAGE, name) and ":" in name and matches(VERSION, version) and name not in names, "invalid installed package")
             names.add(name)
             packages.append({"name": name, "version": version})
         container_ids = self.runner(["docker", "ps", "-aq", "--no-trunc"]).split()
@@ -277,13 +280,19 @@ class HostAgent:
         services = {name: self.runner(["systemctl", "is-active", name], check=False).strip()
                     for name in self.config.get("monitored_services", ["docker.service", "ssh.service"])}
         engine = strict_json(self.runner(["docker", "version", "--format", "{{json .Server}} "]))
+        ctr_output = self.runner(["ctr", "--address", "/run/containerd/containerd.sock", "version"], timeout=30)
+        server = re.search(r"(?m)^Server:\s*\n(?:[ \t]+.*\n)*?[ \t]+Version:[ \t]+v?([0-9]+\.[0-9]+\.[0-9]+(?:[+.-][A-Za-z0-9_.+-]+)?)[ \t]*$", ctr_output)
+        require(server is not None, "containerd running server version is unavailable")
         runtime = {"boot_id": self.read_file("/proc/sys/kernel/random/boot_id").strip(),
                    "running_kernel": self.runner(["uname", "-r"]).strip(),
                    "installed_kernels": [x for x in packages if x["name"].startswith("linux-image-")],
-                   "docker_version": engine["Version"], "containers": containers, "services": services}
+                   "docker_version": engine["Version"], "containerd_version": server.group(1),
+                   "containers": containers, "services": services}
         kernel_candidates = []
         for package in packages:
-            match = re.fullmatch(r"linux-image-(?:unsigned-)?(\d.*)", package["name"])
+            if package["name"].split(":")[1] != actual_platform["architecture"]:
+                continue
+            match = re.fullmatch(r"linux-image-(?:unsigned-)?(\d.*)", package["name"].split(":")[0])
             if match and match.group(1).rsplit("-", 1)[-1] == runtime["running_kernel"].rsplit("-", 1)[-1]:
                 kernel_candidates.append((package["version"], match.group(1)))
         latest = None
@@ -299,8 +308,8 @@ class HostAgent:
         locks = self.lock_probe()
         simulated = ""
         simulation_available = False
-        simulation_error = "apt_locked" if simulation and locks else None
-        if simulation and not locks:
+        simulation_error = "dpkg_pending" if simulation and pending_packages else "apt_locked" if simulation and locks else None
+        if simulation and not locks and not pending_packages:
             try:
                 simulated = self.runner(["apt-get", "-s", "--no-remove", "--with-new-pkgs", "upgrade", *APT_OPTIONS], timeout=120)
                 simulation_available = True
@@ -308,6 +317,7 @@ class HostAgent:
                 simulation_error = "apt_simulation_failed"
         return {"schema_version": 1, "host_id": self.config["host_id"], "platform": actual_platform,
                 "packages": sorted(packages, key=lambda x: x["name"]), "runtime": runtime,
+                "dpkg_state": {"ready": not pending_packages, "pending": sorted(pending_packages, key=lambda x: x["name"])},
                 "maintenance_policy": {"host_role": "database" if self._database_host(packages) else "application",
                                        "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready(),
                                        "allowed_restart_services": self.config["allowed_restart_services"],
@@ -318,6 +328,7 @@ class HostAgent:
                 "reboot_required_packages": self.read_file("/var/run/reboot-required.pkgs").splitlines()}
 
     def _health(self, inventory, expected=None):
+        require(inventory["dpkg_state"]["ready"], "pending dpkg configuration requires operator recovery")
         require(all(value == "active" for value in inventory["runtime"]["services"].values()), "monitored service is inactive")
         current = {x["id"]: x for x in inventory["runtime"]["containers"]}
         expected = inventory if expected is None else expected
@@ -374,6 +385,7 @@ class HostAgent:
                 self.sleeper(min(2, max(0, deadline - self.monotonic())))
 
     def _policy(self, plan, inventory):
+        require(inventory["dpkg_state"]["ready"], "pending dpkg configuration requires operator recovery")
         require(set(plan["restart_services"]) <= set(self.config["allowed_restart_services"]), "restart service not whitelisted")
         required = critical_restart_services(plan["packages"], inventory["maintenance_policy"])
         require(set(required) <= set(plan["restart_services"]), "critical service restart missing from signed scope")
@@ -414,14 +426,17 @@ class HostAgent:
         require(not record_path.exists(), "plan was already consumed")
         before = self.inventory(simulation=False)
         require(state_sha256(before) == plan["state_sha256"], "host state drifted since plan")
-        require(plan["expected_runtime"] == expected_runtime(before, plan["packages"], plan.get("action", "apt_upgrade")),
+        require(plan["expected_runtime"] == expected_runtime(before, plan["packages"], plan.get("action", "apt_upgrade"), plan["restart_services"]),
                 "approved runtime targets do not match transaction")
         self._policy(plan, before)
         self._health(before)
         require(not self.lock_probe(), "apt/dpkg is busy")
         if plan.get("action", "apt_upgrade") == "apt_upgrade" and plan["packages"]:
             require(before["metadata"]["fresh"], "apt metadata must be refreshed before approval")
-            specifications = [x["name"] + "=" + x["target"] for x in plan["packages"]]
+            # :all is a signed architecture identity; apt selects these universal
+            # packages by bare name. Native/foreign package selectors stay explicit.
+            specifications = [(x["name"][:-4] if x["name"].endswith(":all") else x["name"]) + "=" + x["target"]
+                              for x in plan["packages"]]
             simulated = self.runner(["apt-get", "-s", "--no-remove", "install", *APT_OPTIONS, *specifications], timeout=120)
             require(normalize_closure(simulated, before["packages"]) == sorted(plan["packages"], key=lambda x: x["name"]), "approved dependency closure changed")
         else:

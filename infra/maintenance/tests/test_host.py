@@ -42,17 +42,34 @@ class FakeRunner:
         self.docker_version = "28.0.0"
         self.pg_version_num = "160004"
         self.image_id = "sha256:" + "d" * 64
+        self.containerd_version = "2.2.6"
+        self.containerd_client_version = "v9.9.9"
+        self.package_architectures = {}
+        self.new_multiarch_packages = set()
 
     def __call__(self, argv, *, timeout=60, check=True):
         self.calls.append(list(argv))
         self.timeouts.append((list(argv), timeout))
         if argv[0] == "dpkg-query":
             packages = {"openssl": "3.0.13-0ubuntu3", "libssl3t64:arm64": "3.0.13-0ubuntu3"}
+            statuses = {}
             for line in self.extra_packages.splitlines():
-                name, version, _ = line.split("\t")
+                name, version, status = line.split("\t")
                 packages[name] = version
+                statuses[name] = status
+            uniform = "${Package}:${Architecture}" in argv[-1]
+            if uniform:
+                packages = {name if ":" in name else name + ":" + self.package_architectures.get(name, "arm64"): version
+                            for name, version in packages.items()}
+                statuses = {name if ":" in name else name + ":" + self.package_architectures.get(name, "arm64"): status
+                            for name, status in statuses.items()}
             packages.update(self.installed_overrides)
-            return "".join(f"{name}\t{version}\tinstalled\n" for name, version in packages.items())
+            if not uniform:
+                packages = {name + ":arm64" if name in self.new_multiarch_packages else name: version for name, version in packages.items()}
+            else:
+                packages = {name if ":" in name else name + ":" + self.package_architectures.get(name, "arm64"): version
+                            for name, version in packages.items()}
+            return "".join(f"{name}\t{version}\t{statuses.get(name, 'installed')}\n" for name, version in packages.items())
         if argv[:2] == ["dpkg", "--print-architecture"]:
             return "arm64\n"
         if argv[:2] == ["dpkg", "--compare-versions"]:
@@ -61,6 +78,8 @@ class FakeRunner:
             return self.kernel + "\n"
         if argv[:2] == ["docker", "version"]:
             return json.dumps({"Version": self.docker_version}) + "\n"
+        if argv[:2] == ["ctr", "--address"]:
+            return f"Client:\n  Version: {self.containerd_client_version}\nServer:\n  Version: v{self.containerd_version}\n  Revision: fixture\n"
         if argv[:2] == ["docker", "ps"]:
             return "c" * 64 + "\n"
         if argv[:2] == ["docker", "inspect"]:
@@ -195,11 +214,102 @@ class HostTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         command = self.mutations()[0]
         self.assertIn("--no-remove", command)
-        self.assertIn("openssl=3.0.13-0ubuntu3.5", command)
-        self.assertIn("linux-modules-6.8.0-60-generic=6.8.0-60.63", command)
+        self.assertIn("openssl:arm64=3.0.13-0ubuntu3.5", command)
+        self.assertIn("linux-modules-6.8.0-60-generic:arm64=6.8.0-60.63", command)
         with self.assertRaises(p.MaintenanceError):
             self.agent.run("apply", request)
         self.assertEqual(len(self.mutations()), 1)
+
+    def test_new_native_multiarch_dependency_completes_and_verifies_exact_identity(self):
+        self.runner.simulation = "Inst libnew (1.0 Ubuntu:24.04/noble [arm64])\nConf libnew (1.0 Ubuntu:24.04/noble [arm64])\n"
+        self.runner.new_multiarch_packages.add("libnew")
+        request = self.request()
+        try:
+            result = self.agent.run("apply", request)
+        except p.MaintenanceError as exc:
+            self.fail(f"approved native multiarch dependency was falsely failed after installation: {exc}")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(request["envelope"]["plan"]["packages"][0]["name"], "libnew:arm64")
+        self.assertEqual(self.agent.run("verify", {"plan_id": result["plan_id"]})["status"], "verified")
+
+    def test_new_architecture_all_package_has_signed_all_identity(self):
+        self.runner.simulation = "Inst datafiles (1.0 Ubuntu:24.04/noble [all])\nConf datafiles (1.0 Ubuntu:24.04/noble [all])\n"
+        self.runner.package_architectures["datafiles"] = "all"
+        request = self.request()
+        self.assertEqual(request["envelope"]["plan"]["packages"][0]["name"], "datafiles:all")
+        result = self.agent.run("apply", request)
+        self.assertEqual(result["status"], "completed")
+        self.assertIn("datafiles=1.0", self.mutations()[0])
+
+    def test_pending_dpkg_state_blocks_preflight_without_mutation(self):
+        request = self.request()
+        for state in ["unpacked", "half-configured", "half-installed", "triggers-pending", "triggers-awaited"]:
+            self.runner.extra_packages = f"pending\t1.0\t{state}\n"
+            with self.subTest(state=state), self.assertRaises(p.MaintenanceError):
+                self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
+        self.assertEqual(list((self.root / "state" / "plans").glob("*.json")), [])
+
+    def test_pending_dpkg_scan_remains_readable_but_updates_are_unknown(self):
+        self.runner.extra_packages = "pending\t1.0\tunpacked\n"
+        inventory = self.agent.run("scan", {})
+        self.assertIn("dpkg_state", inventory)
+        self.assertFalse(inventory["dpkg_state"]["ready"])
+        self.assertEqual(inventory["dpkg_state"]["pending"][0]["status"], "unpacked")
+        self.assertFalse(inventory["simulation_available"])
+        self.assertEqual(inventory["simulation_error"], "dpkg_pending")
+        self.assertFalse(any(cmd[0] == "apt-get" for cmd in self.runner.calls))
+
+    def test_reboot_pending_dpkg_state_is_denied(self):
+        inv = self.agent.run("scan", {})
+        plan = p.build_plan(inv, self.config["approved_workflow_sha"], allow_reboot=True, now=1000, action="reboot")
+        approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123", "approved_by": "human", "approved_at": 1000,
+                    "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
+        request = {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key)}
+        self.runner.extra_packages = "pending\t1.0\ttriggers-pending\n"
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
+
+    def test_running_containerd_server_version_is_collected_not_client_binary(self):
+        inventory = self.agent.run("scan", {})
+        self.assertIn("containerd_version", inventory["runtime"])
+        self.assertEqual(inventory["runtime"]["containerd_version"], "2.2.6")
+
+    def test_containerd_update_requires_new_running_server_version(self):
+        self.config["allowed_restart_services"].append("containerd.service")
+        self.runner.extra_packages = "containerd.io\t2.2.6-1~ubuntu.24.04\tinstalled\n"
+        self.runner.simulation = "Inst containerd.io [2.2.6-1~ubuntu.24.04] (2.2.7-1~ubuntu.24.04 Docker:24.04/noble [arm64])\n"
+        request = self.request()
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertIn(["systemctl", "restart", "containerd.service"], self.mutations())
+        record = json.loads(next((self.root / "state" / "plans").glob("*.json")).read_text())
+        self.assertEqual(record["status"], "failed")
+
+    def test_reboot_targets_installed_docker_version_even_when_current_daemon_is_older(self):
+        self.runner.extra_packages = "docker.io\t29.1.3-0ubuntu1~24.04.1\tinstalled\n"
+        inv = self.agent.run("scan", {})
+        plan = p.build_plan(inv, self.config["approved_workflow_sha"], allow_reboot=True, now=1000, action="reboot")
+        self.assertEqual(plan["expected_runtime"]["docker_version"], "29.1.3")
+
+    def test_foreign_kernel_package_does_not_become_native_reboot_target(self):
+        self.runner.extra_packages = "linux-image-6.8.0-99-generic:amd64\t6.8.0-99.99\tinstalled\n"
+        inventory = self.agent.run("scan", {})
+        self.assertEqual(inventory["runtime"]["latest_installed_kernel"], self.runner.kernel)
+
+    def test_normal_removed_package_states_do_not_block_package_manager(self):
+        self.runner.extra_packages = "removed\t1.0\tconfig-files\nmissing\t\tnot-installed\n"
+        inventory = self.agent.run("scan", {})
+        self.assertTrue(inventory["dpkg_state"]["ready"])
+        self.assertTrue(inventory["simulation_available"])
+
+    def test_containerd_upgrade_docker_restart_targets_already_installed_docker_version(self):
+        self.config["allowed_restart_services"].append("containerd.service")
+        self.runner.extra_packages = "docker.io\t29.1.3-0ubuntu1~24.04.1\tinstalled\ncontainerd.io\t2.2.6-1~ubuntu.24.04\tinstalled\n"
+        self.runner.simulation = "Inst containerd.io [2.2.6-1~ubuntu.24.04] (2.2.7-1~ubuntu.24.04 Docker:24.04/noble [arm64])\n"
+        request = self.request()
+        self.assertEqual(request["envelope"]["plan"]["expected_runtime"]["docker_version"], "29.1.3")
 
     def test_invalid_signature_never_mutates(self):
         request = self.request()

@@ -71,7 +71,7 @@ class PlanTests(unittest.TestCase):
     def test_build_binds_current_state_and_limits_lifetime(self):
         plan = self.candidate()
         self.assertEqual(plan["state_sha256"], p.state_sha256(inventory()))
-        self.assertEqual(plan["packages"], p.parse_simulation(SIMULATION))
+        self.assertEqual(plan["packages"], p.parse_simulation(SIMULATION, canonical_architecture=True))
         self.assertLessEqual(plan["expires_at"] - plan["created_at"], 86400)
         changed = inventory()
         changed["collected_at"] = 9999
@@ -129,8 +129,8 @@ class PlanTests(unittest.TestCase):
 
     def critical_inventory(self, name, policy):
         inv = inventory()
-        inv["packages"].append({"name": name, "version": "1.0"})
-        inv["simulation"] = f"Inst {name} [1.0] (2.0 Ubuntu:24.04/noble [arm64])\n"
+        inv["packages"].append({"name": name, "version": "1.0.0"})
+        inv["simulation"] = f"Inst {name} [1.0.0] (2.0.0 Ubuntu:24.04/noble [arm64])\n"
         inv["maintenance_policy"] = policy
         return inv
 
@@ -166,6 +166,25 @@ class PlanTests(unittest.TestCase):
             inv = self.critical_inventory(name, {"allowed_restart_services": [name + ".service"]})
             with self.subTest(name=name):
                 self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], [name + ".service"])
+
+    def test_containerd_package_cannot_decline_its_restart_by_omitting_whitelist_unit(self):
+        inv = self.critical_inventory("containerd.io", {"allowed_restart_services": ["docker.service"]})
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inv, self.sha, now=1000)
+
+    def test_unapproved_conf_only_package_is_rejected(self):
+        with self.assertRaises(p.MaintenanceError):
+            p.parse_simulation(SIMULATION + "Conf pending (1.0 Ubuntu:24.04/noble [arm64])\n")
+
+    def test_conf_target_must_match_its_install_record(self):
+        with self.assertRaises(p.MaintenanceError):
+            p.parse_simulation("Inst example (1.0 Ubuntu:24.04/noble [arm64])\nConf example (2.0 Ubuntu:24.04/noble [arm64])\n")
+
+    def test_package_architecture_cannot_disagree_with_apt_target_metadata(self):
+        inv = inventory()
+        inv["simulation"] = "Inst example:amd64 (1.0 Ubuntu:24.04/noble [arm64])\n"
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inv, self.sha, now=1000)
 
 
 if __name__ == "__main__":

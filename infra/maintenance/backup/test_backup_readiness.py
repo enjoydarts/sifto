@@ -31,11 +31,12 @@ class ReadinessTests(unittest.TestCase):
         self.config = self.etc / "config.json"
         self.original = {"host_id": "database-fixture", "host_role": "database",
                          "database_enabled": False, "allowed_approvers": [],
+                         "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "database"},
                          "trusted_public_key": "preserve", "approved_workflow_sha": "preserve",
                          "other_field": {"nested": [1, 2]}, "backup_readiness": {"old": True}}
         self.write(self.config, json.dumps(self.original))
         self.env = self.etc / "backup.env"
-        self.env_text = ("RESTIC_REPOSITORY=s3:https://" + "a" * 32 + ".r2.cloudflarestorage.com/private-bucket/sifto/database\n"
+        self.env_text = ("RESTIC_REPOSITORY=s3:https://" + "a" * 32 + ".r2.cloudflarestorage.com/sifto-backups-prod/database\n"
                          "RESTIC_PASSWORD=synthetic-independent-password\nAWS_ACCESS_KEY_ID=synthetic-key\n"
                          "AWS_SECRET_ACCESS_KEY=synthetic-secret\nAWS_DEFAULT_REGION=auto\n"
                          "BACKUP_DESTINATION_APPROVED=database\nBACKUP_HOST_ID=database-fixture\n")
@@ -125,7 +126,7 @@ class ReadinessTests(unittest.TestCase):
                          {k: v for k, v in self.original.items() if k != "backup_readiness"})
         proof = updated["backup_readiness"]
         self.assertEqual(proof["backup_id"], self.snapshot)
-        self.assertEqual(proof["offhost_object"], "s3://private-bucket/sifto/database/snapshots/" + self.snapshot)
+        self.assertEqual(proof["offhost_object"], "s3://sifto-backups-prod/database/snapshots/" + self.snapshot)
         self.assertEqual(self.restored, [self.dump.read_bytes()])
         self.assertEqual(self.config.stat().st_mode & 0o777, 0o600)
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -172,12 +173,73 @@ class ReadinessTests(unittest.TestCase):
     def test_unapproved_destination_and_env_code_fail_before_egress(self):
         for text in [self.env_text.replace("APPROVED=database", "APPROVED=pending"),
                      self.env_text + "MALICIOUS=$(touch /tmp/untrusted-env-executed)\n",
-                     self.env_text.replace("private-bucket", "REPLACE_BUCKET")]:
+                     self.env_text.replace("sifto-backups-prod", "REPLACE_BUCKET")]:
             self.write(self.env, text)
             with self.assertRaises(self.m.BackupError):
                 self.run_backup()
             self.assertEqual(self.commands, [])
             self.assert_old()
+
+    def test_destination_without_root_policy_fails_before_backup_or_init_egress(self):
+        self.original.pop("backup_destination")
+        self.write(self.config, json.dumps(self.original))
+        with self.assertRaises(self.m.BackupError):
+            self.run_backup()
+        with patch.object(self.m, "run", self.transport):
+            with self.assertRaises(self.m.BackupError):
+                self.m.initialize("database", create=True)
+        self.assertEqual(self.commands, [])
+        self.assert_old()
+
+    def test_shared_bucket_or_wrong_prefix_is_rejected_even_if_root_approved(self):
+        for bucket, prefix in (("sifto-podcast-prod", "database"), ("other-private-bucket", "database"),
+                               ("sifto-backups-prod", "application"), ("sifto-backups-prod", "database/other")):
+            config = {**self.original, "backup_destination": {"bucket": bucket, "prefix": prefix}}
+            self.write(self.config, json.dumps(config))
+            self.write(self.env, self.env_text.replace("sifto-backups-prod/database", bucket + "/" + prefix))
+            with self.assertRaises(self.m.BackupError):
+                self.run_backup()
+            self.assertEqual(self.commands, [])
+            self.assertEqual(json.loads(self.config.read_text()), config)
+
+    def test_destination_must_match_exact_approved_root_schema_and_repository(self):
+        self.write(self.env, self.env_text.replace("sifto-backups-prod", "other-private-bucket"))
+        for destination in (None, "sifto-backups-prod", {"bucket": "sifto-backups-prod"},
+                            {"bucket": "sifto-backups-prod", "prefix": "database", "host": "unexpected"},
+                            {"bucket": "sifto-backups-prod", "prefix": "database"}):
+            config = {**self.original, "backup_destination": destination}
+            self.write(self.config, json.dumps(config))
+            # The final policy is valid but the env still selects another bucket.
+            with self.assertRaises(self.m.BackupError):
+                self.run_backup()
+            self.assertEqual(self.commands, [])
+            self.assertEqual(json.loads(self.config.read_text()), config)
+
+        self.write(self.config, json.dumps(self.original))
+        for repository in ("sifto-podcast-prod/database", "sifto-backups-prod/application",
+                           "sifto-backups-prod/database/other"):
+            self.write(self.env, self.env_text.replace("sifto-backups-prod/database", repository))
+            with self.assertRaises(self.m.BackupError):
+                self.run_backup()
+            self.assertEqual(self.commands, [])
+            self.assert_old()
+
+    def test_destination_approval_revoked_during_restore_never_publishes_readiness(self):
+        configured = {**self.original, "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "database"}}
+        self.write(self.config, json.dumps(configured))
+        self.write(self.env, self.env_text)
+        def revoke(role, dump, work):
+            current = json.loads(self.config.read_text())
+            current.pop("backup_destination")
+            self.write(self.config, json.dumps(current))
+            return self.restore(role, dump, work)
+        with patch.object(self.m, "run", self.transport), patch.object(self.m, "restore_database", revoke):
+            with self.assertRaises(self.m.BackupError):
+                self.m.backup("database")
+        current = json.loads(self.config.read_text())
+        self.assertNotIn("backup_destination", current)
+        self.assertEqual(current["backup_readiness"], self.original["backup_readiness"])
+        self.assertFalse(list(self.state.glob("evidence/offhost-*.json")))
 
     def test_maintenance_lock_prevents_publication(self):
         with self.m.lock(self.state / "maintenance.lock"):
@@ -357,8 +419,9 @@ class ReadinessTests(unittest.TestCase):
 
     def test_coolify_source_parent_symlink_is_rejected_before_generation(self):
         self.original["host_role"] = "application"
+        self.original["backup_destination"]["prefix"] = "application"
         self.write(self.config, json.dumps(self.original))
-        self.write(self.env, self.env_text.replace("APPROVED=database", "APPROVED=application").replace("/sifto/database", "/sifto/application"))
+        self.write(self.env, self.env_text.replace("APPROVED=database", "APPROVED=application").replace("/database", "/application"))
         linked = self.root / "coolify-source"
         linked.symlink_to(self.sources, target_is_directory=True)
         self.m.COOLIFY_SOURCE = linked
@@ -370,8 +433,9 @@ class ReadinessTests(unittest.TestCase):
 
     def test_controlled_coolify_uid9999_source_layout_allows_generation(self):
         self.original["host_role"] = "application"
+        self.original["backup_destination"]["prefix"] = "application"
         self.write(self.config, json.dumps(self.original))
-        self.write(self.env, self.env_text.replace("APPROVED=database", "APPROVED=application").replace("/sifto/database", "/sifto/application"))
+        self.write(self.env, self.env_text.replace("APPROVED=database", "APPROVED=application").replace("/database", "/application"))
         source = self.root / "coolify-source"
         source.mkdir(mode=0o700)
         for name in ("source", "ssh", "ssl", "proxy"):

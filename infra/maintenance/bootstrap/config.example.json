@@ -7,5 +7,6 @@
   "allowed_approvers": ["REPLACE_WITH_GITHUB_LOGIN"],
   "allowed_restart_services": ["docker.service", "containerd.service", "ssh.service"],
   "monitored_services": ["docker.service", "ssh.service"],
-  "database_enabled": false
+  "database_enabled": false,
+  "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "application"}
 }

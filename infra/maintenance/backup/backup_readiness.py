@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 """Prove an exact encrypted offhost snapshot by retrieving and restoring it.
 
-Activation requires an operator-approved root-only env and initialized repository.
+Activation requires an operator-approved root-only env, matching explicit root
+backup_destination policy and initialized repository in the private backup bucket.
 No operation enables database maintenance or guesses a destination.
 """
 import argparse
@@ -106,6 +107,7 @@ def settings(role):
     protected(STATE, private=True, directory=True)
     protected(COMPOSE)
     config = load_config(role)
+    destination = approved_destination(config, role)
     protected(ENV_FILE, private=True)
     require(ENV_FILE.stat().st_mode & 0o777 == 0o600 and ENV_FILE.stat().st_size <= 16384,
             "backup env must be root 0600 and bounded")
@@ -126,8 +128,19 @@ def settings(role):
             "destination has no matching explicit approval")
     match = REPOSITORY.fullmatch(env["RESTIC_REPOSITORY"])
     require(match and all(p not in ("", ".", "..") for p in match[2].split("/")), "invalid approved R2 destination")
+    require("s3://" + match[1] + "/" + match[2] == destination, "R2 repository does not match root-approved backup destination")
     require(len(env["RESTIC_PASSWORD"]) >= 20, "independent backup password required")
-    return config, raw, "s3://" + match[1] + "/" + match[2]
+    return config, raw, destination
+
+
+def approved_destination(config, role):
+    destination = config.get("backup_destination")
+    # Podcast objects have separate public delivery/retention policies. Even a
+    # root-approved env must never repurpose that shared bucket for recovery.
+    require(type(destination) is dict and set(destination) == {"bucket", "prefix"}
+            and destination == {"bucket": "sifto-backups-prod", "prefix": role}
+            and role in ("application", "database"), "explicit dedicated backup destination approval required")
+    return "s3://" + destination["bucket"] + "/" + destination["prefix"]
 
 
 def run(command, *, env=None, timeout=6 * 3600, limit=2 * 1024 * 1024):
@@ -386,6 +399,8 @@ def publish(role, host_id, proof):
     with lock(STATE / "maintenance.lock"):
         config = load_config(role)
         require(config["host_id"] == host_id, "host changed during proof generation")
+        require(proof["offhost_object"] == approved_destination(config, role) + "/snapshots/" + proof["backup_id"],
+                "backup destination approval changed during proof generation")
         evidence = STATE / "evidence"
         if not evidence.exists():
             evidence.mkdir(mode=0o700)

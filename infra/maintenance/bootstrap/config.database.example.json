@@ -9,5 +9,6 @@
   "monitored_services": ["docker.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
   "database_restart_services": ["postgresql@16-main.service"],
   "pgbouncer_health": {"database": "sifto", "user": "sifto"},
-  "database_enabled": false
+  "database_enabled": false,
+  "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "database"}
 }

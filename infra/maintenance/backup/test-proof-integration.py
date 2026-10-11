@@ -33,9 +33,10 @@ proof.COOLIFY_SOURCE.mkdir(mode=0o700)
 for name in ("source", "ssh", "ssl", "proxy"):
     (proof.COOLIFY_SOURCE / name).mkdir(mode=0o700)
 proof.CONFIG.write_text(json.dumps({"host_id": "synthetic", "host_role": "database", "database_enabled": False,
+                                    "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "database"},
                                     "allowed_approvers": [], "operator_field": "preserved"}))
 proof.CONFIG.chmod(0o600)
-proof.ENV_FILE.write_text("RESTIC_REPOSITORY=s3:https://" + "a" * 32 + ".r2.cloudflarestorage.com/fixture-bucket/sifto/database\n"
+proof.ENV_FILE.write_text("RESTIC_REPOSITORY=s3:https://" + "a" * 32 + ".r2.cloudflarestorage.com/sifto-backups-prod/database\n"
                           "RESTIC_PASSWORD=synthetic-independent-password\nAWS_ACCESS_KEY_ID=synthetic\nAWS_SECRET_ACCESS_KEY=synthetic\n"
                           "AWS_DEFAULT_REGION=auto\nBACKUP_DESTINATION_APPROVED=database\nBACKUP_HOST_ID=synthetic\n")
 proof.ENV_FILE.chmod(0o600)
@@ -97,13 +98,15 @@ updated = json.loads(proof.CONFIG.read_text())
 assert updated["database_enabled"] is False and updated["allowed_approvers"] == []
 assert updated["backup_readiness"]["offhost_sha256"] == retrieved_hashes[0] == proof.digest(dump)
 assert updated["operator_field"] == "preserved"
+assert updated["backup_destination"] == {"bucket": "sifto-backups-prod", "prefix": "database"}
 snapshot = updated["backup_readiness"]["backup_id"]
 assert len(snapshot) == 64
 
 # Prove the application flow from real retrieved dump + configuration archive.
 proof.CONFIG.write_text(json.dumps({"host_id": "synthetic", "host_role": "application", "database_enabled": False,
+                                    "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "application"},
                                     "allowed_approvers": [], "operator_field": "preserved"}))
-proof.ENV_FILE.write_text(proof.ENV_FILE.read_text().replace("/sifto/database", "/sifto/application").replace("APPROVED=database", "APPROVED=application"))
+proof.ENV_FILE.write_text(proof.ENV_FILE.read_text().replace("/database", "/application").replace("APPROVED=database", "APPROVED=application"))
 backups = state / "backups"
 backups.mkdir(mode=0o700)
 (backups / "coolify.dump").write_bytes(archive)
@@ -123,6 +126,7 @@ with patch.object(proof, "run", local_transport), patch.object(proof, "restore_d
     proof.backup("application")
 app = json.loads(proof.CONFIG.read_text())
 assert app["database_enabled"] is False and app["allowed_approvers"] == []
+assert app["backup_destination"] == {"bucket": "sifto-backups-prod", "prefix": "application"}
 assert set(app["backup_readiness"]["retrieved_file_sha256"]) == {"coolify.dump", "coolify-config.tar.gz", "created_at"}
 assert app["backup_readiness"]["coolify_config_operator_restore_required"] is True
 

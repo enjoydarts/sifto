@@ -158,3 +158,38 @@ maintenance-syntax:
 	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T -e ANSIBLE_LOCAL_TEMP=/tmp/ansible -e ANSIBLE_HOME=/tmp/ansible-home test ansible-playbook -i localhost, --syntax-check playbooks/scan.yml playbooks/apply.yml
 	docker compose -f infra/maintenance/compose.yml --profile test run --rm -T test python -B -c 'import ast, pathlib; [ast.parse(p.read_text()) for p in pathlib.Path("maintenance").glob("*.py")]'
 	sh -n infra/maintenance/run-controller.sh
+
+# Public PR checks use an isolated project with no .env, host ports, or secrets.
+DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
+.PHONY: dependency-check dependency-api dependency-worker dependency-web dependency-contract dependency-renovate-validate dependency-security dependency-inventory dependency-clean
+dependency-api:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T api
+
+dependency-worker:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps worker
+
+dependency-web:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps web
+
+dependency-contract:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
+	sh -n infra/dependency-ci/init-db.sh
+
+dependency-renovate-validate:
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
+
+dependency-security:
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps trivy
+
+dependency-inventory:
+	mkdir -p .dependency-inventory/api .dependency-inventory/worker .dependency-inventory/web .dependency-inventory/maintenance .dependency-inventory/audio-concat
+	cp api/go.mod api/go.sum .dependency-inventory/api/
+	cp worker/requirements.txt .dependency-inventory/worker/
+	cp web/package-lock.json .dependency-inventory/web/
+	cp infra/maintenance/requirements.txt .dependency-inventory/maintenance/
+	cp infra/audio-concat/requirements.txt .dependency-inventory/audio-concat/
+
+dependency-check: dependency-contract dependency-renovate-validate dependency-api dependency-worker dependency-web maintenance-test maintenance-syntax
+
+dependency-clean:
+	$(DEPENDENCY_COMPOSE) down --volumes --remove-orphans

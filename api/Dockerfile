@@ -1,4 +1,4 @@
-FROM golang:alpine AS builder
+FROM golang:1.27.1-alpine AS builder
 ARG APP_COMMIT_SHA=unknown
 
 WORKDIR /src
@@ -9,14 +9,14 @@ WORKDIR /src/api
 RUN go mod download && \
     go build -o /out/server ./cmd/server
 
-FROM golang:alpine AS dev
+FROM golang:1.27.1-alpine AS dev
 
 WORKDIR /app
 
 COPY api/ ./
 
 RUN go mod download && \
-    go install github.com/air-verse/air@latest
+    go install github.com/air-verse/air@v1.67.4
 
 ENV LLM_CATALOG_PATH=/shared/llm_catalog.json
 

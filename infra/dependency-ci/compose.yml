@@ -1,0 +1,92 @@
+name: sifto-dependency-ci
+services:
+  postgres:
+    build:
+      context: ../..
+      dockerfile: infra/dependency-ci/postgres.Dockerfile
+    environment:
+      POSTGRES_DB: dependency_ci
+      POSTGRES_USER: dependency_ci
+      POSTGRES_PASSWORD: dependency-ci-dummy
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U dependency_ci -d dependency_ci']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  api:
+    build:
+      context: ../..
+      dockerfile: api/Dockerfile
+      target: dev
+    environment:
+      LLM_CATALOG_PATH: /shared/llm_catalog.json
+      TZ: Asia/Tokyo
+      DATABASE_URL: postgres://dependency_ci:dependency-ci-dummy@postgres:5432/dependency_ci?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      USER_SECRET_ENCRYPTION_KEY: dependency-ci-dummy-key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../shared:/shared:ro
+    # DB integration packages share fixtures: serialize packages to avoid races.
+    command: [go, test, -p, '1', ./...]
+  worker:
+    build:
+      context: ../..
+      dockerfile: worker/Dockerfile
+    environment:
+      LLM_CATALOG_PATH: /app/shared/llm_catalog.json
+      TZ: Asia/Tokyo
+    volumes:
+      - ../../worker/tests:/app/tests:ro
+      - ../../shared:/shared:ro
+    command: [sh, -ec, 'python -m compileall -q app && python -m pytest tests/ -q']
+  web:
+    build:
+      context: ../../web
+      dockerfile: ../infra/dependency-ci/web.Dockerfile
+    environment:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_API_URL: http://api.invalid:8080
+      NEXT_PUBLIC_ALLOW_DEV_AUTH_BYPASS: 'true'
+      ALLOW_DEV_AUTH_BYPASS: 'true'
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_bWFpbnRlbmFuY2UtY2kuZXhhbXBsZS5jb20k
+      # RootLayout enables ClerkProvider only when both dummy keys are present.
+      CLERK_SECRET_KEY: sk_test_dependency_ci_dummy_not_a_real_clerk_secret
+      NODE_OPTIONS: --max-old-space-size=6144
+    command: [sh, -ec, 'npm run lint && npm run build']
+  contract:
+    build: ../maintenance
+    volumes:
+      - ../..:/repository:ro
+    command: [python, -B, /repository/infra/dependency-ci/test_contract.py]
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
+  renovate-validator:
+    image: ghcr.io/renovatebot/renovate:44.149.3
+    entrypoint: [renovate-config-validator]
+    command: [--strict, --no-global, /repository/renovate.json]
+    volumes:
+      - ../../renovate.json:/repository/renovate.json:ro
+  trivy:
+    image: aquasec/trivy:0.75.0
+    command: [fs, --scanners, vuln, --severity, 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL', --exit-code, '1', /inventory]
+    volumes:
+      - ../../api/go.mod:/inventory/api/go.mod:ro
+      - ../../api/go.sum:/inventory/api/go.sum:ro
+      - ../../worker/requirements.txt:/inventory/worker/requirements.txt:ro
+      - ../../web/package-lock.json:/inventory/web/package-lock.json:ro
+      - ../maintenance/requirements.txt:/inventory/maintenance/requirements.txt:ro
+      - ../audio-concat/requirements.txt:/inventory/audio-concat/requirements.txt:ro

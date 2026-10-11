@@ -1,0 +1,37 @@
+name: Renovate
+on:
+  schedule:
+    - cron: '20 0 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+jobs:
+  renovate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      # Enable "Allow GitHub Actions to create and approve pull requests".
+      # Bot-created PR checks may require manual approval. Actions updates are
+      # maintained manually: GITHUB_TOKEN cannot edit workflow files.
+      - name: Propose dependency updates for human review
+        uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
+        with:
+          token: ${{ github.token }}
+          renovate-version: '44.149.3'
+        env:
+          RENOVATE_PLATFORM: github
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_AUTODISCOVER: 'false'
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_GIT_AUTHOR: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          RENOVATE_USERNAME: 'github-actions[bot]'

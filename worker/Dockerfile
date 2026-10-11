@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.15-slim
 
 WORKDIR /app
 
@@ -7,9 +7,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY worker/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -U yt-dlp \
-    && pip install --no-cache-dir bgutil-ytdlp-pot-provider==1.3.1
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY worker/app/ ./app/
 COPY shared/ ./shared/

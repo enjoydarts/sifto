@@ -20,7 +20,11 @@ os.chmod(state, 0o700)
 proof.STATE = state
 proof.CONFIG = state / "config.json"
 proof.ENV_FILE = state / "approved.env"
-proof.COMPOSE = Path("/fixture/compose.yml")
+# Preserve production's root-only deployment checks on Linux UID1001 checkout
+# mounts too. External transport below uses the real encrypted local repository.
+proof.COMPOSE = state / "compose.yml"
+proof.COMPOSE.write_bytes(Path("/fixture/compose.yml").read_bytes())
+proof.COMPOSE.chmod(0o600)
 proof.DB_SOURCES = state / "native-dumps"
 proof.DB_SOURCES.mkdir(mode=0o700)
 proof.SOURCE_UID = 0

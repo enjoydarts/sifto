@@ -43,9 +43,9 @@ class ReadinessTests(unittest.TestCase):
         self.dump = self.sources / "sifto-20261011-030000.dump.gz"
         self.write(self.dump, "synthetic frozen dump bytes")
         for key, value in {"STATE": self.state, "CONFIG": self.config, "ENV_FILE": self.env,
-                           "DB_SOURCES": self.sources, "SOURCE_UID": 0,
-                           "COMPOSE": Path(__file__).with_name("compose.yml")}.items():
+                           "DB_SOURCES": self.sources, "SOURCE_UID": 0}.items():
             setattr(self.m, key, value)
+        self.configure_compose(Path(__file__).with_name("compose.yml"))
         self.commands = []
         self.snapshot = "b" * 64
         self.corrupt = False
@@ -56,6 +56,42 @@ class ReadinessTests(unittest.TestCase):
     def write(self, path, value):
         path.write_text(value)
         path.chmod(0o600)
+
+    def configure_compose(self, checkout_source):
+        # Linux CI bind mounts retain checkout UID1001. Install only the
+        # synthetic Compose fixture under root-owned private state, as an
+        # operator would install the real protected file on a native host.
+        target = self.state / "compose.yml"
+        target.write_bytes(checkout_source.read_bytes())
+        target.chmod(0o600)
+        self.m.COMPOSE = target
+
+    def foreign_checkout_compose(self):
+        checkout = self.root / "uid1001-checkout"
+        checkout.mkdir(mode=0o755)
+        source = checkout / "compose.yml"
+        source.write_bytes(Path(__file__).with_name("compose.yml").read_bytes())
+        source.chmod(0o644)
+        os.chown(source, 1001, 1001)
+        os.chown(checkout, 1001, 1001)
+        return source
+
+    def test_protected_fixture_allows_checkout_owned_by_uid1001(self):
+        self.configure_compose(self.foreign_checkout_compose())
+        try:
+            self.run_backup()
+        except self.m.BackupError as exc:
+            self.fail("fixture must use a root-protected Compose copy: " + str(exc))
+        self.assertEqual(self.m.COMPOSE.stat().st_uid, 0)
+        self.assertEqual(self.m.COMPOSE.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.m.COMPOSE.parent, self.state)
+
+    def test_unprotected_checkout_compose_still_rejected_before_egress(self):
+        self.m.COMPOSE = self.foreign_checkout_compose()
+        with self.assertRaisesRegex(self.m.BackupError, "unprotected path ancestor"):
+            self.run_backup()
+        self.assertEqual(self.commands, [])
+        self.assert_old()
 
     def transport(self, command, **kwargs):
         self.commands.append(command)

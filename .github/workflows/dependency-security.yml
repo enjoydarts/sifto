@@ -1,0 +1,48 @@
+name: Dependency Security Advisory
+on:
+  schedule:
+    - cron: '40 0 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dependency-security
+  cancel-in-progress: false
+jobs:
+  # Keep this advisory inventory separate from required functional PR checks.
+  # Findings fail the job and need human triage; no baseline CVEs are suppressed.
+  inventory:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Stage public dependency manifests only
+        run: make dependency-inventory
+      - name: Scan all known package vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: 'v0.75.0'
+          scan-type: fs
+          scan-ref: .dependency-inventory
+          scanners: vuln
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: table
+          output: .dependency-vulnerabilities.txt
+          cache: false
+      - name: Publish package and CVE inventory in summary
+        if: always()
+        run: |
+          printf '%s\n' '## Dependency vulnerability inventory' 'Findings require human review. This advisory is separate from functional PR checks.' '```text' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f .dependency-vulnerabilities.txt ]; then
+            cat .dependency-vulnerabilities.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' 'The scanner did not produce a report. Inspect the failed scan step.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"

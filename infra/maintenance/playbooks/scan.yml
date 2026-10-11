@@ -1,0 +1,10 @@
+- name: Collect with dedicated fixed-command SSH gateway
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run private scanner
+      ansible.builtin.command:
+        argv: [python, -B, -m, maintenance.cli, scan]
+      no_log: true
+      changed_when: false

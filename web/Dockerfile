@@ -1,25 +1,25 @@
 # ── Dev stage ───────────────────────────────────────────────
-FROM node:22-alpine AS dev
+FROM node:22.23.3-alpine AS dev
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 EXPOSE 3000
 ENV WATCHPACK_POLLING=true
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 # ── Production build ─────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:22.23.3-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-FROM node:22-alpine AS builder
+FROM node:22.23.3-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22.23.3-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/public ./public

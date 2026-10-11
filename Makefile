@@ -149,3 +149,58 @@ test-worker:
 	$(COMPOSE) exec -T worker sh -lc 'python -m pytest tests/ -v'
 
 check-worker-full: check-worker test-worker
+
+.PHONY: maintenance-test maintenance-syntax maintenance-backup-unit-test
+maintenance-test: maintenance-backup-unit-test
+	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T test
+
+maintenance-backup-unit-test:
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-unit -f infra/maintenance/compose.yml --profile test run --build --rm -T test python -B backup/test_backup_readiness.py
+
+maintenance-syntax:
+	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T -e ANSIBLE_LOCAL_TEMP=/tmp/ansible -e ANSIBLE_HOME=/tmp/ansible-home test ansible-playbook -i localhost, --syntax-check playbooks/scan.yml playbooks/apply.yml
+	docker compose -f infra/maintenance/compose.yml --profile test run --rm -T test python -B -c 'import ast, pathlib; [ast.parse(p.read_text()) for p in pathlib.Path("maintenance").glob("*.py")]'
+	sh -n infra/maintenance/run-controller.sh
+
+.PHONY: maintenance-backup-test
+maintenance-backup-test: maintenance-backup-unit-test
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
+	PROOF_PG_VERSION=15.19 docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures-pg15 -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T script-test
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T lock-test
+
+# Public PR checks use an isolated project with no .env, host ports, or secrets.
+DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
+.PHONY: dependency-check dependency-api dependency-worker dependency-web dependency-contract dependency-renovate-validate dependency-security dependency-inventory dependency-clean
+dependency-api:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T api
+
+dependency-worker:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps worker
+
+dependency-web:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps web
+
+dependency-contract:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
+	sh -n infra/dependency-ci/init-db.sh
+
+dependency-renovate-validate:
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-status-test
+
+dependency-security:
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps trivy
+
+dependency-inventory:
+	mkdir -p .dependency-inventory/api .dependency-inventory/worker .dependency-inventory/web .dependency-inventory/maintenance .dependency-inventory/audio-concat
+	cp api/go.mod api/go.sum .dependency-inventory/api/
+	cp worker/requirements.txt .dependency-inventory/worker/
+	cp web/package-lock.json .dependency-inventory/web/
+	cp infra/maintenance/requirements.txt .dependency-inventory/maintenance/
+	cp infra/audio-concat/requirements.txt .dependency-inventory/audio-concat/
+
+dependency-check: dependency-contract dependency-renovate-validate dependency-api dependency-worker dependency-web maintenance-test maintenance-syntax
+
+dependency-clean:
+	$(DEPENDENCY_COMPOSE) down --volumes --remove-orphans

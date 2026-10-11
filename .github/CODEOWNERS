@@ -1,0 +1,11 @@
+# Branch protection must require approval from this owner.
+/.github/** @enjoydarts
+/infra/** @enjoydarts
+**/Dockerfile* @enjoydarts
+**/requirements*.txt @enjoydarts
+**/package*.json @enjoydarts
+**/go.mod @enjoydarts
+**/go.sum @enjoydarts
+/docker-compose*.yml @enjoydarts
+/Makefile @enjoydarts
+/renovate.json @enjoydarts

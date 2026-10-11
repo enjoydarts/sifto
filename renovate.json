@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": false,
+  "branchPrefix": "renovate-ci/",
+  "automerge": false,
+  "platformAutomerge": false,
+  "minimumReleaseAge": "7 days",
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "pinDigests": true,
+  "enabledManagers": ["dockerfile", "docker-compose", "gomod", "pip_requirements", "npm", "custom.regex"],
+  "ignorePaths": ["shared/llm_catalog.json", "**/node_modules/**", "**/.next/**", ".worktrees/**"],
+  "packageRules": [
+    {
+      "matchManagers": ["npm", "gomod", "pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "{{manager}} minor and patch dependencies"
+    },
+    {
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "Docker image digests"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^api\\/Dockerfile$/"],
+      "matchStrings": ["go install github\\.com/air-verse/air@(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"],
+      "depNameTemplate": "github.com/air-verse/air",
+      "datasourceTemplate": "go",
+      "versioningTemplate": "semver"
+    }
+  ]
+}

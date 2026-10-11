@@ -1,0 +1,41 @@
+services:
+  test:
+    build: .
+    profiles: [test]
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+      - ../..:/repository:ro
+    command: [python, -B, -m, unittest, discover, -s, tests, -v]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /opt
+      - /etc/sifto-maintenance:mode=0755
+      - /var/lib/sifto-maintenance:mode=0700
+  controller:
+    build: .
+    profiles: [controller]
+    working_dir: /src
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ${MAINTENANCE_SECRET_DIR:-/nonexistent-maintenance-secrets}:/secrets:ro
+      - ${MAINTENANCE_WORK_DIR:-/nonexistent-maintenance-work}:/private
+    tmpfs:
+      - /tmp:mode=0700
+    environment:
+      GITHUB_REF:
+      GITHUB_RUN_ID:
+      GITHUB_RUN_ATTEMPT:
+      GH_TOKEN:
+      MAINTENANCE_EXECUTOR_SHA:
+      MAINTENANCE_CHECKED_OUT_SHA:
+      MAINTENANCE_PIPELINE_SHA:
+      MAINTENANCE_OPS_REPO:
+      MAINTENANCE_ALLOWED_APPROVERS:
+      MAINTENANCE_AI_MODEL:
+      ANSIBLE_LOCAL_TEMP: /tmp/ansible
+      ANSIBLE_HOME: /tmp/ansible-home

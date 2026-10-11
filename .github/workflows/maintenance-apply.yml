@@ -1,0 +1,153 @@
+name: Maintenance Approve and Apply
+on:
+  workflow_dispatch:
+    inputs:
+      private_commit:
+        description: Immutable private Git commit
+        required: true
+        type: string
+      plan_id:
+        description: Plan UUID
+        required: true
+        type: string
+      plan_sha256:
+        description: SHA256 of exact canonical private plan
+        required: true
+        type: string
+      executor_sha:
+        description: Root-approved executor source commit
+        required: true
+        type: string
+      dry_run:
+        description: Human-gated host preflight without consuming or updating
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  MAINTENANCE_EXECUTOR_SHA: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+  MAINTENANCE_OPS_REPO: ${{ vars.MAINTENANCE_OPS_REPO }}
+  MAINTENANCE_PIPELINE_SHA: ${{ github.sha }}
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Validate immutable private plan before native gate
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          MAINTENANCE_OPS_READ_KEY: ${{ secrets.MAINTENANCE_OPS_READ_KEY }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-controller.sh prepare
+  approve:
+    if: github.ref == 'refs/heads/main'
+    needs: prepare
+    environment: production-maintenance
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      approval_commit: ${{ steps.authorize.outputs.approval_commit }}
+      approval_sha256: ${{ steps.authorize.outputs.approval_sha256 }}
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Sign only after verifying actual native reviewer history
+        id: authorize
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_ALLOWED_APPROVERS: ${{ vars.MAINTENANCE_ALLOWED_APPROVERS }}
+          MAINTENANCE_APPROVAL_PRIVATE_KEY: ${{ secrets.MAINTENANCE_APPROVAL_PRIVATE_KEY }}
+          MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-controller.sh authorize
+  execute:
+    if: github.ref == 'refs/heads/main'
+    needs: approve
+    environment: maintenance-executor
+    runs-on: ubuntu-26.04
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Execute exactly one signed plan through controller-local Ansible
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_APPROVAL_COMMIT: ${{ needs.approve.outputs.approval_commit }}
+          INPUT_APPROVAL_SHA256: ${{ needs.approve.outputs.approval_sha256 }}
+          MAINTENANCE_APPLY_SSH_KEY: ${{ secrets.MAINTENANCE_APPLY_SSH_KEY }}
+          MAINTENANCE_OPS_READ_KEY: ${{ secrets.MAINTENANCE_OPS_READ_KEY }}
+          MAINTENANCE_HOSTS_JSON: ${{ secrets.MAINTENANCE_HOSTS_JSON }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-controller.sh execute
+  audit:
+    if: always() && github.ref == 'refs/heads/main'
+    needs: [prepare, approve, execute]
+    environment: maintenance-audit
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Persist private outcome even when preflight fails
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_APPROVAL_COMMIT: ${{ needs.approve.outputs.approval_commit }}
+          INPUT_APPROVAL_SHA256: ${{ needs.approve.outputs.approval_sha256 }}
+          NEEDS_PREPARE_RESULT: ${{ needs.prepare.result }}
+          NEEDS_APPROVE_RESULT: ${{ needs.approve.result }}
+          NEEDS_EXECUTE_RESULT: ${{ needs.execute.result }}
+          MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-controller.sh audit

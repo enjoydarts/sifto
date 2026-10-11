@@ -1,0 +1,60 @@
+name: Dependency Check
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dependency-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  api:
+    name: Dependency API
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: make dependency-api
+      - if: always()
+        run: make dependency-clean
+  worker:
+    name: Dependency Worker
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: make dependency-worker
+      - if: always()
+        run: make dependency-clean
+  web:
+    name: Dependency Web
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: make dependency-web
+      - if: always()
+        run: make dependency-clean
+  policy:
+    name: Dependency Policy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: |
+          make dependency-contract
+          make dependency-renovate-validate
+          make maintenance-test
+          make maintenance-syntax
+      - if: always()
+        run: make dependency-clean

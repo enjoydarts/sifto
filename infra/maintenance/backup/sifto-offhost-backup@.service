@@ -1,0 +1,14 @@
+[Unit]
+Description=Sifto encrypted offhost backup (%i)
+ConditionPathExists=/etc/sifto-maintenance/backup.env
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/bin/bash /opt/sifto-maintenance/backup/run-backup.sh %i
+TimeoutStartSec=infinity
+Nice=10
+IOSchedulingClass=idle

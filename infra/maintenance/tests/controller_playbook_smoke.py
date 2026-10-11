@@ -1,6 +1,7 @@
 """Exercise real controller playbooks with no credentials or external network."""
 import os
 from pathlib import Path
+import pwd
 import subprocess
 
 
@@ -10,7 +11,20 @@ expected = (
 )
 summary = Path("/private/summary.md")
 assert os.environ.get("GITHUB_REF", "") == "", "fixture must reject before external operations"
-assert not any(Path("/secrets").iterdir()), "fixture secrets must be empty"
+files = {path.name for path in Path("/secrets").iterdir()}
+assert files in (set(), {"permission-probe"}), "fixture must contain no credentials"
+if files:
+    probe = Path("/secrets/permission-probe")
+    assert probe.read_bytes() == b"fixture-only\n", "private fixture file must be readable"
+    assert probe.stat().st_uid == 1001 and probe.stat().st_mode & 0o777 == 0o600
+    for directory in (Path("/secrets"), Path("/private")):
+        assert directory.stat().st_uid == 1001 and directory.stat().st_mode & 0o777 == 0o700
+ssh = subprocess.run(
+    ["ssh", "-G", "-F", "/dev/null", "controller-fixture.invalid"],
+    capture_output=True, timeout=10,
+)
+assert ssh.returncode == 0, "controller UID must support OpenSSH configuration without networking"
+assert pwd.getpwuid(os.getuid()).pw_uid == os.getuid()
 
 for operation in ("scan", "apply"):
     summary.unlink(missing_ok=True)
@@ -25,8 +39,9 @@ for operation in ("scan", "apply"):
         assert result.returncode == 2, f"{operation}: expected safe configuration rejection"
         assert summary.exists(), f"{operation}: CLI did not reach configuration"
         assert summary.read_text() == expected, f"{operation}: unexpected CLI summary"
+        assert summary.stat().st_mode & 0o777 == 0o600, f"{operation}: summary must remain private"
     finally:
-        # Delete root-owned 0600 output inside the container, including on failure,
+        # Delete private 0600 output inside the container, including on failure,
         # so an unprivileged CI runner can remove its temporary fixture directory.
         summary.unlink(missing_ok=True)
     print(f"{operation}: real CLI reached configuration in read-only controller")

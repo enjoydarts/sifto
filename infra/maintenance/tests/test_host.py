@@ -8,9 +8,14 @@ import multiprocessing
 import shutil
 import subprocess
 import sys
+import importlib.util
+import marshal
+import struct
+import os
 from unittest.mock import patch
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 from maintenance import plan as p
 from test_plan import SIMULATION
 
@@ -106,7 +111,8 @@ class HostTests(unittest.TestCase):
                        "allowed_approvers": ["human"],
                        "host_role": "application",
                        "health_wait_seconds": 0,
-                       "allowed_restart_services": ["docker.service"], "database_enabled": False}
+                       "allowed_restart_services": ["docker.service", "postgresql@16-main.service"],
+                       "database_restart_services": ["postgresql@16-main.service"], "database_enabled": False}
         self.agent = h.HostAgent(self.config, self.runner, clock=lambda: 1000,
                                  read_file=self.read_file, lock_probe=lambda: [])
 
@@ -144,7 +150,9 @@ class HostTests(unittest.TestCase):
         inventory = self.agent.run("scan", {})
         self.assertIn("maintenance_policy", inventory)
         self.assertEqual(inventory["maintenance_policy"], {"host_role": "database", "database_enabled": False,
-                                                         "backup_ready": True})
+                                                         "backup_ready": True,
+                                                         "allowed_restart_services": self.config["allowed_restart_services"],
+                                                         "database_restart_services": self.config["database_restart_services"]})
         self.config["backup_readiness"]["offhost_verified_at"] = -90000
         self.assertFalse(self.agent.run("scan", {})["maintenance_policy"]["backup_ready"])
 
@@ -340,6 +348,60 @@ class HostTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-I", str(script), "scan-gateway"], capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(marker.exists(), "untrusted Python package executed before ownership check")
+
+    def install_entrypoint_fixture(self):
+        installed = Path("/opt/sifto-maintenance")
+        installed.mkdir(mode=0o755, exist_ok=True)
+        self.addCleanup(shutil.rmtree, installed)
+        source = Path(__file__).parents[1]
+        shutil.copyfile(source / "host_agent.py", installed / "host_agent.py")
+        shutil.copytree(source / "maintenance", installed / "maintenance", ignore=shutil.ignore_patterns("__pycache__"))
+        state = Path("/var/lib/sifto-maintenance")
+        (state / "plans").mkdir(mode=0o700, exist_ok=True)
+        (state / "maintenance.lock").touch(mode=0o600)
+        public_key = self.key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        config = {**self.config, "state_path": str(state), "trusted_public_key": __import__("base64").b64encode(public_key).decode()}
+        config_path = Path("/etc/sifto-maintenance/config.json")
+        config_path.write_bytes(p.canonical_json(config))
+        config_path.chmod(0o600)
+        return installed
+
+    def run_installed_entrypoint(self, installed):
+        request = {"dry_run": True, "workflow_sha": self.config["approved_workflow_sha"], "envelope": {}}
+        return subprocess.run([sys.executable, "-I", str(installed / "host_agent.py"), "apply-gateway"],
+                              input=p.canonical_json(request), capture_output=True,
+                              env={**os.environ, "SSH_ORIGINAL_COMMAND": "apply", "PYTHONDONTWRITEBYTECODE": "1"})
+
+    def test_real_isolated_entrypoint_does_not_create_python_caches(self):
+        installed = self.install_entrypoint_fixture()
+        result = self.run_installed_entrypoint(installed)
+        self.assertIn(b"invalid envelope", result.stderr)
+        self.assertEqual(list(installed.rglob("*.pyc")), [], "first dry-run wrote Python bytecode")
+
+    def test_real_isolated_entrypoint_bypasses_timestamp_valid_malicious_cache(self):
+        installed = self.install_entrypoint_fixture()
+        host_source = installed / "maintenance" / "host.py"
+        marker = self.root / "malicious-cache-executed"
+        hostile_code = compile(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n" + host_source.read_text(),
+                               str(host_source), "exec")
+        source_stat = host_source.stat()
+        cache = Path(importlib.util.cache_from_source(str(host_source)))
+        cache.parent.mkdir(mode=0o777)
+        cache.parent.chmod(0o777)
+        cache.write_bytes(importlib.util.MAGIC_NUMBER + struct.pack("<III", 0, int(source_stat.st_mtime), source_stat.st_size)
+                          + marshal.dumps(hostile_code))
+        cache.chmod(0o666)
+        result = self.run_installed_entrypoint(installed)
+        self.assertIn(b"invalid envelope", result.stderr)
+        self.assertFalse(marker.exists(), "unchecked cached bytecode executed as root")
+
+    def test_signed_docker_plan_missing_critical_restart_unit_is_denied_before_mutation(self):
+        self.runner.extra_packages = "docker-ce\t5:28.0.0-1~ubuntu.24.04~noble\tinstalled\n"
+        self.runner.simulation = "Inst docker-ce [5:28.0.0-1~ubuntu.24.04~noble] (5:28.1.1-1~ubuntu.24.04~noble Docker:24.04/noble [arm64])\n"
+        request = self.request(lambda plan: plan.update(restart_services=[]))
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
 
     def test_expiry_during_simulation_never_mutates_or_consumes(self):
         request = self.request()

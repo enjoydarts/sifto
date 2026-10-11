@@ -7,6 +7,11 @@ if not sys.flags.isolated:
     sys.stderr.write("maintenance agent requires isolated Python (-I)\n")
     raise SystemExit(1)
 
+# -I ignores PYTHONDONTWRITEBYTECODE and still reads timestamp-valid caches.
+# A non-directory prefix prevents cache reads; disabling writes keeps dry-run pure.
+sys.dont_write_bytecode = True
+sys.pycache_prefix = "/dev/null"
+
 import os
 from pathlib import Path
 import stat

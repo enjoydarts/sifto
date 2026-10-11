@@ -8,4 +8,8 @@ services:
     command: [python, -B, -m, unittest, discover, -s, tests, -v]
     network_mode: none
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs:
+      - /tmp
+      - /opt
+      - /etc/sifto-maintenance:mode=0755
+      - /var/lib/sifto-maintenance:mode=0700

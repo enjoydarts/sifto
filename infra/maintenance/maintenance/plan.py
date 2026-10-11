@@ -23,7 +23,7 @@ HASH = re.compile(r"[0-9a-f]{64}\Z")
 HOST = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 PLAN_FIELDS = {"schema_version", "plan_id", "host_id", "created_at", "expires_at",
                "workflow_sha", "state_sha256", "packages", "allow_service_restarts",
-               "allow_reboot", "restart_services", "expected_runtime"}
+               "allow_reboot", "restart_services", "restart_scope", "expected_runtime"}
 APPROVAL_FIELDS = {"plan_sha256", "run_id", "approved_by", "approved_at", "expires_at", "workflow_sha"}
 
 
@@ -135,7 +135,9 @@ def validate_plan(plan):
     require(action in ("apt_upgrade", "reboot"), "invalid action")
     if action == "reboot":
         require(plan["allow_reboot"] and not plan["packages"] and not plan["restart_services"], "invalid reboot plan")
+        require(plan["restart_scope"] == "none", "reboot cannot approve package-script restarts")
     else:
+        require(plan["restart_scope"] == "package_scripts_and_listed_services", "apt maintainer-script restart scope must be explicit")
         require(not plan["packages"] or plan["allow_service_restarts"], "apt scripts require service restart approval")
         require(not plan["allow_reboot"], "reboot requires a separate explicit reboot plan")
     canonical_json(plan)
@@ -161,18 +163,52 @@ def expected_runtime(inventory, packages, action):
     return expected
 
 
+def critical_restart_services(packages, policy):
+    """Minimum explicit post-update restarts, separate from package-script consent.
+
+    Apt maintainer scripts can restart other host services. This list constrains
+    only the agent's explicit systemctl operations; it does not sandbox scripts.
+    """
+    require(type(policy) is dict, "invalid maintenance policy")
+    allowed = policy.get("allowed_restart_services", [])
+    database_units = policy.get("database_restart_services", [])
+    for units in (allowed, database_units):
+        require(type(units) is list and len(units) <= 64 and all(matches(SERVICE, x) for x in units),
+                "invalid configured restart scope")
+    names = {x["name"].split(":")[0] for x in packages}
+    required = set()
+    if names & {"docker-ce", "docker.io", "moby-engine", "containerd", "containerd.io"}:
+        required.add("docker.service")
+        if "containerd.service" in allowed:
+            required.add("containerd.service")
+    postgres_change = "postgresql-common" in names or any(re.match(r"postgresql-\d+(?:-|$)", name) for name in names)
+    library_change = policy.get("host_role") == "database" and any(
+        name.startswith("lib") or name in ("openssl", "zlib1g") for name in names)
+    if postgres_change or library_change:
+        require(database_units and all(re.fullmatch(r"postgresql(?:@[A-Za-z0-9_.-]+)?\.service", unit) for unit in database_units),
+                "native database restart units must be configured explicitly")
+        required.update(database_units)
+    for package, unit in (("pgbouncer", "pgbouncer.service"), ("pgpool2", "pgpool2.service")):
+        if package in names:
+            required.add(unit)
+    require(required <= set(allowed), "critical service restart is not in root whitelist")
+    return sorted(required)
+
+
 def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboot=False, *, now=None, action="apt_upgrade"):
     now = int(time.time()) if now is None else now
     require(inventory["platform"] == {"id": "ubuntu", "version": "24.04", "architecture": "arm64"}, "unsupported platform")
     require(action != "apt_upgrade" or inventory.get("simulation_available", True) is True,
             "update availability is unknown; no upgrade plan can be built")
     packages = normalize_closure(inventory["simulation"], inventory["packages"]) if action == "apt_upgrade" else []
+    restart_services = critical_restart_services(packages, inventory.get("maintenance_policy", {})) if action == "apt_upgrade" else []
     plan = {"schema_version": 1, "plan_id": str(uuid.uuid4()), "host_id": inventory["host_id"],
             "created_at": now, "expires_at": now + 86400, "workflow_sha": workflow_sha,
             "state_sha256": state_sha256(inventory),
             "packages": packages, "expected_runtime": expected_runtime(inventory, packages, action),
             "allow_service_restarts": allow_service_restarts, "allow_reboot": allow_reboot,
-            "restart_services": [], "action": action}
+            "restart_services": restart_services,
+            "restart_scope": "package_scripts_and_listed_services" if action == "apt_upgrade" else "none", "action": action}
     return validate_plan(plan)
 
 

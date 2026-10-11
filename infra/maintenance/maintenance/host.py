@@ -5,7 +5,8 @@ Root config at /etc/sifto-maintenance/config.json:
   state_path (/var/lib/sifto-maintenance), allowed_restart_services (unit names),
   host_role (application/database), database_enabled (maintenance enable bool),
   allowed_approvers (GitHub logins; empty denies apply),
-  monitored_services (optional unit names).
+  monitored_services (optional unit names), database_restart_services (explicit
+  native PG cluster units, required for server/common/library updates).
 Database readiness is root-maintained backup_readiness = {backup_id, host_id,
   verified_at (Unix seconds <=24h old), restore_tested_at (<=30 days old),
   offhost_object (s3:// or gs:// reference), offhost_sha256 (64 hex),
@@ -27,7 +28,7 @@ import subprocess
 import time
 import uuid
 
-from .plan import (MaintenanceError, HASH, PACKAGE, SERVICE, SHA, VERSION, canonical_json,
+from .plan import (MaintenanceError, HASH, PACKAGE, SERVICE, SHA, VERSION, canonical_json, critical_restart_services,
                    expected_runtime, matches, normalize_closure, require, state_sha256, verify_envelope)
 
 MAX_REQUEST_BYTES = 1024 * 1024
@@ -102,7 +103,7 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     require(type(config.get("allowed_approvers", [])) is list
             and all(isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", x)
                     for x in config.get("allowed_approvers", [])), "invalid configured approvers")
-    for key in ("allowed_restart_services", "monitored_services"):
+    for key in ("allowed_restart_services", "monitored_services", "database_restart_services"):
         if key in config:
             require(type(config[key]) is list and all(matches(SERVICE, x) for x in config[key]), "invalid configured services")
     try:
@@ -308,7 +309,9 @@ class HostAgent:
         return {"schema_version": 1, "host_id": self.config["host_id"], "platform": actual_platform,
                 "packages": sorted(packages, key=lambda x: x["name"]), "runtime": runtime,
                 "maintenance_policy": {"host_role": "database" if self._database_host(packages) else "application",
-                                       "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready()},
+                                       "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready(),
+                                       "allowed_restart_services": self.config["allowed_restart_services"],
+                                       "database_restart_services": self.config.get("database_restart_services", [])},
                 "collected_at": int(self.clock()), "simulation": simulated, "simulation_available": simulation_available,
                 "simulation_error": simulation_error, "metadata": self._metadata(),
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
@@ -372,6 +375,8 @@ class HostAgent:
 
     def _policy(self, plan, inventory):
         require(set(plan["restart_services"]) <= set(self.config["allowed_restart_services"]), "restart service not whitelisted")
+        required = critical_restart_services(plan["packages"], inventory["maintenance_policy"])
+        require(set(required) <= set(plan["restart_services"]), "critical service restart missing from signed scope")
         majors = {match.group(1) for x in inventory["packages"]
                   if (match := re.match(r"postgresql-(\d+)(?:-|:|$)", x["name"]))}
         db_change = any(name.startswith("postgresql") for name in plan["restart_services"])

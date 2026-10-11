@@ -119,6 +119,54 @@ class PlanTests(unittest.TestCase):
             p.build_plan(inv, self.sha, now=1000)
         self.assertEqual(p.build_plan(inv, self.sha, action="reboot", allow_reboot=True, now=1000)["packages"], [])
 
+    def test_nonempty_apt_plan_requires_explicit_package_script_restart_scope(self):
+        plan = self.candidate()
+        self.assertIn("restart_scope", plan)
+        self.assertEqual(plan["restart_scope"], "package_scripts_and_listed_services")
+        plan["restart_scope"] = "listed_services_only"
+        with self.assertRaises(p.MaintenanceError):
+            p.validate_plan(plan)
+
+    def critical_inventory(self, name, policy):
+        inv = inventory()
+        inv["packages"].append({"name": name, "version": "1.0"})
+        inv["simulation"] = f"Inst {name} [1.0] (2.0 Ubuntu:24.04/noble [arm64])\n"
+        inv["maintenance_policy"] = policy
+        return inv
+
+    def test_runtime_packages_require_explicit_docker_and_configured_containerd_scope(self):
+        for name in ["docker-ce", "docker.io", "moby-engine", "containerd", "containerd.io"]:
+            inv = self.critical_inventory(name, {"allowed_restart_services": ["docker.service", "containerd.service"]})
+            inv["packages"][-1]["version"] = "1.0.0"
+            inv["simulation"] = f"Inst {name} [1.0.0] (2.0.0 Ubuntu:24.04/noble [arm64])\n"
+            with self.subTest(name=name):
+                self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], ["containerd.service", "docker.service"])
+
+    def test_critical_runtime_update_declines_without_root_restart_whitelist(self):
+        inv = self.critical_inventory("containerd.io", {"allowed_restart_services": []})
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inv, self.sha, now=1000)
+
+    def test_postgres_common_requires_configured_cluster_restart_scope(self):
+        inv = self.critical_inventory("postgresql-common", {"allowed_restart_services": ["postgresql@16-main.service"],
+                                                          "database_restart_services": ["postgresql@16-main.service"]})
+        self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], ["postgresql@16-main.service"])
+        inv["maintenance_policy"]["database_restart_services"] = []
+        with self.assertRaises(p.MaintenanceError):
+            p.build_plan(inv, self.sha, now=1000)
+
+    def test_database_library_upgrade_lists_configured_postgres_cluster(self):
+        inv = inventory()
+        inv["maintenance_policy"] = {"host_role": "database", "allowed_restart_services": ["postgresql@16-main.service"],
+                                     "database_restart_services": ["postgresql@16-main.service"]}
+        self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], ["postgresql@16-main.service"])
+
+    def test_pooler_packages_require_their_own_whitelisted_service(self):
+        for name in ["pgbouncer", "pgpool2"]:
+            inv = self.critical_inventory(name, {"allowed_restart_services": [name + ".service"]})
+            with self.subTest(name=name):
+                self.assertEqual(p.build_plan(inv, self.sha, now=1000)["restart_services"], [name + ".service"])
+
 
 if __name__ == "__main__":
     unittest.main()

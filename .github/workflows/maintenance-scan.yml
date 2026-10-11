@@ -1,0 +1,51 @@
+name: Maintenance Scan
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_request:
+        description: Request unchanged candidate again after expiry or failed dispatch
+        type: boolean
+        default: false
+      dry_run:
+        description: Request native human-gated preflight only
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: maintenance-scan
+  cancel-in-progress: false
+env:
+  MAINTENANCE_EXECUTOR_SHA: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+  MAINTENANCE_OPS_REPO: ${{ vars.MAINTENANCE_OPS_REPO }}
+  MAINTENANCE_PIPELINE_SHA: ${{ github.sha }}
+  MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL }}
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'
+    environment: maintenance-scan
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Validate executor pin
+        env:
+          EXECUTOR_PIN: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+        run: |
+          [[ "$EXECUTOR_PIN" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ vars.MAINTENANCE_EXECUTOR_SHA }}
+          persist-credentials: false
+      - name: Scan through controller-local Ansible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_SCAN_SSH_KEY: ${{ secrets.MAINTENANCE_SCAN_SSH_KEY }}
+          MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
+          MAINTENANCE_HOSTS_JSON: ${{ secrets.MAINTENANCE_HOSTS_JSON }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+          MAINTENANCE_ANTHROPIC_API_KEY: ${{ secrets.MAINTENANCE_ANTHROPIC_API_KEY }}
+          INPUT_FORCE_REQUEST: ${{ inputs.force_request || 'false' }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: sh infra/maintenance/run-controller.sh scan

@@ -1,0 +1,8 @@
+*
+!requirements.txt
+!maintenance/
+!maintenance/*.py
+!tests/
+!tests/*.py
+!playbooks/
+!playbooks/*.yml

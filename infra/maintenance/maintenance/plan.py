@@ -24,7 +24,7 @@ HOST = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 PLAN_FIELDS = {"schema_version", "plan_id", "host_id", "created_at", "expires_at",
                "workflow_sha", "state_sha256", "packages", "allow_service_restarts",
                "allow_reboot", "restart_services", "restart_scope", "expected_runtime"}
-APPROVAL_FIELDS = {"plan_sha256", "run_id", "approved_by", "approved_at", "expires_at", "workflow_sha"}
+APPROVAL_FIELDS = {"plan_sha256", "run_id", "approved_by", "approved_at", "expires_at", "workflow_sha", "execution_mode"}
 
 
 def canonical_json(value):
@@ -264,6 +264,7 @@ def validate_approval(plan, approval):
     require(type(approval) is dict and set(approval) == APPROVAL_FIELDS, "invalid approval fields")
     require(approval["plan_sha256"] == plan_sha256(plan), "plan hash mismatch")
     require(approval["workflow_sha"] == plan["workflow_sha"], "approval workflow mismatch")
+    require(approval["execution_mode"] in ("dry_run", "apply"), "invalid signed execution mode")
     require(isinstance(approval["run_id"], str) and re.fullmatch(r"[0-9]{1,30}", approval["run_id"]) is not None, "invalid run ID")
     require(isinstance(approval["approved_by"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}", approval["approved_by"]) is not None, "invalid approver")
     require(type(approval["approved_at"]) is int and type(approval["expires_at"]) is int

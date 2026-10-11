@@ -140,7 +140,7 @@ class HostTests(unittest.TestCase):
                  "/proc/sys/kernel/random/boot_id": "boot-a\n"}
         return files.get(str(path), "")
 
-    def request(self, mutate=None):
+    def request(self, mutate=None, *, dry_run=False):
         self.agent.run("refresh", {})
         self.runner.calls.clear()
         inv = self.agent.run("scan", {})
@@ -149,8 +149,9 @@ class HostTests(unittest.TestCase):
             mutate(plan)
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123",
                     "approved_by": "human", "approved_at": 1000,
-                    "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
-        return {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key)}
+                    "expires_at": 2000, "workflow_sha": plan["workflow_sha"],
+                    "execution_mode": "dry_run" if dry_run else "apply"}
+        return {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key), "dry_run": dry_run}
 
     def mutations(self):
         return [cmd for cmd in self.runner.calls if (cmd[0] == "apt-get" and "-s" not in cmd)
@@ -264,7 +265,7 @@ class HostTests(unittest.TestCase):
         inv = self.agent.run("scan", {})
         plan = p.build_plan(inv, self.config["approved_workflow_sha"], allow_reboot=True, now=1000, action="reboot")
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123", "approved_by": "human", "approved_at": 1000,
-                    "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
+                    "expires_at": 2000, "workflow_sha": plan["workflow_sha"], "execution_mode": "apply"}
         request = {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key)}
         self.runner.extra_packages = "pending\t1.0\ttriggers-pending\n"
         with self.assertRaises(p.MaintenanceError):
@@ -319,7 +320,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(self.mutations(), [])
 
     def test_dry_run_verifies_transaction_without_consuming_or_mutating(self):
-        request = self.request()
+        request = self.request(dry_run=True)
         request["dry_run"] = True
         before_files = {str(x): x.read_bytes() for x in (self.root / "state").rglob("*") if x.is_file()}
         try:
@@ -330,7 +331,19 @@ class HostTests(unittest.TestCase):
         after_files = {str(x): x.read_bytes() for x in (self.root / "state").rglob("*") if x.is_file()}
         self.assertEqual(before_files, after_files)
         self.assertEqual(self.mutations(), [])
-        self.assertEqual(self.agent.run("apply", {k: v for k, v in request.items() if k != "dry_run"})["status"], "completed")
+        self.assertEqual(self.agent.run("apply", self.request())["status"], "completed")
+
+    def test_dry_run_signed_mode_cannot_authorize_real_apply(self):
+        request = self.request(dry_run=True)
+        request["dry_run"] = False
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
+        self.assertFalse(self.agent._record_path(request["envelope"]["plan"]["plan_id"]).exists())
+        request.pop("dry_run")
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
 
     def test_dry_run_flag_must_be_boolean(self):
         request = self.request()
@@ -343,7 +356,7 @@ class HostTests(unittest.TestCase):
         inv = self.agent.inventory()
         plan = p.build_plan(inv, self.config["approved_workflow_sha"], now=1000)
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123", "approved_by": "human",
-                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
+                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"], "execution_mode": "dry_run"}
         request = {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key), "dry_run": True}
         with self.assertRaises(p.MaintenanceError):
             self.agent.run("apply", request)
@@ -379,7 +392,7 @@ class HostTests(unittest.TestCase):
     def test_database_role_rejects_library_upgrade_without_backup_even_when_enabled(self):
         self.config["host_role"] = "database"
         self.config["database_enabled"] = True
-        request = self.request()
+        request = self.request(dry_run=True)
         request["dry_run"] = True
         with self.assertRaises(p.MaintenanceError):
             self.agent.run("apply", request)
@@ -388,7 +401,7 @@ class HostTests(unittest.TestCase):
     def test_database_role_rejects_all_upgrade_when_maintenance_disabled(self):
         self.config["host_role"] = "database"
         self.config["backup_readiness"] = self.readiness()
-        request = self.request()
+        request = self.request(dry_run=True)
         request["dry_run"] = True
         with self.assertRaises(p.MaintenanceError):
             self.agent.run("apply", request)
@@ -397,7 +410,7 @@ class HostTests(unittest.TestCase):
     def test_database_role_requires_current_offhost_evidence(self):
         self.config["host_role"] = "database"
         self.config["database_enabled"] = True
-        request = self.request()
+        request = self.request(dry_run=True)
         request["dry_run"] = True
         for readiness in [{"backup_id": "backup-1", "verified_at": 900, "restore_tested_at": 800, "host_id": "sifto-app"},
                           {**self.readiness(), "offhost_verified_at": -90000},
@@ -411,7 +424,7 @@ class HostTests(unittest.TestCase):
         self.config["host_role"] = "database"
         self.config["database_enabled"] = True
         self.config["backup_readiness"] = self.readiness()
-        request = self.request()
+        request = self.request(dry_run=True)
         request["dry_run"] = True
         self.assertEqual(self.agent.run("apply", request)["status"], "preflight_passed")
         self.assertTrue(any("BEGIN READ ONLY" in " ".join(x) for x in self.runner.calls))
@@ -439,7 +452,7 @@ class HostTests(unittest.TestCase):
         inv = self.agent.run("scan", {})
         plan = p.build_plan(inv, self.config["approved_workflow_sha"], allow_reboot=True, now=1000, action="reboot")
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123", "approved_by": "human",
-                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
+                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"], "execution_mode": "apply"}
         request = {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key)}
         self.agent.run("apply", request)
         self.agent.read_file = lambda path: "boot-b\n" if str(path).endswith("boot_id") else self.read_file(path)
@@ -667,7 +680,7 @@ class HostTests(unittest.TestCase):
         inv = self.agent.run("scan", {})
         plan = p.build_plan(inv, self.config["approved_workflow_sha"], allow_reboot=True, now=1000, action="reboot")
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123", "approved_by": "human",
-                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"]}
+                    "approved_at": 1000, "expires_at": 2000, "workflow_sha": plan["workflow_sha"], "execution_mode": "apply"}
         request = {"workflow_sha": plan["workflow_sha"], "envelope": p.sign_plan(plan, approval, self.key)}
         result = self.agent.run("apply", request)
         self.assertEqual(result["status"], "reboot_scheduled")

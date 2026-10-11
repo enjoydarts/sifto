@@ -47,7 +47,7 @@ class PlanTests(unittest.TestCase):
         plan = self.candidate()
         approval = {"plan_sha256": p.plan_sha256(plan), "run_id": "123",
                     "approved_by": "reviewer", "approved_at": 1001,
-                    "expires_at": 2000, "workflow_sha": self.sha}
+                    "expires_at": 2000, "workflow_sha": self.sha, "execution_mode": "apply"}
         return p.sign_plan(plan, approval, self.key)
 
     def test_parser_captures_dependency_closure_and_multiarch(self):
@@ -103,6 +103,23 @@ class PlanTests(unittest.TestCase):
             plan[field] = value
             with self.subTest(field=field), self.assertRaises(p.MaintenanceError):
                 p.validate_plan(plan)
+
+    def test_execution_mode_is_signed_required_and_strict(self):
+        self.assertIn("execution_mode", p.APPROVAL_FIELDS, "signed execution mode support missing")
+        envelope = self.envelope()
+        for value in [None, "upgrade", True]:
+            approval = dict(envelope["approval"])
+            approval["execution_mode"] = value
+            with self.subTest(value=value), self.assertRaises(p.MaintenanceError):
+                p.sign_plan(envelope["plan"], approval, self.key)
+        approval = dict(envelope["approval"])
+        del approval["execution_mode"]
+        with self.assertRaises(p.MaintenanceError):
+            p.sign_plan(envelope["plan"], approval, self.key)
+        tampered = copy.deepcopy(envelope)
+        tampered["approval"]["execution_mode"] = "dry_run"
+        with self.assertRaises(p.MaintenanceError):
+            p.verify_envelope(tampered, self.key.public_key(), "sifto-app", self.sha, now=1010)
 
     def test_unknown_fields_and_nonfinite_json_are_rejected(self):
         with self.assertRaises(p.MaintenanceError):

@@ -149,3 +149,12 @@ test-worker:
 	$(COMPOSE) exec -T worker sh -lc 'python -m pytest tests/ -v'
 
 check-worker-full: check-worker test-worker
+
+.PHONY: maintenance-test maintenance-syntax
+maintenance-test:
+	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T test
+
+maintenance-syntax:
+	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T -e ANSIBLE_LOCAL_TEMP=/tmp/ansible -e ANSIBLE_HOME=/tmp/ansible-home test ansible-playbook -i localhost, --syntax-check playbooks/scan.yml playbooks/apply.yml
+	docker compose -f infra/maintenance/compose.yml --profile test run --rm -T test python -B -c 'import ast, pathlib; [ast.parse(p.read_text()) for p in pathlib.Path("maintenance").glob("*.py")]'
+	sh -n infra/maintenance/run-controller.sh

@@ -32,6 +32,8 @@ from .plan import (MaintenanceError, HASH, PACKAGE, SERVICE, SHA, VERSION, canon
                    expected_runtime, matches, normalize_closure, require, state_sha256, verify_envelope)
 
 MAX_REQUEST_BYTES = 1024 * 1024
+MAX_RECEIPT_HISTORY_COUNT = 10000
+MAX_RECEIPT_HISTORY_BYTES = 32 * 1024 * 1024
 APT_LOCKS = ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock",
              "/var/lib/apt/lists/lock", "/var/cache/apt/archives/lock")
 APT_OPTIONS = ["-o", "DPkg::Lock::Timeout=0", "-o", "Acquire::Retries=0",
@@ -39,7 +41,7 @@ APT_OPTIONS = ["-o", "DPkg::Lock::Timeout=0", "-o", "Acquire::Retries=0",
                "-o", "APT::Update::Error-Mode=any"]
 CONTAINER_FORMAT = ('{"id":{{json .Id}},"image_id":{{json .Image}},'
                     '"image":{{json .Config.Image}},"status":{{json .State.Status}},'
-                    '"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}"none"{{end}}}')
+                    '"health":{{with index .State "Health"}}{{json .Status}}{{else}}"none"{{end}}}')
 
 
 def strict_json(data):
@@ -420,6 +422,8 @@ class HostAgent:
         require(request["workflow_sha"] == self.config["approved_workflow_sha"], "executor is not locally pinned")
         plan = verify_envelope(request["envelope"], self.config["trusted_public_key"], self.config["host_id"],
                                self.config["approved_workflow_sha"], now=int(self.clock()))
+        require(request["envelope"]["approval"]["execution_mode"] ==
+                ("dry_run" if request.get("dry_run", False) else "apply"), "signed execution mode mismatch")
         require(request["envelope"]["approval"]["approved_by"] in self.config.get("allowed_approvers", []),
                 "approver not permitted by root config")
         record_path = self._record_path(plan["plan_id"])
@@ -503,6 +507,50 @@ class HostAgent:
         self._write(path, record)
         return {"plan_id": request["plan_id"], "status": "verified"}
 
+    def report(self):
+        # Only the scan forced gateway exposes receipts, which the controller
+        # stores privately. Bound records and bytes without touching journals.
+        paths = list((self.state / "plans").glob("*.json"))
+        response = {"host_id": self.config["host_id"], "metadata": self._metadata(), "plans": [],
+                    "receipts": [], "receipt_total": len(paths), "receipt_truncated": len(paths),
+                    "receipt_history_complete": False, "unresolved_execution_count": None}
+        if len(paths) > MAX_RECEIPT_HISTORY_COUNT:
+            return response
+        for path in paths:
+            info = path.lstat()
+            require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                    and info.st_mode & 0o077 == 0, "invalid private receipt file")
+            self._record_path(path.stem)
+        paths.sort(key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+        size, history_size, unresolved = 0, 0, 0
+        for path in paths:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                        and info.st_mode & 0o077 == 0 and info.st_size <= 8 * 1024 * 1024,
+                        "invalid private receipt file")
+                raw = stream.read(8 * 1024 * 1024 + 1)
+            require(len(raw) <= 8 * 1024 * 1024, "private receipt exceeds limit")
+            history_size += len(raw)
+            if history_size > MAX_RECEIPT_HISTORY_BYTES:
+                return response
+            receipt = strict_json(raw)
+            require(type(receipt) is dict and receipt.get("status") in
+                    ("started", "failed", "completed", "reboot_scheduled", "verified"), "invalid receipt")
+            diagnosis = receipt.get("operator_diagnosed_at")
+            diagnosed = (type(diagnosis) is int and 0 < diagnosis <= int(self.clock())
+                         and diagnosis >= receipt.get("failed_at", receipt.get("started_at", 0)))
+            if receipt["status"] in ("started", "failed") and not diagnosed:
+                unresolved += 1
+            if len(response["receipts"]) < 20 and size + len(raw) <= 8 * 1024 * 1024:
+                response["receipts"].append(receipt)
+                response["plans"].append({"plan_id": path.stem, "status": receipt["status"]})
+                size += len(raw)
+                response["receipt_truncated"] -= 1
+        response.update(receipt_history_complete=True, unresolved_execution_count=unresolved)
+        return response
+
     def run(self, mode, request):
         require(type(request) is dict, "request must be an object")
         if mode == "apply":
@@ -520,6 +568,4 @@ class HostAgent:
                 self.runner(["apt-get", "update", "--error-on=any", *APT_OPTIONS], timeout=120)
                 self._write(self.state / "refresh.json", {"refreshed_at": int(self.clock())})
                 return {"status": "metadata_refreshed"}
-            return {"host_id": self.config["host_id"], "metadata": self._metadata(),
-                    "plans": [{"plan_id": path.stem, "status": strict_json(path.read_bytes())["status"]}
-                              for path in sorted((self.state / "plans").glob("*.json"))]}
+            return self.report()

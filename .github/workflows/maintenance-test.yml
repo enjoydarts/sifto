@@ -1,0 +1,21 @@
+name: Maintenance Test
+on:
+  pull_request:
+    paths: ['infra/maintenance/**', '.github/workflows/maintenance-*.yml', 'Makefile']
+  push:
+    branches: [main]
+    paths: ['infra/maintenance/**', '.github/workflows/maintenance-*.yml', 'Makefile']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Network-disabled synthetic tests and controller-local syntax
+        run: |
+          make maintenance-test
+          make maintenance-syntax

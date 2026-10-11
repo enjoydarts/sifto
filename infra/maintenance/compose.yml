@@ -15,9 +15,14 @@ services:
       - /etc/sifto-maintenance:mode=0755
       - /var/lib/sifto-maintenance:mode=0700
   controller:
-    build: .
+    build:
+      context: .
+      args:
+        MAINTENANCE_CONTROLLER_UID: ${MAINTENANCE_CONTROLLER_UID:-0}
+        MAINTENANCE_CONTROLLER_GID: ${MAINTENANCE_CONTROLLER_GID:-0}
     profiles: [controller]
     working_dir: /src
+    user: "${MAINTENANCE_CONTROLLER_UID:-0}:${MAINTENANCE_CONTROLLER_GID:-0}"
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -25,7 +30,7 @@ services:
       - ${MAINTENANCE_SECRET_DIR:-/nonexistent-maintenance-secrets}:/secrets:ro
       - ${MAINTENANCE_WORK_DIR:-/nonexistent-maintenance-work}:/private
     tmpfs:
-      - /tmp:mode=0700
+      - /tmp:mode=1777
     environment:
       GITHUB_REF:
       GITHUB_RUN_ID:

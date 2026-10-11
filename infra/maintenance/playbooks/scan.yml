@@ -6,5 +6,6 @@
     - name: Run private scanner
       ansible.builtin.command:
         argv: [python, -B, -m, maintenance.cli, scan]
+        chdir: /src
       no_log: true
       changed_when: false

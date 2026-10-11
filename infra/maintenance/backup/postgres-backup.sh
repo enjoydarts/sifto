@@ -11,7 +11,9 @@ partial=$(mktemp "$backup_dir/.sifto-backup.XXXXXXXX.partial")
 trap 'rm -f -- "$partial"' EXIT
 /usr/bin/pg_dump --username=postgres --format=custom --dbname=sifto | gzip > "$partial"
 gzip -t "$partial"
-gzip -dc "$partial" | /usr/bin/pg_restore --list >/dev/null
+# --list reads only the archive header/TOC. Drain the remaining stream so a
+# valid large dump cannot fail pipefail when gzip receives an early SIGPIPE.
+gzip -dc "$partial" | { /usr/bin/pg_restore --list >/dev/null; cat >/dev/null; }
 mv -- "$partial" "$backup_dir/sifto-$stamp.dump.gz"
 find "$backup_dir" -maxdepth 1 -type f -name 'sifto-*.dump.gz' -mtime +14 -delete
 printf 'logical backup completed; restore and offhost verification are separate\n'

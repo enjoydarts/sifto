@@ -27,10 +27,18 @@ trap 'runuser -u postgres -- pg_ctl -D /tmp/database -m fast -w stop >/dev/null'
 export PGHOST=/tmp
 createdb -U postgres sifto
 psql -X -v ON_ERROR_STOP=1 -U postgres -d sifto -c 'CREATE TABLE backup_probe(id int); INSERT INTO backup_probe VALUES(1);' >/dev/null
+# Large enough to expose early-reader SIGPIPE in archive TOC inspection.
+psql -X -v ON_ERROR_STOP=1 -U postgres -d sifto >/dev/null <<'SQL'
+CREATE TABLE backup_bulk AS
+SELECT i, (SELECT string_agg(md5((i*4096+j)::text), '')
+           FROM generate_series(1,4096) AS blocks(j)) AS payload
+FROM generate_series(1,32) AS rows(i);
+SQL
 runuser -u postgres -- /bin/bash /fixture/postgres-backup.sh
 dump=$(find /data/backups -name '*.dump.gz')
 [[ -f "$dump" && $(stat -c %a "$dump") == 600 ]]
 createdb -U postgres restored
 gzip -dc "$dump" | pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d restored
 [[ $(psql -X -U postgres -d restored -Atc 'SELECT count(*) FROM backup_probe') == 1 ]]
+[[ $(psql -X -U postgres -d restored -Atc 'SELECT count(*) FROM backup_bulk') == 32 ]]
 printf 'backup failure handling, permissions and isolated fixture restore verified\n'

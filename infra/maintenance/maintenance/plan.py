@@ -23,7 +23,7 @@ HASH = re.compile(r"[0-9a-f]{64}\Z")
 HOST = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 PLAN_FIELDS = {"schema_version", "plan_id", "host_id", "created_at", "expires_at",
                "workflow_sha", "state_sha256", "packages", "allow_service_restarts",
-               "allow_reboot", "restart_services"}
+               "allow_reboot", "restart_services", "expected_runtime"}
 APPROVAL_FIELDS = {"plan_sha256", "run_id", "approved_by", "approved_at", "expires_at", "workflow_sha"}
 
 
@@ -88,6 +88,8 @@ def state_sha256(inventory):
     # not stable identities. A boot, package, engine or container identity change is drift.
     runtime = inventory["runtime"]
     identities = {key: runtime[key] for key in ("boot_id", "running_kernel", "docker_version")}
+    if "postgres_version_num" in runtime:
+        identities["postgres_version_num"] = runtime["postgres_version_num"]
     identities["containers"] = sorted(
         [{"id": x["id"], "image_id": x["image_id"], "image": x["image"]}
          for x in runtime["containers"]], key=lambda x: x["id"])
@@ -114,6 +116,13 @@ def validate_plan(plan):
             and len(set(plan["restart_services"])) == len(plan["restart_services"]), "invalid restart services")
     require(not plan["restart_services"] or plan["allow_service_restarts"], "service restarts not approved")
     require(type(plan["packages"]) is list and len(plan["packages"]) <= 10000, "invalid packages")
+    expected = plan["expected_runtime"]
+    require(type(expected) is dict and {"running_kernel", "docker_version"} <= set(expected)
+            and set(expected) <= {"running_kernel", "docker_version", "postgres_version_num"}, "invalid expected runtime fields")
+    require(isinstance(expected["running_kernel"], str) and re.fullmatch(r"[A-Za-z0-9_.+-]{1,128}", expected["running_kernel"])
+            and isinstance(expected["docker_version"], str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[+.-][A-Za-z0-9_.+-]+)?", expected["docker_version"]), "invalid expected runtime")
+    require("postgres_version_num" not in expected or (isinstance(expected["postgres_version_num"], str)
+            and re.fullmatch(r"[0-9]{6}", expected["postgres_version_num"])), "invalid expected PostgreSQL version")
     names = set()
     for package in plan["packages"]:
         require(type(package) is dict and set(package) == {"name", "installed", "target"}, "invalid package fields")
@@ -133,13 +142,33 @@ def validate_plan(plan):
     return plan
 
 
+def expected_runtime(inventory, packages, action):
+    runtime = inventory["runtime"]
+    expected = {"running_kernel": runtime.get("latest_installed_kernel", runtime["running_kernel"])
+                if action == "reboot" else runtime["running_kernel"], "docker_version": runtime["docker_version"]}
+    if "postgres_version_num" in runtime:
+        expected["postgres_version_num"] = runtime["postgres_version_num"]
+    for package in packages:
+        name = package["name"].split(":")[0]
+        if name in ("docker-ce", "docker.io", "moby-engine"):
+            match = re.fullmatch(r"(?:\d+:)?(\d+\.\d+\.\d+)(?:[-~+].*)?", package["target"])
+            require(match is not None, "cannot derive Docker runtime target")
+            expected["docker_version"] = match.group(1)
+        if re.fullmatch(r"postgresql-\d+", name):
+            match = re.fullmatch(r"(?:\d+:)?(\d+)\.(\d+)(?:[-~+].*)?", package["target"])
+            require(match is not None and int(match.group(1)) >= 10, "cannot derive PostgreSQL runtime target")
+            expected["postgres_version_num"] = str(int(match.group(1)) * 10000 + int(match.group(2)))
+    return expected
+
+
 def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboot=False, *, now=None, action="apt_upgrade"):
     now = int(time.time()) if now is None else now
     require(inventory["platform"] == {"id": "ubuntu", "version": "24.04", "architecture": "arm64"}, "unsupported platform")
+    packages = normalize_closure(inventory["simulation"], inventory["packages"]) if action == "apt_upgrade" else []
     plan = {"schema_version": 1, "plan_id": str(uuid.uuid4()), "host_id": inventory["host_id"],
             "created_at": now, "expires_at": now + 86400, "workflow_sha": workflow_sha,
             "state_sha256": state_sha256(inventory),
-            "packages": normalize_closure(inventory["simulation"], inventory["packages"]) if action == "apt_upgrade" else [],
+            "packages": packages, "expected_runtime": expected_runtime(inventory, packages, action),
             "allow_service_restarts": allow_service_restarts, "allow_reboot": allow_reboot,
             "restart_services": [], "action": action}
     return validate_plan(plan)

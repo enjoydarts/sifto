@@ -8,13 +8,19 @@ except ImportError:
     p = None
 
 
-# Ubuntu apt LC_ALL=C simulation output: existing, newly installed, and multiarch.
+# Synthetic Ubuntu apt LC_ALL=C records: existing, newly installed, and multiarch.
 SIMULATION = """Reading package lists...
 Building dependency tree...
 Inst openssl [3.0.13-0ubuntu3] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates [arm64])
 Inst libssl3t64:arm64 [3.0.13-0ubuntu3] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates [arm64])
 Inst linux-modules-6.8.0-60-generic (6.8.0-60.63 Ubuntu:24.04/noble-updates [arm64])
 Conf openssl (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates [arm64])
+"""
+
+# Only generic OS records retained from an actual Ubuntu 24.04 ARM64 apt
+# simulation captured 2026-10-11. Host inventory is kept private.
+CAPTURED_UBUNTU_FRAGMENT = """Inst motd-news-config [13ubuntu10.4] (13ubuntu10.5 Ubuntu:24.04/noble-updates [all])
+Inst base-files [13ubuntu10.4] (13ubuntu10.5 Ubuntu:24.04/noble-updates [arm64])
 """
 
 
@@ -50,6 +56,11 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(result[-1], {"name": "openssl", "installed": "3.0.13-0ubuntu3",
                                     "target": "3.0.13-0ubuntu3.5"})
         self.assertIsNone(next(x for x in result if x["name"].startswith("linux-modules"))["installed"])
+
+    def test_parser_accepts_captured_ubuntu_release_version_records(self):
+        result = p.parse_simulation(CAPTURED_UBUNTU_FRAGMENT)
+        self.assertEqual(result, [{"name": "base-files", "installed": "13ubuntu10.4", "target": "13ubuntu10.5"},
+                                  {"name": "motd-news-config", "installed": "13ubuntu10.4", "target": "13ubuntu10.5"}])
 
     def test_removal_and_malformed_inst_are_rejected(self):
         for output in [SIMULATION + "Remv openssl [3.0.13]\n", "Inst evil;touch /tmp/pwn (1 repo [arm64])",

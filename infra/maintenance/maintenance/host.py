@@ -3,10 +3,13 @@
 Root config at /etc/sifto-maintenance/config.json:
   host_id, trusted_public_key (base64 raw Ed25519), approved_workflow_sha (40 hex),
   state_path (/var/lib/sifto-maintenance), allowed_restart_services (unit names),
-  database_enabled (bool), allowed_approvers (GitHub logins; empty denies apply),
+  host_role (application/database), database_enabled (maintenance enable bool),
+  allowed_approvers (GitHub logins; empty denies apply),
   monitored_services (optional unit names).
 Database readiness is root-maintained backup_readiness = {backup_id, host_id,
-  verified_at (Unix seconds <=24h old), restore_tested_at (<=30 days old)}.
+  verified_at (Unix seconds <=24h old), restore_tested_at (<=30 days old),
+  offhost_object (s3:// or gs:// reference), offhost_sha256 (64 hex),
+  offhost_verified_at (<=24h old)}.
 The verification must include backup integrity and a successful isolated restore;
 the agent never attempts a production restore. Enabling DB maintenance or renewing
 readiness is an operator action; an approval cannot change these conditions.
@@ -24,8 +27,8 @@ import subprocess
 import time
 import uuid
 
-from .plan import (MaintenanceError, PACKAGE, SERVICE, SHA, VERSION, canonical_json,
-                   matches, normalize_closure, require, state_sha256, verify_envelope)
+from .plan import (MaintenanceError, HASH, PACKAGE, SERVICE, SHA, VERSION, canonical_json,
+                   expected_runtime, matches, normalize_closure, require, state_sha256, verify_envelope)
 
 MAX_REQUEST_BYTES = 1024 * 1024
 APT_LOCKS = ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock",
@@ -88,11 +91,14 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     require(Path(path).stat().st_mode & 0o077 == 0, "config must be root-only")
     config = strict_json(Path(path).read_bytes())
     required = {"host_id", "trusted_public_key", "approved_workflow_sha", "state_path",
-                "allowed_restart_services", "database_enabled"}
+                "allowed_restart_services", "database_enabled", "host_role"}
     require(type(config) is dict and required <= set(config), "missing root config")
     require(config["state_path"] == "/var/lib/sifto-maintenance", "invalid state path")
     require(matches(SHA, config["approved_workflow_sha"]), "invalid pinned executor SHA")
     require(type(config["database_enabled"]) is bool, "invalid database flag")
+    require(config["host_role"] in ("application", "database"), "invalid host role")
+    require(type(config.get("health_wait_seconds", 120)) is int
+            and 0 <= config.get("health_wait_seconds", 120) <= 300, "invalid health wait")
     require(type(config.get("allowed_approvers", [])) is list
             and all(isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", x)
                     for x in config.get("allowed_approvers", [])), "invalid configured approvers")
@@ -109,7 +115,7 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
 class SubprocessRunner:
     # Do not inherit PATH, PYTHONPATH, sudo caller environment or apt configuration.
     ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "LANG": "C",
-           "DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_MODE": "a"}
+           "DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_MODE": "l"}
 
     def __call__(self, argv, *, timeout=60, check=True):
         try:
@@ -150,12 +156,15 @@ def probe_apt_locks():
 
 
 class HostAgent:
-    def __init__(self, config, runner=None, *, clock=time.time, read_file=None, lock_probe=probe_apt_locks):
+    def __init__(self, config, runner=None, *, clock=time.time, read_file=None, lock_probe=probe_apt_locks,
+                 sleeper=time.sleep, monotonic=time.monotonic):
         self.config = config
         self.runner = runner or SubprocessRunner()
         self.clock = clock
         self.read_file = read_file or self._read_file
         self.lock_probe = lock_probe
+        self.sleeper = sleeper
+        self.monotonic = monotonic
         self.state = Path(config["state_path"])
 
     @staticmethod
@@ -172,11 +181,27 @@ class HostAgent:
                 and info.st_mode & 0o077 == 0, "state directory must be private and owned by executor")
 
     @contextlib.contextmanager
-    def locked(self):
-        self._mkdir(self.state)
-        self._mkdir(self.state / "plans")
-        descriptor = os.open(self.state / "maintenance.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    def locked(self, *, existing_only=False):
+        if existing_only:
+            for path in (self.state, self.state / "plans"):
+                try:
+                    info = path.lstat()
+                except FileNotFoundError as exc:
+                    raise MaintenanceError("dry-run requires provisioned maintenance state") from exc
+                require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid()
+                        and info.st_mode & 0o077 == 0, "invalid provisioned state directory")
+        else:
+            self._mkdir(self.state)
+            self._mkdir(self.state / "plans")
         try:
+            descriptor = os.open(self.state / "maintenance.lock", os.O_RDWR | os.O_NOFOLLOW
+                                 | (0 if existing_only else os.O_CREAT), 0o600)
+        except FileNotFoundError as exc:
+            raise MaintenanceError("dry-run requires provisioned maintenance lock") from exc
+        try:
+            info = os.fstat(descriptor)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                    and info.st_mode & 0o077 == 0, "invalid maintenance lock file")
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
@@ -255,12 +280,28 @@ class HostAgent:
                    "running_kernel": self.runner(["uname", "-r"]).strip(),
                    "installed_kernels": [x for x in packages if x["name"].startswith("linux-image-")],
                    "docker_version": engine["Version"], "containers": containers, "services": services}
+        kernel_candidates = []
+        for package in packages:
+            match = re.fullmatch(r"linux-image-(?:unsigned-)?(\d.*)", package["name"])
+            if match and match.group(1).rsplit("-", 1)[-1] == runtime["running_kernel"].rsplit("-", 1)[-1]:
+                kernel_candidates.append((package["version"], match.group(1)))
+        latest = None
+        for version, kernel in kernel_candidates:
+            if latest is None or self.runner.compare_versions(version, "gt", latest[0]):
+                latest = (version, kernel)
+        runtime["latest_installed_kernel"] = latest[1] if latest else runtime["running_kernel"]
+        if self._database_host(packages):
+            value = self._postgres_query("current_setting('server_version_num')")
+            require(re.fullmatch(r"[0-9]{6}", value) is not None, "invalid PostgreSQL runtime version")
+            runtime["postgres_version_num"] = value
         require(runtime["boot_id"] and runtime["running_kernel"] and runtime["docker_version"], "missing runtime identity")
         locks = self.lock_probe()
         require(not simulation or not locks, "apt/dpkg is busy")
         simulated = self.runner(["apt-get", "-s", "--no-remove", "--with-new-pkgs", "upgrade", *APT_OPTIONS], timeout=120) if simulation else ""
         return {"schema_version": 1, "host_id": self.config["host_id"], "platform": actual_platform,
                 "packages": sorted(packages, key=lambda x: x["name"]), "runtime": runtime,
+                "maintenance_policy": {"host_role": "database" if self._database_host(packages) else "application",
+                                       "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready()},
                 "collected_at": int(self.clock()), "simulation": simulated, "metadata": self._metadata(),
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
                 "reboot_required_packages": self.read_file("/var/run/reboot-required.pkgs").splitlines()}
@@ -273,12 +314,53 @@ class HostAgent:
             if container["status"] == "running":
                 actual = current.get(container["id"])
                 require(actual is not None and actual["status"] == "running"
+                        and actual["image_id"] == container["image_id"] and actual["image"] == container["image"]
                         and actual["health"] in ("none", "healthy"), "container health check failed")
-        if self.config["database_enabled"]:
-            output = self.runner(["sudo", "-n", "-u", "postgres", "/usr/bin/psql", "--no-psqlrc",
-                                  "--quiet", "--tuples-only", "--no-align", "--dbname=postgres", "--command",
-                                  "BEGIN READ ONLY; SELECT 1; COMMIT;"], timeout=30)
-            require(output.strip() == "1", "database read-only health check failed")
+        if self._database_host(inventory["packages"]):
+            require(self._postgres_query("1") == "1", "database read-only health check failed")
+
+    def _postgres_query(self, expression):
+        # Expressions come only from code constants, never request data/config.
+        return self.runner(["sudo", "-n", "-u", "postgres", "/usr/bin/psql", "--no-psqlrc",
+                            "--quiet", "--tuples-only", "--no-align", "--dbname=postgres", "--command",
+                            "BEGIN READ ONLY; SELECT " + expression + "; COMMIT;"], timeout=30).strip()
+
+    def _database_host(self, packages):
+        return self.config["host_role"] == "database" or any(
+            re.fullmatch(r"postgresql-\d+(?::[a-z0-9-]+)?", x["name"]) for x in packages)
+
+    def _backup_ready(self):
+        readiness = self.config.get("backup_readiness", {})
+        now = int(self.clock())
+        return bool(type(readiness) is dict
+                    and readiness.get("host_id") == self.config["host_id"]
+                    and isinstance(readiness.get("backup_id"), str)
+                    and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", readiness["backup_id"])
+                    and type(readiness.get("verified_at")) is int and 0 <= now - readiness["verified_at"] <= 86400
+                    and type(readiness.get("restore_tested_at")) is int and 0 <= now - readiness["restore_tested_at"] <= 30 * 86400
+                    and isinstance(readiness.get("offhost_object"), str)
+                    and re.fullmatch(r"(?:s3|gs)://[A-Za-z0-9][A-Za-z0-9._/-]{2,1023}", readiness["offhost_object"])
+                    and matches(HASH, readiness.get("offhost_sha256"))
+                    and type(readiness.get("offhost_verified_at")) is int
+                    and 0 <= now - readiness["offhost_verified_at"] <= 86400)
+
+    @staticmethod
+    def _runtime_targets(plan, inventory):
+        actual = inventory["runtime"]
+        require(all(actual.get(key) == value for key, value in plan["expected_runtime"].items()),
+                "running kernel, Docker or PostgreSQL version does not match approved target")
+
+    def _wait_healthy(self, before):
+        deadline = self.monotonic() + self.config.get("health_wait_seconds", 120)
+        while True:
+            try:
+                after = self.inventory(simulation=False)
+                self._health(after, before)
+                return after
+            except MaintenanceError:
+                if self.monotonic() >= deadline:
+                    raise
+                self.sleeper(min(2, max(0, deadline - self.monotonic())))
 
     def _policy(self, plan, inventory):
         require(set(plan["restart_services"]) <= set(self.config["allowed_restart_services"]), "restart service not whitelisted")
@@ -287,7 +369,7 @@ class HostAgent:
         db_change = any(name.startswith("postgresql") for name in plan["restart_services"])
         for package in plan["packages"]:
             name = package["name"].split(":")[0]
-            if name.startswith(("postgresql", "libpq")):
+            if name.startswith(("postgresql", "libpq", "pgbouncer", "pgpool")):
                 db_change = True
                 require(name not in ("postgresql", "postgresql-client", "postgresql-contrib", "postgresql-server-dev-all"),
                         "unversioned PostgreSQL metapackage is forbidden")
@@ -295,15 +377,9 @@ class HostAgent:
                 require(match is None or match.group(1) in majors, "PostgreSQL major introduction is forbidden")
             if package["installed"] is not None:
                 require(not self.runner.compare_versions(package["target"], "lt", package["installed"]), "package downgrade is forbidden")
-        if db_change or (plan.get("action") == "reboot" and self.config["database_enabled"]):
-            readiness = self.config.get("backup_readiness", {})
-            now = int(self.clock())
-            require(self.config["database_enabled"] and type(readiness) is dict
-                    and readiness.get("host_id") == self.config["host_id"]
-                    and isinstance(readiness.get("backup_id"), str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", readiness["backup_id"])
-                    and type(readiness.get("verified_at")) is int and 0 <= now - readiness["verified_at"] <= 86400
-                    and type(readiness.get("restore_tested_at")) is int and 0 <= now - readiness["restore_tested_at"] <= 30 * 86400,
-                    "database backup and restore verification is required")
+        if db_change or self._database_host(inventory["packages"]):
+            require(self.config["database_enabled"] and self._backup_ready(),
+                    "database maintenance requires enable, verified offhost backup and isolated restore evidence")
 
     def _record_path(self, plan_id):
         try:
@@ -325,6 +401,8 @@ class HostAgent:
         require(not record_path.exists(), "plan was already consumed")
         before = self.inventory(simulation=False)
         require(state_sha256(before) == plan["state_sha256"], "host state drifted since plan")
+        require(plan["expected_runtime"] == expected_runtime(before, plan["packages"], plan.get("action", "apt_upgrade")),
+                "approved runtime targets do not match transaction")
         self._policy(plan, before)
         self._health(before)
         require(not self.lock_probe(), "apt/dpkg is busy")
@@ -358,15 +436,17 @@ class HostAgent:
                 self.runner(["systemctl", "reboot", "--no-block"], timeout=30)
             else:
                 if specifications:
-                    self.runner(["apt-get", "-y", "--no-remove", "install", *APT_OPTIONS, *specifications], timeout=900)
+                    # Never kill apt/dpkg because a maintenance window elapsed.
+                    # CI monitors externally; a disconnect leaves the consumed journal.
+                    self.runner(["apt-get", "-y", "--no-remove", "install", *APT_OPTIONS, *specifications], timeout=None)
                 for service in plan["restart_services"]:
                     self.runner(["systemctl", "restart", service], timeout=120)
-                after = self.inventory(simulation=False)
+                after = self._wait_healthy(before)
                 actual = {x["name"]: x["version"] for x in after["packages"]}
                 expected = {x["name"]: x["version"] for x in before["packages"]}
                 expected.update({x["name"]: x["target"] for x in plan["packages"]})
                 require(actual == expected, "installed package transaction verification failed")
-                self._health(after, before)
+                self._runtime_targets(plan, after)
                 record["status"] = "completed"
                 record["completed_at"] = int(self.clock())
                 self._write(record_path, record)
@@ -383,13 +463,13 @@ class HostAgent:
         require(path.is_file(), "unknown plan")
         record = strict_json(path.read_bytes())
         require(record["status"] in ("completed", "reboot_scheduled", "verified"), "failed or interrupted plan requires operator investigation")
-        after = self.inventory(simulation=False)
         before = {"runtime": record["before_runtime"]}
+        after = self._wait_healthy(before)
         if record["plan"].get("action") == "reboot":
             require(after["runtime"]["boot_id"] != before["runtime"]["boot_id"], "reboot has not completed")
         actual = {x["name"]: x["version"] for x in after["packages"]}
         require(all(actual.get(x["name"]) == x["target"] for x in record["plan"]["packages"]), "installed targets changed")
-        self._health(after, before)
+        self._runtime_targets(record["plan"], after)
         record["status"] = "verified"
         record["verified_at"] = int(self.clock())
         self._write(path, record)
@@ -397,7 +477,9 @@ class HostAgent:
 
     def run(self, mode, request):
         require(type(request) is dict, "request must be an object")
-        with self.locked():
+        if mode == "apply":
+            require(type(request.get("dry_run", False)) is bool, "dry_run must be boolean")
+        with self.locked(existing_only=mode == "apply" and request.get("dry_run") is True):
             if mode == "apply":
                 return self.apply(request)
             if mode == "verify":

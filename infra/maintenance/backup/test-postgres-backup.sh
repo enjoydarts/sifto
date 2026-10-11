@@ -34,7 +34,12 @@ SELECT i, (SELECT string_agg(md5((i*4096+j)::text), '')
            FROM generate_series(1,4096) AS blocks(j)) AS payload
 FROM generate_series(1,32) AS rows(i);
 SQL
+# Production sudo can retain an invoking user's inaccessible home directory.
+# Exercise that case without exposing any production files to this fixture.
+install -d -m 0700 /tmp/inaccessible-caller
+cd /tmp/inaccessible-caller
 runuser -u postgres -- /bin/bash /fixture/postgres-backup.sh
+cd /
 dump=$(find /data/backups -name '*.dump.gz')
 [[ -f "$dump" && $(stat -c %a "$dump") == 600 ]]
 createdb -U postgres restored

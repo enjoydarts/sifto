@@ -4,6 +4,7 @@ set -euo pipefail
 umask 077
 backup_dir=/data/backups
 [[ $(id -un) == postgres && -d "$backup_dir" && ! -L "$backup_dir" ]]
+cd -- "$backup_dir"
 exec 9>"$backup_dir/.sifto-backup.lock"
 flock -n 9 || { printf 'another backup is running\n' >&2; exit 1; }
 stamp=$(date +%Y%m%d-%H%M%S)

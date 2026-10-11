@@ -1,0 +1,9 @@
+**
+!host_agent.py
+!maintenance/
+!maintenance/__init__.py
+!maintenance/plan.py
+!maintenance/host.py
+!bootstrap/
+!bootstrap/install-host.sh
+!bootstrap/test-install.sh

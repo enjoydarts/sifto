@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Sifto encrypted backup (%i)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Tokyo
+RandomizedDelaySec=300
+Persistent=true
+Unit=sifto-offhost-backup@%i.service
+
+[Install]
+WantedBy=timers.target

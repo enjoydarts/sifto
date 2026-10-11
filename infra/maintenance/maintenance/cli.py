@@ -312,7 +312,7 @@ def execute(executor, repo, inputs, store):
     result = client.call(host, "apply", {"workflow_sha": executor, "envelope": envelope, "dry_run": inputs["dry_run"]})
     if inputs["dry_run"]:
         require(result == {"plan_id": plan["plan_id"], "status": "preflight_passed"}, "preflight_invalid")
-    elif plan["action"] == "reboot":
+    elif plan.get("action", "apt_upgrade") == "reboot":
         require(result.get("status") == "reboot_scheduled", "apply_incomplete")
         deadline = time.monotonic() + 600
         while True:

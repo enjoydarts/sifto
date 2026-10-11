@@ -280,6 +280,27 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(transport.call.call_count, 1)
             git.write.assert_not_called()
 
+    def test_legacy_signed_plan_without_action_runs_post_apply_verify(self):
+        from maintenance.plan import sign_plan
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'secrets').mkdir()
+            (root / 'secrets/hosts.json').write_text(json.dumps([{'host_id': 'sifto-app', 'address': 'example.invalid', 'port': 22, 'role': 'application'}]))
+            plan = build_plan(ready(), self.sha, now=1000)
+            del plan['action']
+            envelope = sign_plan(plan, {'plan_sha256': plan_sha256(plan), 'run_id': '123', 'approved_by': 'synthetic-human', 'approved_at': 1001, 'expires_at': 2000, 'workflow_sha': self.sha, 'execution_mode': 'apply'}, Ed25519PrivateKey.generate())
+            git = Mock()
+            git.fetch.return_value = json.dumps(envelope).encode()
+            transport = Mock()
+            transport.call.side_effect = [{'plan_id': plan['plan_id'], 'status': 'completed'}, {'plan_id': plan['plan_id'], 'status': 'verified'}]
+            inputs = {'plan_id': plan['plan_id'], 'approval_commit': 'b' * 40, 'approval_sha256': 'c' * 64, 'dry_run': False}
+            with patch.object(cli, 'Path', side_effect=lambda value: root / value.lstrip('/')), patch.object(cli, 'load_plan', return_value=plan), patch.object(cli, 'Client', return_value=transport), patch.object(cli, 'summary') as summary, patch.dict('os.environ', {'GITHUB_RUN_ID': '123'}):
+                cli.execute(self.sha, 'enjoydarts/sifto-operations', inputs, git)
+            self.assertEqual([call.args[1] for call in transport.call.call_args_list], ['apply', 'verify'])
+            self.assertEqual(transport.call.call_args_list[0].args[2]['envelope'], envelope)
+            self.assertNotIn('action', envelope['plan'])
+            self.assertIn('verified', summary.call_args.args[0])
+
     def test_capture_bounds_both_streams_without_cancelling_mutation(self):
         import sys
         code, stdout, stderr, capped = ssh.capture([sys.executable, '-c', 'import sys; sys.stdout.write("o"*2000); sys.stderr.write("e"*2000)'], limit=100, timeout=None)

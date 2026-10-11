@@ -259,4 +259,3 @@ class RunningPoolProbeTests(unittest.TestCase):
                      {"executable": "/tmp/pgbouncer"}, {"uid": 1000}, {"changed": True}):
             with self.subTest(args=args), self.assertRaises(p.MaintenanceError):
                 self.probe(**args)
-

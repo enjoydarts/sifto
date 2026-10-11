@@ -6,5 +6,6 @@
     - name: Run fixed-command executor
       ansible.builtin.command:
         argv: [python, -B, -m, maintenance.cli, execute]
+        chdir: /src
       no_log: true
       changed_when: false

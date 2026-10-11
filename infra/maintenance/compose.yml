@@ -38,4 +38,5 @@ services:
       MAINTENANCE_ALLOWED_APPROVERS:
       MAINTENANCE_AI_MODEL:
       ANSIBLE_LOCAL_TEMP: /tmp/ansible
+      ANSIBLE_REMOTE_TEMP: /tmp/ansible-remote
       ANSIBLE_HOME: /tmp/ansible-home

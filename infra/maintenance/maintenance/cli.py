@@ -11,7 +11,7 @@ from pathlib import Path
 from .host import strict_json
 from .plan import (HASH, SHA, MaintenanceError, build_plan, canonical_json, matches,
                    normalize_closure, plan_sha256, require, sign_plan, validate_approval, validate_plan)
-from .report import ai_advice, observe_coolify, render
+from .report import DEFAULT_AI_MODEL, ai_advice, observe_coolify, render
 from .ssh import Client, parse_hosts
 from .store import GitStore, private_write, repo_url, validate_ref
 
@@ -246,7 +246,7 @@ def scan(executor, repo, inputs, store):
         coolify = observe_coolify(collected)
         files[prefix + "/coolify-observation.json"] = coolify
         advice = ai_advice(plan, Path("/secrets/anthropic_key").read_text().strip(),
-                           os.environ.get("MAINTENANCE_AI_MODEL") or "claude-haiku-4-5") if plan else {
+                           os.environ.get("MAINTENANCE_AI_MODEL") or DEFAULT_AI_MODEL) if plan else {
                            "status": "unavailable", "warning_ja": "承認可能な計画がありません。AI 解析は実施していません。"}
         files[prefix + "/assessment.json"] = result
         files[prefix + "/report.md"] = render(result, advice, coolify).encode()

@@ -10,6 +10,7 @@ REFERENCES = ["https://documentation.ubuntu.com/server/how-to/software/package-m
               "https://ubuntu.com/security/notices", "https://docs.docker.com/engine/release-notes/",
               "https://www.postgresql.org/docs/release/"]
 MAX_AI = 32768
+DEFAULT_AI_MODEL = "claude-haiku-5-5"
 COOLIFY_LATEST_API = "https://api.github.com/repos/coollabsio/coolify/releases/latest"
 MAX_RELEASE = 256 * 1024
 STABLE_VERSION = r"(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})"
@@ -80,7 +81,7 @@ def validate_advice(value):
     return value
 
 
-def ai_advice(plan, key, model="claude-haiku-4-5"):
+def ai_advice(plan, key, model=DEFAULT_AI_MODEL):
     try:
         require(isinstance(key, str) and bool(key), "AI key missing")
         require(isinstance(model, str) and 1 <= len(model) <= 100, "invalid AI model")
@@ -92,6 +93,11 @@ def ai_advice(plan, key, model="claude-haiku-4-5"):
                 "推測と確認済みのバージョン事実を区別する。外部参照は資料URLだけで未取得。"
                 '出力はJSONだけ: {"summary_ja":"...","warnings_ja":["..."]}。',
                 "messages": [{"role": "user", "content": canonical_json(payload).decode()}]}
+        if model == DEFAULT_AI_MODEL:
+            # Adaptive thinking consumes the same output budget as the answer.
+            # Keep this advisory call cheap and bounded, with room for both.
+            # Legacy overrides retain their compatible request parameters.
+            body.update(max_tokens=4096, thinking={"type": "adaptive"}, output_config={"effort": "low"})
         request = urllib.request.Request("https://api.anthropic.com/v1/messages", data=canonical_json(body),
                                          headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                                                   "Content-Type": "application/json"}, method="POST")
@@ -100,9 +106,29 @@ def ai_advice(plan, key, model="claude-haiku-4-5"):
         require(len(raw) <= MAX_AI, "AI response too large")
         from .host import strict_json
         result = strict_json(raw)
-        require(result.get("stop_reason") == "end_turn" and type(result.get("content")) is list
-                and len(result["content"]) == 1 and result["content"][0].get("type") == "text", "incomplete AI advice")
-        advice = validate_advice(strict_json(result["content"][0]["text"]))
+        require(type(result) is dict and result.get("stop_reason") == "end_turn"
+                and type(result.get("content")) is list and 1 <= len(result["content"]) <= 8,
+                "incomplete AI advice")
+        texts = []
+        for block in result["content"]:
+            require(type(block) is dict, "invalid AI content block")
+            kind = block.get("type")
+            if kind == "text":
+                require(set(block) <= {"type", "text", "citations"} and isinstance(block.get("text"), str)
+                        and block.get("citations") in (None, []), "invalid AI text block")
+                texts.append(block["text"])
+            elif kind == "thinking":
+                require(set(block) == {"type", "thinking", "signature"} and isinstance(block["thinking"], str)
+                        and isinstance(block["signature"], str) and bool(block["signature"]), "invalid AI thinking block")
+            elif kind == "redacted_thinking":
+                require(set(block) == {"type", "data"} and isinstance(block["data"], str)
+                        and bool(block["data"]), "invalid AI redacted thinking block")
+            else:
+                require(False, "unexpected AI content block")
+        # Never expose, replay or store opaque thinking. Multiple text blocks are
+        # ambiguous for our single JSON object contract and fail closed.
+        require(len(texts) == 1, "ambiguous AI advice")
+        advice = validate_advice(strict_json(texts[0]))
         return {"status": "available", **advice}
     except Exception:
         return {"status": "unavailable", "warning_ja": "AI 解析を利用できません。AI による解析は完了していません。決定的な変更一覧を確認してください。"}

@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 """Prove an exact encrypted offhost snapshot by retrieving and restoring it.
 
-Activation requires an operator-approved root-only env and initialized repository.
+Activation requires an operator-approved root-only env, matching explicit root
+backup_destination policy and initialized repository in the private backup bucket.
 No operation enables database maintenance or guesses a destination.
 """
 import argparse
@@ -15,6 +16,8 @@ from pathlib import Path
 import pwd
 import re
 import resource
+import selectors
+import signal
 import shutil
 import stat
 import subprocess
@@ -106,6 +109,7 @@ def settings(role):
     protected(STATE, private=True, directory=True)
     protected(COMPOSE)
     config = load_config(role)
+    destination = approved_destination(config, role)
     protected(ENV_FILE, private=True)
     require(ENV_FILE.stat().st_mode & 0o777 == 0o600 and ENV_FILE.stat().st_size <= 16384,
             "backup env must be root 0600 and bounded")
@@ -126,23 +130,59 @@ def settings(role):
             "destination has no matching explicit approval")
     match = REPOSITORY.fullmatch(env["RESTIC_REPOSITORY"])
     require(match and all(p not in ("", ".", "..") for p in match[2].split("/")), "invalid approved R2 destination")
+    require("s3://" + match[1] + "/" + match[2] == destination, "R2 repository does not match root-approved backup destination")
     require(len(env["RESTIC_PASSWORD"]) >= 20, "independent backup password required")
-    return config, raw, "s3://" + match[1] + "/" + match[2]
+    return config, raw, destination
+
+
+def approved_destination(config, role):
+    destination = config.get("backup_destination")
+    # Podcast objects have separate public delivery/retention policies. Even a
+    # root-approved env must never repurpose that shared bucket for recovery.
+    require(type(destination) is dict and set(destination) == {"bucket", "prefix"}
+            and destination == {"bucket": "sifto-backups-prod", "prefix": role}
+            and role in ("application", "database"), "explicit dedicated backup destination approval required")
+    return "s3://" + destination["bucket"] + "/" + destination["prefix"]
 
 
 def run(command, *, env=None, timeout=6 * 3600, limit=2 * 1024 * 1024):
-    def bound_output():
-        resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
-    with tempfile.TemporaryFile(dir=STATE) as output:
-        try:
-            result = subprocess.run(command, env=env or SAFE_ENV, stdin=subprocess.DEVNULL,
-                                    stdout=output, stderr=output, timeout=timeout,
-                                    preexec_fn=bound_output, check=False)
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            raise BackupError("backup subprocess failed or timed out") from exc
-        require(result.returncode == 0 and output.tell() <= limit, "backup subprocess failed")
-        output.seek(0)
-        return output.read().decode("utf-8", errors="strict")
+    # RLIMIT_FSIZE also caps producer dump/archive files. Bound only the output
+    # pipe, while retaining the fixed timeout and cleaning up this child group.
+    process = None
+    deadline = time.monotonic() + timeout
+    try:
+        process = subprocess.Popen(command, env=env or SAFE_ENV, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        output = bytearray()
+        os.set_blocking(process.stdout.fileno(), False)
+        with selectors.DefaultSelector() as reader:
+            reader.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                require(remaining > 0 and reader.select(remaining), "backup subprocess timed out")
+                block = os.read(process.stdout.fileno(), min(65536, limit - len(output) + 1))
+                if not block:
+                    break
+                output.extend(block)
+                require(len(output) <= limit, "backup subprocess output limit exceeded")
+        require(process.wait(timeout=max(0, deadline - time.monotonic())) == 0, "backup subprocess failed")
+        return output.decode("utf-8", errors="strict")
+    except (subprocess.TimeoutExpired, OSError, UnicodeError):
+        # Do not attach captured output or inherited credentials to errors.
+        raise BackupError("backup subprocess failed or timed out") from None
+    finally:
+        if process is not None:
+            # Session isolation limits termination to our own command family.
+            # Kill surviving descendants even when their parent already exited.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.stdout.close()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                raise BackupError("backup subprocess cleanup timed out") from None
 
 
 def compose(service, arguments):
@@ -386,6 +426,8 @@ def publish(role, host_id, proof):
     with lock(STATE / "maintenance.lock"):
         config = load_config(role)
         require(config["host_id"] == host_id, "host changed during proof generation")
+        require(proof["offhost_object"] == approved_destination(config, role) + "/snapshots/" + proof["backup_id"],
+                "backup destination approval changed during proof generation")
         evidence = STATE / "evidence"
         if not evidence.exists():
             evidence.mkdir(mode=0o700)

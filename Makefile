@@ -159,6 +159,14 @@ maintenance-syntax:
 	docker compose -f infra/maintenance/compose.yml --profile test run --rm -T test python -B -c 'import ast, pathlib; [ast.parse(p.read_text()) for p in pathlib.Path("maintenance").glob("*.py")]'
 	sh -n infra/maintenance/run-controller.sh
 
+.PHONY: maintenance-backup-test
+maintenance-backup-test:
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-unit -f infra/maintenance/compose.yml --profile test run --build --rm -T test python -B backup/test_backup_readiness.py
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
+	PROOF_PG_VERSION=15.19 docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures-pg15 -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T script-test
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T lock-test
+
 # Public PR checks use an isolated project with no .env, host ports, or secrets.
 DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
 .PHONY: dependency-check dependency-api dependency-worker dependency-web dependency-contract dependency-renovate-validate dependency-security dependency-inventory dependency-clean

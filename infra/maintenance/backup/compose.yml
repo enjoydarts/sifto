@@ -3,10 +3,36 @@ services:
     image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
     profiles: [operational]
     env_file:
-      - path: /etc/sifto-maintenance/backup.env
-        required: false
+      - path: ${MAINTENANCE_BACKUP_ENV:-/etc/sifto-maintenance/backup.env}
+        required: true
     volumes:
       - ${MAINTENANCE_BACKUP_SOURCE:-/var/lib/sifto-maintenance/backups}:/source:ro
+    tmpfs: [/tmp]
+    environment:
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+    read_only: true
+    mem_limit: 512m
+    cpus: 1.0
+  repository:
+    image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+    profiles: [operational]
+    env_file:
+      - path: ${MAINTENANCE_BACKUP_ENV:-/etc/sifto-maintenance/backup.env}
+        required: true
+    tmpfs: [/tmp]
+    environment:
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+    read_only: true
+    mem_limit: 512m
+    cpus: 1.0
+  retrieve:
+    image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+    profiles: [operational]
+    env_file:
+      - path: ${MAINTENANCE_BACKUP_ENV:-/etc/sifto-maintenance/backup.env}
+        required: true
+    volumes:
+      - ${MAINTENANCE_RESTORE_TARGET:-/nonexistent-offhost-restore}:/restore
     tmpfs: [/tmp]
     environment:
       RESTIC_CACHE_DIR: /tmp/restic-cache
@@ -34,6 +60,21 @@ services:
         restic restore latest --target /tmp/restore
         cmp /tmp/source/probe /tmp/restore/tmp/source/probe
         echo 'encrypted backup and full restore verified with synthetic data'
+  proof-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.proof-test
+      args:
+        PG_VERSION: ${PROOF_PG_VERSION:-16.13}
+    profiles: [test]
+    network_mode: none
+    read_only: true
+    mem_limit: 768m
+    cpus: 1.0
+    volumes:
+      - .:/fixture:ro
+    tmpfs: [/tmp, /source, /var/lib/sifto-maintenance, /var/run/postgresql]
+    entrypoint: [/bin/bash, /fixture/test-proof-integration.sh]
   script-test:
     image: postgres:16.13-bookworm
     profiles: [test]

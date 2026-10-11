@@ -150,9 +150,12 @@ test-worker:
 
 check-worker-full: check-worker test-worker
 
-.PHONY: maintenance-test maintenance-syntax
-maintenance-test:
+.PHONY: maintenance-test maintenance-syntax maintenance-backup-unit-test
+maintenance-test: maintenance-backup-unit-test
 	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T test
+
+maintenance-backup-unit-test:
+	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-unit -f infra/maintenance/compose.yml --profile test run --build --rm -T test python -B backup/test_backup_readiness.py
 
 maintenance-syntax:
 	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T -e ANSIBLE_LOCAL_TEMP=/tmp/ansible -e ANSIBLE_HOME=/tmp/ansible-home test ansible-playbook -i localhost, --syntax-check playbooks/scan.yml playbooks/apply.yml
@@ -160,8 +163,7 @@ maintenance-syntax:
 	sh -n infra/maintenance/run-controller.sh
 
 .PHONY: maintenance-backup-test
-maintenance-backup-test:
-	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-unit -f infra/maintenance/compose.yml --profile test run --build --rm -T test python -B backup/test_backup_readiness.py
+maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
 	PROOF_PG_VERSION=15.19 docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures-pg15 -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T script-test

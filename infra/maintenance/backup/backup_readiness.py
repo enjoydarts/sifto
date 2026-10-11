@@ -317,26 +317,69 @@ def restore_database(role, dump, work):
         run(["/usr/bin/docker", "rm", "-f", name], timeout=60)
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, rollback_on_commit_failure=False):
     if path.exists() or path.is_symlink():
         protected(path, private=True)
     protected(path.parent, private=True, directory=True)
-    fd, temporary = tempfile.mkstemp(prefix=".proof.", dir=path.parent)
+    temporary = rollback = None
+    retain_rollback = False
+    parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
+        if rollback_on_commit_failure:
+            # Publication holds maintenance.lock. Durably prepare the previous
+            # complete config before replacement, so recovery needs no allocation.
+            old_fd, rollback = tempfile.mkstemp(prefix=".rollback.", dir=path.parent)
+            with os.fdopen(old_fd, "wb") as stream:
+                stream.write(path.read_bytes())
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(parent_fd)
+        fd, temporary = tempfile.mkstemp(prefix=".proof.", dir=path.parent)
         with os.fdopen(fd, "w") as stream:
             json.dump(value, stream, sort_keys=True, separators=(",", ":"))
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
-        parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        temporary = None
         try:
             os.fsync(parent_fd)
-        finally:
-            os.close(parent_fd)
+        except OSError as exc:
+            if rollback is None:
+                raise
+            try:
+                os.replace(rollback, path)
+                rollback = None
+            except OSError:
+                # An allocation-free rename should normally restore the old
+                # config. If the directory cannot be changed, invalidate the
+                # existing config in place: native load_config then denies all
+                # maintenance. Retain the private recovery file for an operator.
+                retain_rollback = True
+                try:
+                    disabled_fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW)
+                    try:
+                        os.fsync(disabled_fd)
+                    finally:
+                        os.close(disabled_fd)
+                except OSError:
+                    raise BackupError("configuration recovery could not be confirmed; private rollback file retained; operator recovery required") from exc
+                raise BackupError("configuration rollback failed; readiness disabled; private rollback file retained for recovery") from exc
+            try:
+                os.fsync(parent_fd)
+            except OSError:
+                raise BackupError("previous configuration restored; directory durability unconfirmed; operator recovery required") from exc
+            raise BackupError("configuration commit failed; previous readiness restored") from exc
     finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+        os.close(parent_fd)
+        # Housekeeping cannot turn an already durable successful commit into a
+        # reported failure with fresh readiness. All leftovers are root 0600.
+        for leftover in (temporary, None if retain_rollback else rollback):
+            if leftover is not None:
+                try:
+                    os.unlink(leftover)
+                except OSError:
+                    pass
 
 
 def publish(role, host_id, proof):
@@ -349,7 +392,7 @@ def publish(role, host_id, proof):
         protected(evidence, private=True, directory=True)
         atomic_json(evidence / ("offhost-" + proof["backup_id"] + ".json"), proof)
         config["backup_readiness"] = proof
-        atomic_json(CONFIG, config)
+        atomic_json(CONFIG, config, rollback_on_commit_failure=True)
 
 
 def backup(role):

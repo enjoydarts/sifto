@@ -7,6 +7,7 @@ import tempfile
 import time
 import tarfile
 import sys
+import stat
 import unittest
 from unittest.mock import patch
 
@@ -192,6 +193,79 @@ class ReadinessTests(unittest.TestCase):
                 self.m.atomic_json(self.config, {"truncated": True})
         self.assertEqual(self.config.read_bytes(), original)
         self.assertFalse(list(self.etc.glob(".proof.*")))
+
+    def test_post_replace_config_directory_fsync_failure_does_not_advance_readiness(self):
+        fsync = self.m.os.fsync
+        failed = False
+        def fail_after_config_replacement(fd):
+            nonlocal failed
+            info = os.fstat(fd)
+            if (not failed and stat.S_ISDIR(info.st_mode)
+                    and info.st_ino == self.etc.stat().st_ino
+                    and json.loads(self.config.read_text()) != self.original):
+                failed = True
+                raise OSError("post-replace configuration directory fsync failure")
+            return fsync(fd)
+        with patch.object(self.m.os, "fsync", fail_after_config_replacement):
+            with self.assertRaises((OSError, self.m.BackupError)):
+                self.run_backup()
+        self.assertTrue(failed, "exercise failure after configuration replacement")
+        self.assertEqual(json.loads(self.config.read_text()), self.original)
+        # Standalone evidence records a real verified restore; it may remain.
+        self.assertEqual(len(list(self.state.glob("evidence/offhost-*.json"))), 1)
+        self.assertEqual(self.config.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(list(self.etc.glob(".rollback.*")))
+
+    def test_default_maintenance_target_runs_backup_unit_tests(self):
+        import re
+        targets = {name: (deps.split(), recipe) for name, deps, recipe in re.findall(
+            r"^([a-zA-Z0-9_-]+):([^\n]*)\n((?:\t[^\n]*\n)*)", Path("/repository/Makefile").read_text(), re.M)}
+        def reachable_commands(target):
+            deps, recipe = targets[target]
+            return recipe + "".join(reachable_commands(dep) for dep in deps if dep in targets)
+        self.assertIn("backup/test_backup_readiness.py", reachable_commands("maintenance-test"))
+
+    def test_failed_rollback_rename_disables_readiness_and_preserves_private_recovery_file(self):
+        fsync, replace = self.m.os.fsync, self.m.os.replace
+        failed = False
+        def fail_config_directory_fsync(fd):
+            nonlocal failed
+            info = os.fstat(fd)
+            if (not failed and stat.S_ISDIR(info.st_mode) and info.st_ino == self.etc.stat().st_ino
+                    and json.loads(self.config.read_text()) != self.original):
+                failed = True
+                raise OSError("configuration commit fsync failure")
+            return fsync(fd)
+        def fail_rollback(source, target):
+            if Path(source).name.startswith(".rollback."):
+                raise OSError("rollback rename unavailable")
+            return replace(source, target)
+        with patch.object(self.m.os, "fsync", fail_config_directory_fsync), patch.object(self.m.os, "replace", fail_rollback):
+            with self.assertRaises((OSError, self.m.BackupError)):
+                self.run_backup()
+        self.assertEqual(self.config.read_bytes(), b"", "unavailable rollback must deny config loading/readiness")
+        recovery = list(self.etc.glob(".rollback.*"))
+        self.assertEqual(len(recovery), 1)
+        self.assertEqual(json.loads(recovery[0].read_text()), self.original)
+        self.assertEqual(recovery[0].stat().st_mode & 0o777, 0o600)
+
+    def test_persistent_directory_fsync_failure_keeps_old_config_after_rollback(self):
+        fsync = self.m.os.fsync
+        failed = False
+        def persistent_config_directory_failure(fd):
+            nonlocal failed
+            info = os.fstat(fd)
+            if stat.S_ISDIR(info.st_mode) and info.st_ino == self.etc.stat().st_ino:
+                if failed or json.loads(self.config.read_text()) != self.original:
+                    failed = True
+                    raise OSError("persistent directory fsync failure")
+            return fsync(fd)
+        with patch.object(self.m.os, "fsync", persistent_config_directory_failure):
+            with self.assertRaisesRegex(self.m.BackupError, "previous configuration restored"):
+                self.run_backup()
+        self.assertTrue(failed)
+        self.assertEqual(json.loads(self.config.read_text()), self.original)
+        self.assertFalse(list(self.etc.glob(".rollback.*")))
 
     def test_missing_postgres_owned_lock_is_not_created_as_root(self):
         os.chown(self.sources, 999, 999)

@@ -90,3 +90,13 @@ services:
       - ../../web/package-lock.json:/inventory/web/package-lock.json:ro
       - ../maintenance/requirements.txt:/inventory/maintenance/requirements.txt:ro
       - ../audio-concat/requirements.txt:/inventory/audio-concat/requirements.txt:ro
+  renovate-status-test:
+    image: ghcr.io/renovatebot/renovate:44.149.3
+    entrypoint: [node]
+    command: [/fixtures/test-renovate-status.mjs]
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ./test-renovate-status.mjs:/fixtures/test-renovate-status.mjs:ro
+      - ../../.github/workflows/renovate.yml:/fixtures/renovate.yml:ro

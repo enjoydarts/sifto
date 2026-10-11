@@ -47,11 +47,20 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(set(events), {'schedule', 'workflow_dispatch'})
         job = workflow['jobs']['renovate']
         self.assertIn("github.ref == 'refs/heads/main'", job['if'])
-        self.assertEqual(job['permissions'], {'contents': 'write', 'pull-requests': 'write'})
         action = next(s for s in job['steps'] if s.get('uses', '').startswith('renovatebot/'))
         self.assertEqual(action['with']['token'], '${{ github.token }}')
         self.assertRegex(action['with']['renovate-version'], r'^\d+\.\d+\.\d+$')
         self.assertNotIn('secrets.', (ROOT / '.github/workflows/renovate.yml').read_text())
+
+    def test_bot_can_publish_release_age_status_without_broader_permissions(self):
+        workflow = read_yaml('.github/workflows/renovate.yml')
+        self.assertEqual(workflow['permissions'], {})
+        self.assertEqual(workflow['jobs']['renovate']['permissions'], {
+            'contents': 'write',
+            'pull-requests': 'write',
+            # Renovate publishes pending/success for minimumReleaseAge before PR creation.
+            'statuses': 'write',
+        })
 
     def test_public_pr_checks_have_no_write_permissions_or_secrets(self):
         path = '.github/workflows/dependency-check.yml'

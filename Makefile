@@ -177,6 +177,7 @@ dependency-contract:
 
 dependency-renovate-validate:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-status-test
 
 dependency-security:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps trivy

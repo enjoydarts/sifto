@@ -199,19 +199,21 @@ func runAINavigatorBriefPipelineFn(client inngestgo.Client, db *pgxpool.Pool, wo
 	secretCipher := service.NewSecretCipher()
 	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, nil, cache, nil)
 
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
+		ID: "run-ai-navigator-brief-pipeline", Name: "Run AI Navigator Brief Pipeline",
+	}, []inngestgo.ConfigStepConcurrency{
+		{
+			Limit: 1,
+			Key:   inngestgo.StrPtr("event.data.brief_id"),
+			Scope: enums.ConcurrencyScopeFn,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{
-			ID:   "run-ai-navigator-brief-pipeline",
-			Name: "Run AI Navigator Brief Pipeline",
-			Concurrency: []inngestgo.ConfigStepConcurrency{
-				{
-					Limit: 1,
-					Key:   inngestgo.StrPtr("event.data.brief_id"),
-					Scope: enums.ConcurrencyScopeFn,
-				},
-			},
-		},
+		options,
 		inngestgo.EventTrigger("ai-navigator-brief/run", nil),
 		func(ctx context.Context, input inngestgo.Input[aiNavigatorBriefRunEventData]) (any, error) {
 			data := input.Event.Data
@@ -256,19 +258,21 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
 	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
+		ID: "run-audio-briefing-pipeline", Name: "Run Audio Briefing Pipeline",
+	}, []inngestgo.ConfigStepConcurrency{
+		{
+			Limit: 1,
+			Key:   inngestgo.StrPtr("event.data.job_id"),
+			Scope: enums.ConcurrencyScopeFn,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{
-			ID:   "run-audio-briefing-pipeline",
-			Name: "Run Audio Briefing Pipeline",
-			Concurrency: []inngestgo.ConfigStepConcurrency{
-				{
-					Limit: 1,
-					Key:   inngestgo.StrPtr("event.data.job_id"),
-					Scope: enums.ConcurrencyScopeFn,
-				},
-			},
-		},
+		options,
 		inngestgo.EventTrigger("audio-briefing/run", nil),
 		func(ctx context.Context, input inngestgo.Input[audioBriefingRunEventData]) (any, error) {
 			data := input.Event.Data
@@ -1072,26 +1076,26 @@ func runItemBulkJobFn(client inngestgo.Client, db *pgxpool.Pool, cache service.J
 		batchSize = 200
 	}
 
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
+		ID: "run-item-bulk-job", Name: "Run Item Bulk Job",
+		Throttle: &inngestgo.ConfigThrottle{
+			Limit: 1, Period: 30 * time.Second, Burst: 1,
+		},
+	}, []inngestgo.ConfigStepConcurrency{
+		{
+			Limit: 1,
+		},
+		{
+			Limit: 1,
+			Key:   inngestgo.StrPtr("event.data.job_id"),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{
-			ID:   "run-item-bulk-job",
-			Name: "Run Item Bulk Job",
-			Concurrency: []inngestgo.ConfigStepConcurrency{
-				{
-					Limit: 1,
-				},
-				{
-					Limit: 1,
-					Key:   inngestgo.StrPtr("event.data.job_id"),
-				},
-			},
-			Throttle: &inngestgo.ConfigThrottle{
-				Limit:  1,
-				Period: 30 * time.Second,
-				Burst:  1,
-			},
-		},
+		options,
 		inngestgo.EventTrigger("item-bulk-job/run", nil),
 		func(ctx context.Context, input inngestgo.Input[ItemBulkJobRunData]) (any, error) {
 			jobID := strings.TrimSpace(input.Event.Data.JobID)
@@ -1207,26 +1211,26 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		pickMaxPerDay:      envIntOrDefault("ONESIGNAL_PICK_MAX_PER_DAY", 2),
 	}
 
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
+		ID: "process-item", Name: "Process Item",
+		Throttle: &inngestgo.ConfigThrottle{
+			Limit: 30, Period: time.Minute, Burst: 6,
+		},
+	}, []inngestgo.ConfigStepConcurrency{
+		{
+			Limit: 5,
+		},
+		{
+			Limit: 1,
+			Key:   inngestgo.StrPtr("event.data.item_id"),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{
-			ID:   "process-item",
-			Name: "Process Item",
-			Concurrency: []inngestgo.ConfigStepConcurrency{
-				{
-					Limit: 5,
-				},
-				{
-					Limit: 1,
-					Key:   inngestgo.StrPtr("event.data.item_id"),
-				},
-			},
-			Throttle: &inngestgo.ConfigThrottle{
-				Limit:  30,
-				Period: time.Minute,
-				Burst:  6,
-			},
-		},
+		options,
 		inngestgo.EventTrigger("item/created", nil),
 		func(ctx context.Context, input inngestgo.Input[processItemEventData]) (any, error) {
 			data := input.Event.Data

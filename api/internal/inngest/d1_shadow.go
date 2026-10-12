@@ -123,10 +123,13 @@ func d1ShadowFn(client inngestgo.Client, db *pgxpool.Pool, keys *service.UserKey
 	}
 	deps := processItemDeps{d1: service.NewD1ClientFromCatalog(catalog), d1Catalog: catalog, keyProvider: keys, cache: cache,
 		qualityRepo: repository.NewItemQualityEvaluationRepo(db), llmUsageRepo: repository.NewLLMUsageLogRepo(db), llmExecutionRepo: repository.NewLLMExecutionEventRepo(db)}
-	return inngestgo.CreateFunction(client, inngestgo.FunctionOpts{
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
 		ID: "evaluate-d1-shadow", Name: "Evaluate D1 Shadow",
-		Concurrency: []inngestgo.ConfigStepConcurrency{{Limit: 1}},
-	}, inngestgo.EventTrigger("item/d1-shadow.requested", nil), func(ctx context.Context, input inngestgo.Input[service.D1ShadowEventData]) (any, error) {
+	}, []inngestgo.ConfigStepConcurrency{{Limit: 1}})
+	if err != nil {
+		return nil, err
+	}
+	return inngestgo.CreateFunction(client, options, inngestgo.EventTrigger("item/d1-shadow.requested", nil), func(ctx context.Context, input inngestgo.Input[service.D1ShadowEventData]) (any, error) {
 		data := input.Event.Data
 		if data.ItemID == "" || data.UserID == "" || (data.Kind != "facts" && data.Kind != "faithfulness") {
 			return map[string]any{"skipped": true}, nil

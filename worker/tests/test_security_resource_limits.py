@@ -26,7 +26,7 @@ def test_pdf_extraction_rejects_too_many_pages_before_parsing_text():
     document.__enter__ = Mock(return_value=document)
     document.__exit__ = Mock(return_value=False)
     document.page_count = 1001
-    with patch("fitz.open", return_value=document), pytest.raises(ValueError):
+    with patch("pymupdf.open", return_value=document), pytest.raises(ValueError):
         pdf_service._extract_pdf_body_in_process(b"%PDF-test", "https://example.com/test.pdf")
     document.__iter__.assert_not_called()
 

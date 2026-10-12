@@ -79,7 +79,12 @@ bgutil-ytdlp-pot-provider==1.3.2
                     shutil.copyfile(ROOT / 'infra/audio-concat' / file, target / file)
                 if failure == 'direct':
                     source = target / 'requirements.in'
-                    source.write_text(source.read_text().replace('boto3==1.39.13', 'boto3==1.39.14'))
+                    original = source.read_text()
+                    changed, count = re.subn(r'(?m)^(boto3==[0-9]+\.[0-9]+\.)([0-9]+)$',
+                                            lambda match: match[1] + str(int(match[2]) + 1), original)
+                    self.assertEqual(count, 1, 'Expected one boto3 input pin to mutate')
+                    self.assertNotEqual(changed, original)
+                    source.write_text(changed)
                 else:
                     lock = target / 'requirements.txt'
                     text = lock.read_text()

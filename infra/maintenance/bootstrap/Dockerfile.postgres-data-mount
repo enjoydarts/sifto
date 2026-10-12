@@ -1,0 +1,9 @@
+FROM scratch AS context-test
+COPY . /
+
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends systemd python3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY bootstrap/52-sifto-data-mount.conf bootstrap/test-postgres-data-mount-systemd.py /fixture/
+CMD ["python3", "-B", "/fixture/test-postgres-data-mount-systemd.py"]

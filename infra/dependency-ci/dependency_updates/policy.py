@@ -8,6 +8,7 @@ SHA = re.compile(r'^[0-9a-f]{40}$')
 VERSION = r'[~^]?[0-9][a-zA-Z0-9.+_-]*(?:\.[a-zA-Z0-9.+_-]+)*'
 IMAGE = r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*(?:@sha256:[0-9a-f]{64})?'
 DOCKERFILES = {'api/Dockerfile', 'worker/Dockerfile', 'web/Dockerfile', 'infra/audio-concat/Dockerfile', 'infra/dependency-ci/web.Dockerfile', 'infra/dependency-ci/postgres.Dockerfile', 'infra/maintenance/Dockerfile', 'infra/maintenance/backup/Dockerfile.proof-test', 'infra/maintenance/bootstrap/Dockerfile.test'}
+DOCKERFILES.add('infra/maintenance/bootstrap/Dockerfile.postgres-data-mount')
 COMPOSE = {'docker-compose.yml', 'infra/dependency-ci/compose.yml', 'infra/maintenance/compose.yml', 'infra/maintenance/bootstrap/compose.yml', 'infra/maintenance/backup/compose.yml'}
 COMPOSE.add('infra/dependency-ci/compose.python-locks.yml')
 PYTHON_INPUTS = {'worker/requirements.in', 'infra/audio-concat/requirements.in'}
@@ -225,7 +226,7 @@ def surfaces(paths):
             result.add('audio')
         elif path in {'docker-compose.yml', 'web/Dockerfile'}:
             result.add('development')
-        elif path.startswith('infra/dependency-ci/') or path in {'infra/maintenance/bootstrap/Dockerfile.test', 'infra/maintenance/backup/Dockerfile.proof-test'}:
+        elif path.startswith('infra/dependency-ci/') or path in {'infra/maintenance/bootstrap/Dockerfile.test', 'infra/maintenance/bootstrap/Dockerfile.postgres-data-mount', 'infra/maintenance/backup/Dockerfile.proof-test'}:
             result.add('ci')
         else:
             raise Refused('Resource activation for this dependency path is unsupported')

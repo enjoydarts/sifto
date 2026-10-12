@@ -1,0 +1,12 @@
+services:
+  test:
+    build:
+      context: ..
+      dockerfile: bootstrap/Dockerfile.postgres-data-mount
+    platform: ${POSTGRES_MOUNT_TEST_PLATFORM:-linux/arm64}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:mode=1777,exec

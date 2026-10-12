@@ -183,6 +183,13 @@ maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T script-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --rm -T lock-test
 
+# Verify the fixed production /data/postgres policy with Ubuntu 24's real loader.
+# This loads an offline fixture; it never installs a drop-in or starts PostgreSQL.
+.PHONY: maintenance-postgres-data-mount-test
+maintenance-postgres-data-mount-test:
+	sh infra/maintenance/bootstrap/test-postgres-data-mount-context.sh
+	docker compose --env-file /dev/null --project-name sifto-postgres-data-mount-fixture -f infra/maintenance/bootstrap/compose.postgres-data-mount.yml run --build --rm -T --no-deps test
+
 # Public PR checks use an isolated project with no .env, host ports, or secrets.
 DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
 export PYTHON_LOCK_UID ?= $(shell id -u)

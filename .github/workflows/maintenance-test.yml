@@ -9,6 +9,16 @@ on:
 permissions:
   contents: read
 jobs:
+  postgres-data-mount:
+    name: PostgreSQL data mount ordering
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Ubuntu 24 offline systemd mount ordering
+        run: make maintenance-postgres-data-mount-test
   test:
     runs-on: ubuntu-26.04
     steps:

@@ -72,7 +72,10 @@ jobs:
         env:
           EXPECTED_HEAD: ${{ inputs.expected_head }}
         run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-      - run: |
+      - env:
+          # Run the offline loader natively on this AMD64 policy runner.
+          POSTGRES_MOUNT_TEST_PLATFORM: linux/amd64
+        run: |
           make dependency-python-locks-check
           make dependency-python-locks-test
           make dependency-contract
@@ -80,5 +83,6 @@ jobs:
           make dependency-audio
           make maintenance-test
           make maintenance-syntax
+          make maintenance-postgres-data-mount-test
       - if: always()
         run: make dependency-clean

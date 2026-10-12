@@ -91,8 +91,24 @@ class DependencyAutomationContract(unittest.TestCase):
             self.assertNotIn('environment', job)
             self.assertNotIn('permissions', job)
         text = (ROOT / path).read_text()
-        for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'dependency-contract', 'dependency-renovate-validate', 'dependency-python-locks-check', 'dependency-audio']:
+        for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'maintenance-postgres-data-mount-test', 'dependency-contract', 'dependency-renovate-validate', 'dependency-python-locks-check', 'dependency-audio']:
             self.assertIn(target, text)
+
+    def test_mount_regression_blocks_automatic_dependency_approval(self):
+        job = read_yaml('.github/workflows/dependency-check.yml')['jobs']['policy']
+        self.assertEqual(job['name'], 'Dependency Policy')
+        self.assertEqual(job['runs-on'], 'ubuntu-26.04')
+        step = next(step for step in job['steps'] if 'make maintenance-postgres-data-mount-test' in step.get('run', ''))
+        self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/amd64')
+        self.assertNotIn('if', step)
+        self.assertIsNot(step.get('continue-on-error'), True)
+        fixture = read_yaml('infra/maintenance/bootstrap/compose.postgres-data-mount.yml')['services']['test']
+        self.assertEqual(fixture['platform'], '${POSTGRES_MOUNT_TEST_PLATFORM:-linux/arm64}')
+        self.assertEqual(fixture['network_mode'], 'none')
+        self.assertIs(fixture['read_only'], True)
+        self.assertEqual(fixture['cap_drop'], ['ALL'])
+        self.assertEqual(fixture['security_opt'], ['no-new-privileges:true'])
+        self.assertTrue({'volumes', 'ports', 'environment', 'env_file'}.isdisjoint(fixture))
 
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
         for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'deploy', 'deploy-audio-concat']:

@@ -229,6 +229,11 @@ dependency-contract: dependency-python-locks-mounts-test
 dependency-renovate-validate:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-status-test
+	$(MAKE) dependency-renovate-npm-test
+
+.PHONY: dependency-renovate-npm-test
+dependency-renovate-npm-test:
+	docker compose --env-file /dev/null -f infra/dependency-ci/compose.renovate-npm.yml run --rm -T --no-deps test
 
 dependency-security:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps trivy

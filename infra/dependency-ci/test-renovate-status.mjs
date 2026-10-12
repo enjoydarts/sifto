@@ -18,6 +18,9 @@ import { applyPackageRules } from '/usr/local/renovate/dist/util/package-rules/i
 import { extractAllPackageFiles } from '/usr/local/renovate/dist/modules/manager/pip-compile/extract.js';
 import { extractHeaderCommand } from '/usr/local/renovate/dist/modules/manager/pip-compile/common.js';
 import { constructPipCompileCmd } from '/usr/local/renovate/dist/modules/manager/pip-compile/artifacts.js';
+import { getExecOptions } from '/usr/local/renovate/dist/modules/manager/pip-compile/common.js';
+import { setCustomEnv } from '/usr/local/renovate/dist/util/env.js';
+import { getChildEnv } from '/usr/local/renovate/dist/util/exec/utils.js';
 import { generateUpdate } from '/usr/local/renovate/dist/workers/repository/process/lookup/generate.js';
 import { get as getVersioning } from '/usr/local/renovate/dist/modules/versioning/index.js';
 import { getRangeStrategy } from '/usr/local/renovate/dist/modules/manager/index.js';
@@ -40,6 +43,19 @@ let canWriteStatuses = false;
 try {
   await initLogger();
   const repositoryConfig = JSON.parse(readFileSync('/fixtures/renovate.json', 'utf8'));
+  // Plain UV_EXCLUDE_NEWER is filtered by Renovate. Trusted customEnvVariables
+  // must reach the real pip-compile execution path without changing the header.
+  assert.equal(action.env.RENOVATE_CUSTOM_ENV_VARIABLES, '${{ steps.python-age.outputs.custom_env }}');
+  const cutoffStep = workflow.jobs.renovate.steps.find((step) => step.id === 'python-age');
+  assert.ok(cutoffStep && cutoffStep.run.includes('dependency_updates.release_age'));
+  const cutoff = '2026-10-05T00:00:00Z';
+  const option = getOptions().find((entry) => entry.name === 'customEnvVariables');
+  assert.ok(option && option.globalOnly);
+  setCustomEnv({ UV_EXCLUDE_NEWER: cutoff });
+  GlobalConfig.set({ localDir: directory, cacheDir: directory, exposeAllEnv: false });
+  const execOptions = await getExecOptions(repositoryConfig, 'uv', directory, {}, '3.12');
+  assert.equal(getChildEnv(execOptions).UV_EXCLUDE_NEWER, cutoff);
+  setCustomEnv({});
   GlobalConfig.set({ localDir: directory });
   // Exercise the real Go parser's disabled indirect dependencies, then apply
   // repository rules. Mirror extract/manager-files normalizeDepNames, which

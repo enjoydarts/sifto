@@ -7,14 +7,31 @@ import tempfile
 import unittest
 import subprocess
 import sys
+from unittest.mock import patch
 
-from python_locks import COMMAND, check_directory, LockError
+from python_locks import COMMAND, compile_lock, check_directory, LockError
 from dependency_updates.policy import python_lock
 
 ROOT = Path('/repository')
 
 
 class PythonLocksTests(unittest.TestCase):
+    def test_generator_replaces_immature_transitive_preference_with_compatible_mature_pin(self):
+        # Actual PR 34 at 305807ace06f3cad97a7ca7ca051e12b6a114d45:
+        # boto3 1.43.108 was old enough; botocore 1.43.111 (Oct 9) was not.
+        # Preserve that existing resolver preference to exercise regeneration.
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('boto3==1.43.108\n')
+            (target / 'requirements.txt').write_text('botocore==1.43.111\n')
+            with patch('python_locks.release_cutoff', return_value='2026-10-05T00:00:00Z', create=True):
+                compile_lock(target)
+            pins = python_lock((target / 'requirements.txt').read_text())
+            self.assertEqual(pins['boto3']['version'], '1.43.108')
+            self.assertEqual(pins['botocore']['version'], '1.43.108',
+                             'Generator must enforce seven days for solver-selected transitives')
+            self.assertTrue(all(pin['hashes'] for pin in pins.values()))
+
     def test_indirect_updates_do_not_force_incompatible_solver_versions(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
         rules = [rule for rule in config['packageRules']

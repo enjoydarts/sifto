@@ -5,6 +5,8 @@
   "branchPrefix": "renovate-ci/",
   "automerge": false,
   "platformAutomerge": false,
+  "prBodyTemplate": "{{{header}}}{{{table}}}{{{warnings}}}{{{notes}}}{{{changelogs}}}{{{controls}}}{{{footer}}}",
+  "prFooter": "Sifto requests owner approval in the production-maintenance Environment. After that approval, Sifto automatically merges and deploys the verified candidate. No manual PR merge is required.",
   "minimumReleaseAge": "7 days",
   "prHourlyLimit": 2,
   "prConcurrentLimit": 5,
@@ -20,6 +22,12 @@
     {
       "matchUpdateTypes": ["digest", "pinDigest"],
       "groupName": "Docker image digests"
+    },
+    {
+      "matchFileNames": ["infra/maintenance/Dockerfile", "infra/maintenance/requirements.txt"],
+      "groupName": "Maintenance executor activation dependencies",
+      "groupSlug": "maintenance-executor-activation",
+      "automerge": false
     }
   ],
   "customManagers": [

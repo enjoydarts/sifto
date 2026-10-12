@@ -13,6 +13,7 @@ import { githubApi } from '/usr/local/renovate/dist/modules/platform/github/comm
 import { setStability } from '/usr/local/renovate/dist/workers/repository/update/branch/status-checks.js';
 import { REPOSITORY_CHANGED } from '/usr/local/renovate/dist/constants/error-messages.js';
 import { init as initLogger } from '/usr/local/renovate/dist/logger/index.js';
+import { applyPackageRules } from '/usr/local/renovate/dist/util/package-rules/index.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -29,6 +30,23 @@ let canWriteStatuses = false;
 
 try {
   await initLogger();
+  const repositoryConfig = JSON.parse(readFileSync('/fixtures/renovate.json', 'utf8'));
+  const activationGroup = 'Maintenance executor activation dependencies';
+  for (const updateType of ['minor', 'patch']) {
+    for (const packageFile of ['worker/requirements.txt', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.txt']) {
+      const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip_requirements', updateType });
+      assert.equal(config.groupName, packageFile.startsWith('infra/maintenance/') ? activationGroup : '{{manager}} minor and patch dependencies');
+      assert.equal(config.automerge, false);
+    }
+  }
+  for (const updateType of ['digest', 'pinDigest']) {
+    for (const packageFile of ['api/Dockerfile', 'infra/maintenance/bootstrap/Dockerfile.test', 'infra/maintenance/Dockerfile']) {
+      const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'dockerfile', updateType });
+      assert.equal(config.groupName, packageFile === 'infra/maintenance/Dockerfile' ? activationGroup : 'Docker image digests');
+      assert.equal(config.automerge, false);
+    }
+  }
+  console.log(`Renovate ${installedVersion}: live executor dependencies are separate from Worker/Audio minor-patch and ordinary Docker digest groups.`);
   execFileSync('git', ['init', '--initial-branch=main', directory], { stdio: 'pipe' });
   execFileSync('git', ['-C', directory, '-c', 'user.name=Dependency CI', '-c', 'user.email=dependency-ci@example.invalid', 'commit', '--allow-empty', '-m', 'Synthetic status fixture'], { stdio: 'pipe' });
   execFileSync('git', ['-C', directory, 'branch', branchName], { stdio: 'pipe' });

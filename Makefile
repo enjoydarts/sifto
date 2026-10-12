@@ -184,6 +184,7 @@ dependency-web:
 
 dependency-contract:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_updates.py
 	sh -n infra/dependency-ci/init-db.sh
 
 dependency-renovate-validate:

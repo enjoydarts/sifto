@@ -9,6 +9,28 @@ case "$component" in
   web) platform=linux/amd64; context=web; dockerfile=web/Dockerfile ;;
   *) echo 'Unknown image component' >&2; exit 2 ;;
 esac
+if [ "$component" = web ]; then
+  # Next.js freezes NEXT_PUBLIC values into the client bundle at build time.
+  # Require the production public Clerk configuration before any build work.
+  public_key=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+  valid_public_key=false
+  case "$public_key" in
+    pk_live_?*)
+      encoded_host=${public_key#pk_live_}
+      if printf '%s' "$encoded_host" | LC_ALL=C grep -Eq '^[A-Za-z0-9+/]+={0,2}$' && \
+        decoded_host=$(printf '%s' "$encoded_host" | base64 --decode 2>/dev/null) && \
+        [ "$(printf '%s' "$decoded_host" | base64 | tr -d '\n')" = "$encoded_host" ] && \
+        [ "$(printf '%s' "$decoded_host" | wc -l)" -eq 0 ] && \
+        printf '%s' "$decoded_host" | LC_ALL=C grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+\$$'; then
+        valid_public_key=true
+      fi
+      ;;
+  esac
+  if [ "$valid_public_key" != true ]; then
+    echo 'Web image security build requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY with a valid production pk_live_ public key; set the GitHub Actions repository variable or export it locally. No build started.' >&2
+    exit 2
+  fi
+fi
 # Archives and BuildKit layers can exhaust a shared local Docker host. Fail
 # before starting the build; CI runners build one matrix image per machine.
 available_kib=$(df -Pk . | awk 'NR == 2 {print $4}')
@@ -39,6 +61,9 @@ printf '%s\n' "$IMAGE_SOURCE_DIRTY" > "$IMAGE_SECURITY_DIR/source-dirty.txt"
 # No --target: scan the final production stage, never the dev stage.
 # No registry login, push, production environment or secret arguments.
 set -- --build-arg "APP_COMMIT_SHA=$IMAGE_SOURCE_SHA"
+if [ "$component" = web ]; then
+  set -- "$@" --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$public_key"
+fi
 if [ "$component" = maintenance ]; then
   # Match run-controller.sh, including its caller passwd/group entries.
   set -- "$@" --build-arg "MAINTENANCE_CONTROLLER_UID=$(id -u)" \

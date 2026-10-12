@@ -33,6 +33,7 @@ jobs:
       - name: Build final production image archive for deployment platform
         env:
           IMAGE_COMPONENT: ${{ matrix.component }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: make image-security-build
       - name: Generate SBOM and scan final image OS and library vulnerabilities
         env:

@@ -2,9 +2,7 @@ import { Suspense } from "react";
 import LoginForm from "./login-form";
 
 export default function LoginPage() {
-  const showClerk = !!(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
-  );
+  const showClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return (
     <Suspense>

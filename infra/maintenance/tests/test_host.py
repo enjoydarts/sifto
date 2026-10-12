@@ -1,3 +1,4 @@
+import base64
 import copy
 import io
 import json
@@ -46,6 +47,8 @@ class FakeRunner:
         self.containerd_client_version = "v9.9.9"
         self.package_architectures = {}
         self.new_multiarch_packages = set()
+        self.containers = None
+        self.after_restart = None
 
     def __call__(self, argv, *, timeout=60, check=True, env=None, pass_fds=()):
         self.calls.append(list(argv))
@@ -81,8 +84,12 @@ class FakeRunner:
         if argv[:2] == ["ctr", "--address"]:
             return f"Client:\n  Version: {self.containerd_client_version}\nServer:\n  Version: v{self.containerd_version}\n  Revision: fixture\n"
         if argv[:2] == ["docker", "ps"]:
+            if self.containers is not None:
+                return "".join(container["id"] + "\n" for container in self.containers)
             return "c" * 64 + "\n"
         if argv[:2] == ["docker", "inspect"]:
+            if self.containers is not None:
+                return "".join(json.dumps(container) + "\n" for container in self.containers)
             return json.dumps({"id": "c" * 64, "image_id": self.image_id,
                                "image": "example/app:1", "status": "running", "health": self.container_health}) + "\n"
         if argv[:2] == ["systemctl", "is-active"]:
@@ -110,6 +117,8 @@ class FakeRunner:
         if argv[:2] == ["systemctl", "reboot"]:
             return ""
         if argv[:2] == ["systemctl", "restart"]:
+            if self.after_restart:
+                self.after_restart()
             return ""
         raise AssertionError(f"unexpected command: {argv}")
 
@@ -158,6 +167,204 @@ class HostTests(unittest.TestCase):
     def mutations(self):
         return [cmd for cmd in self.runner.calls if (cmd[0] == "apt-get" and "-s" not in cmd)
                 or cmd[:2] in (["systemctl", "restart"], ["systemctl", "reboot"])]
+
+    def sentinel_containers(self):
+        return [{"id": "a" * 64, "image_id": "sha256:" + "b" * 64,
+                 "image": "docker.io/coollabsio/sentinel:1.0.2", "status": "running", "health": "healthy"},
+                {"id": "c" * 64, "image_id": "sha256:" + "d" * 64,
+                 "image": "example/app:1", "status": "running", "health": "none"}]
+
+    def sentinel_health_inventories(self):
+        self.config["allowed_recreated_container_images"] = ["docker.io/coollabsio/sentinel:1.0.2"]
+        self.runner.containers = self.sentinel_containers()
+        before = self.agent.inventory(simulation=False)
+        self.runner.containers[0]["id"] = "e" * 64
+        return before, self.agent.inventory(simulation=False)
+
+    def test_opted_in_sentinel_replacement_with_exact_image_is_healthy(self):
+        before, after = self.sentinel_health_inventories()
+        try:
+            self.agent._health(after, before)
+        except p.MaintenanceError as exc:
+            self.fail(f"healthy opted-in Sentinel recreation was rejected: {exc}")
+
+    def test_sentinel_replacement_without_application_opt_in_is_rejected(self):
+        before, after = self.sentinel_health_inventories()
+        self.config.pop("allowed_recreated_container_images")
+        with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+            self.agent._health(after, before)
+        for role, allowlist in [("application", []), ("application", ["docker.io/coollabsio/sentinel:1.0.3"]),
+                                ("database", ["docker.io/coollabsio/sentinel:1.0.2"])]:
+            with self.subTest(role=role):
+                self.config.update(host_role=role, allowed_recreated_container_images=allowlist)
+                with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+                    self.agent._health(after, before)
+
+    def test_ordinary_application_container_replacement_remains_rejected(self):
+        before, after = self.sentinel_health_inventories()
+        after["runtime"]["containers"][1]["id"] = "f" * 64
+        with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+            self.agent._health(after, before)
+
+    def test_sentinel_replacement_with_changed_image_reference_or_id_is_rejected(self):
+        before, after = self.sentinel_health_inventories()
+        for field, value in [("image_id", "sha256:" + "f" * 64), ("image", "docker.io/coollabsio/sentinel:1.0.3")]:
+            changed = copy.deepcopy(after)
+            changed["runtime"]["containers"][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+                self.agent._health(changed, before)
+
+    def test_ambiguous_original_or_replacement_sentinel_image_is_rejected(self):
+        before, after = self.sentinel_health_inventories()
+        for side in ("before", "after"):
+            original, current = copy.deepcopy(before), copy.deepcopy(after)
+            inventory = original if side == "before" else current
+            duplicate = dict(inventory["runtime"]["containers"][0], id="f" * 64, status="exited")
+            inventory["runtime"]["containers"].append(duplicate)
+            with self.subTest(side=side), self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+                self.agent._health(current, original)
+
+    def test_recreated_sentinel_requires_running_and_explicitly_healthy(self):
+        before, after = self.sentinel_health_inventories()
+        for status, health in [("running", "unhealthy"), ("running", "none"), ("running", "starting"), ("exited", "healthy")]:
+            changed = copy.deepcopy(after)
+            changed["runtime"]["containers"][0].update(status=status, health=health)
+            with self.subTest(status=status, health=health), self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+                self.agent._health(changed, before)
+
+    def test_existing_unhealthy_sentinel_id_cannot_fall_back_to_healthy_replacement(self):
+        before, after = self.sentinel_health_inventories()
+        after["runtime"]["containers"].append(dict(before["runtime"]["containers"][0], health="unhealthy"))
+        with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+            self.agent._health(after, before)
+
+    def test_existing_sentinel_id_preserves_strict_identity_and_health_rules(self):
+        before, after = self.sentinel_health_inventories()
+        after["runtime"]["containers"][0]["id"] = before["runtime"]["containers"][0]["id"]
+        after["runtime"]["containers"][0]["health"] = "none"
+        self.agent._health(after, before)
+        for field, value in [("image_id", "sha256:" + "f" * 64), ("image", "example/app:1"),
+                             ("status", "exited"), ("health", "unhealthy")]:
+            changed = copy.deepcopy(after)
+            changed["runtime"]["containers"][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+                self.agent._health(changed, before)
+
+    def sentinel_upgrade_request(self, *, dry_run=False):
+        self.config["allowed_recreated_container_images"] = ["docker.io/coollabsio/sentinel:1.0.2"]
+        self.runner.containers = self.sentinel_containers()
+        self.runner.extra_packages = "docker.io\t28.0.0-1\tinstalled\n"
+        self.runner.simulation = "Inst docker.io [28.0.0-1] (29.0.0-1 Docker:24.04/noble [arm64])\n"
+
+        def restart():
+            self.runner.docker_version = "29.0.0"
+            self.runner.containers[0]["id"] = "e" * 64
+
+        self.runner.after_restart = restart
+        return self.request(dry_run=dry_run)
+
+    def test_apply_and_verify_accept_sentinel_recreated_by_signed_docker_restart(self):
+        request = self.sentinel_upgrade_request()
+        self.assertEqual(request["envelope"]["plan"]["restart_services"], ["docker.service"])
+        before_app = copy.deepcopy(self.runner.containers[1])
+        try:
+            result = self.agent.run("apply", request)
+        except p.MaintenanceError as exc:
+            self.fail(f"signed Docker restart with healthy Sentinel recreation failed: {exc}")
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(self.runner.containers[1], before_app)
+        self.assertEqual(self.agent.run("verify", {"plan_id": result["plan_id"]})["status"], "verified")
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+
+    def test_opted_in_sentinel_upgrade_dry_run_preserves_containers_and_journal(self):
+        request = self.sentinel_upgrade_request(dry_run=True)
+        before = copy.deepcopy(self.runner.containers)
+        self.assertEqual(self.agent.run("apply", request)["status"], "preflight_passed")
+        self.assertEqual(self.runner.containers, before)
+        self.assertEqual(self.mutations(), [])
+        self.assertEqual(list((self.root / "state" / "plans").glob("*.json")), [])
+
+    def test_recreated_ordinary_app_after_restart_fails_and_cannot_be_verified_or_replayed(self):
+        request = self.sentinel_upgrade_request()
+        restart = self.runner.after_restart
+
+        def replace_app():
+            restart()
+            self.runner.containers[1]["id"] = "f" * 64
+
+        self.runner.after_restart = replace_app
+        with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+            self.agent.run("apply", request)
+        plan_id = request["envelope"]["plan"]["plan_id"]
+        path = self.root / "state" / "plans" / f"{plan_id}.json"
+        failed_receipt = path.read_bytes()
+        self.assertEqual(json.loads(failed_receipt)["status"], "failed")
+        self.runner.containers[1]["id"] = "c" * 64
+        with self.assertRaisesRegex(p.MaintenanceError, "failed or interrupted plan"):
+            self.agent.run("verify", {"plan_id": plan_id})
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(path.read_bytes(), failed_receipt)
+
+    def test_enabling_sentinel_opt_in_cannot_verify_or_replay_previous_failed_receipt(self):
+        request = self.sentinel_upgrade_request()
+        self.config.pop("allowed_recreated_container_images")
+        with self.assertRaisesRegex(p.MaintenanceError, "container health check failed"):
+            self.agent.run("apply", request)
+        plan_id = request["envelope"]["plan"]["plan_id"]
+        path = self.root / "state" / "plans" / f"{plan_id}.json"
+        failed_receipt = path.read_bytes()
+        self.assertEqual(json.loads(failed_receipt)["status"], "failed")
+        self.config["allowed_recreated_container_images"] = ["docker.io/coollabsio/sentinel:1.0.2"]
+        with self.assertRaisesRegex(p.MaintenanceError, "failed or interrupted plan"):
+            self.agent.run("verify", {"plan_id": plan_id})
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(path.read_bytes(), failed_receipt)
+
+    def load_root_config_with_recreated_images(self, **overrides):
+        config = dict(self.config, state_path="/var/lib/sifto-maintenance",
+                      trusted_public_key=base64.b64encode(self.key.public_key().public_bytes(
+                          serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode())
+        config.update(overrides)
+        with tempfile.TemporaryDirectory(dir="/etc/sifto-maintenance") as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+            return h.load_config(path)
+
+    def test_root_config_recreated_images_default_empty_and_valid_application_opt_in(self):
+        self.assertEqual(self.load_root_config_with_recreated_images().get("allowed_recreated_container_images"), [])
+        images = ["docker.io/coollabsio/sentinel:1.0.2", "docker.io/coollabsio/sentinel:12.34.56"]
+        self.assertEqual(self.load_root_config_with_recreated_images(
+            allowed_recreated_container_images=images)["allowed_recreated_container_images"], images)
+        max_images = [f"docker.io/coollabsio/sentinel:1.0.{i}" for i in range(8)]
+        self.assertEqual(self.load_root_config_with_recreated_images(
+            allowed_recreated_container_images=max_images)["allowed_recreated_container_images"], max_images)
+        self.assertEqual(self.load_root_config_with_recreated_images(
+            host_role="database", allowed_recreated_container_images=[])["allowed_recreated_container_images"], [])
+
+    def test_root_config_rejects_invalid_recreated_container_allowlists(self):
+        image = "docker.io/coollabsio/sentinel:1.0.2"
+        invalid = [None, image, {}, True, [None], [1], [image, image],
+                   [f"docker.io/coollabsio/sentinel:1.0.{i}" for i in range(9)],
+                   ["coollabsio/sentinel:1.0.2"], ["docker.io/other/sentinel:1.0.2"],
+                   ["docker.io/coollabsio/other:1.0.2"], ["docker.io/coollabsio/sentinel:latest"],
+                   ["docker.io/coollabsio/sentinel:1.0"], ["docker.io/coollabsio/sentinel:1.0.2-beta"],
+                   [image + "\n"], [image + "@sha256:" + "a" * 64]]
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaisesRegex(p.MaintenanceError, "recreated container"):
+                self.load_root_config_with_recreated_images(allowed_recreated_container_images=value)
+        with self.assertRaisesRegex(p.MaintenanceError, "recreated container"):
+            self.load_root_config_with_recreated_images(host_role="database", allowed_recreated_container_images=[image])
+
+    def test_bootstrap_opts_in_only_application_sentinel(self):
+        bootstrap = Path(__file__).resolve().parents[1] / "bootstrap"
+        app = json.loads((bootstrap / "config.example.json").read_text())
+        database = json.loads((bootstrap / "config.database.example.json").read_text())
+        self.assertEqual(app.get("allowed_recreated_container_images"), ["docker.io/coollabsio/sentinel:1.0.2"])
+        self.assertEqual(database.get("allowed_recreated_container_images", []), [])
 
     def test_scan_returns_private_inventory_without_mutations(self):
         inv = self.agent.run("scan", {})

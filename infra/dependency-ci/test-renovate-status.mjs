@@ -17,6 +17,10 @@ import { init as initLogger } from '/usr/local/renovate/dist/logger/index.js';
 import { applyPackageRules } from '/usr/local/renovate/dist/util/package-rules/index.js';
 import { extractAllPackageFiles } from '/usr/local/renovate/dist/modules/manager/pip-compile/extract.js';
 import { extractHeaderCommand } from '/usr/local/renovate/dist/modules/manager/pip-compile/common.js';
+import { constructPipCompileCmd } from '/usr/local/renovate/dist/modules/manager/pip-compile/artifacts.js';
+import { generateUpdate } from '/usr/local/renovate/dist/workers/repository/process/lookup/generate.js';
+import { get as getVersioning } from '/usr/local/renovate/dist/modules/versioning/index.js';
+import { getRangeStrategy } from '/usr/local/renovate/dist/modules/manager/index.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -72,11 +76,30 @@ try {
   }
   for (const packageFile of ['worker/requirements.txt', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.txt']) {
     const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', depType: 'indirect', updateType: 'patch', enabled: false });
-    assert.equal(config.enabled, true);
-    assert.equal(config.rangeStrategy, 'update-lockfile');
+    assert.equal(config.enabled, false);
     assert.equal(config.minimumReleaseAge, '7 days');
     assert.equal(config.groupName, packageFile.startsWith('infra/maintenance/') ? activationGroup : '{{manager}} minor and patch dependencies');
   }
+  const worker = extracted.find((file) => file.packageFile === 'worker/requirements.in');
+  const direct = worker.deps.find((dep) => dep.depName === 'pydantic');
+  const indirect = worker.deps.find((dep) => dep.depName === 'pydantic-core');
+  assert.ok(direct.currentValue && direct.lockedVersion);
+  assert.equal(indirect.depType, 'indirect');
+  const directConfig = await applyPackageRules({ rangeStrategy: getOptions().find((option) => option.name === 'rangeStrategy').default, ...repositoryConfig, ...direct, packageFile: worker.packageFile, manager: 'pip-compile', updateType: 'minor' });
+  const indirectConfig = await applyPackageRules({ ...repositoryConfig, ...indirect, packageFile: worker.packageFile, manager: 'pip-compile', updateType: 'minor' });
+  assert.notEqual(directConfig.enabled, false);
+  assert.equal(indirectConfig.enabled, false);
+  assert.equal(directConfig.minimumReleaseAge, '7 days');
+  assert.equal(directConfig.groupName, '{{manager}} minor and patch dependencies');
+  const rangeStrategy = getRangeStrategy(directConfig);
+  assert.equal(rangeStrategy, 'replace');
+  const update = await generateUpdate(directConfig, direct.currentValue, getVersioning('pep440'), rangeStrategy, direct.lockedVersion, 'minor', { version: '2.13.5' }, new Set([direct.lockedVersion, '2.13.5']));
+  assert.equal(update.newValue, '==2.13.5');
+  assert.notEqual(update.isLockfileUpdate, true);
+  const header = extractHeaderCommand(readFileSync('/fixtures/worker/requirements.txt', 'utf8'), 'worker/requirements.txt');
+  const command = constructPipCompileCmd(header, [update].filter((dep) => dep.isLockfileUpdate));
+  assert.equal(command, 'uv pip compile --python-version=3.12 --universal --generate-hashes --output-file=requirements.txt requirements.in');
+  console.log(`Renovate ${installedVersion}: direct Python updates regenerate complete locks without independently forced indirect versions.`);
   console.log(`Renovate ${installedVersion}: live executor dependencies are separate from Worker/Audio minor-patch and ordinary Docker digest groups.`);
   execFileSync('git', ['init', '--initial-branch=main', directory], { stdio: 'pipe' });
   execFileSync('git', ['-C', directory, '-c', 'user.name=Dependency CI', '-c', 'user.email=dependency-ci@example.invalid', 'commit', '--allow-empty', '-m', 'Synthetic status fixture'], { stdio: 'pipe' });

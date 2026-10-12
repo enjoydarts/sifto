@@ -84,5 +84,6 @@ jobs:
           make maintenance-test
           make maintenance-syntax
           make maintenance-postgres-data-mount-test
+          make image-security-test
       - if: always()
         run: make dependency-clean

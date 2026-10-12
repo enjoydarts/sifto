@@ -14,6 +14,106 @@ if SPEC:
 SHA = 'a' * 40
 BASE = 'b' * 40
 
+# Public data captured from the actual Go Bot PR #24; no candidate code runs.
+GO_BOT24_BEFORE = """module github.com/enjoydarts/sifto/api
+
+go 1.24.0
+
+require (
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/inngest/inngestgo v0.15.1
+	github.com/jackc/pgx/v5 v5.8.0
+	github.com/mmcdole/gofeed v1.3.0
+	github.com/redis/go-redis/v9 v9.18.0
+)
+
+require (
+	github.com/PuerkitoBio/goquery v1.8.0 // indirect
+	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coder/websocket v1.8.12 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/getsentry/sentry-go v0.36.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/gosimple/slug v1.12.0 // indirect
+	github.com/gosimple/unidecode v1.0.1 // indirect
+	github.com/gowebpki/jcs v1.0.0 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/inngest/inngest v1.13.5 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/oklog/ulid/v2 v2.1.1 // indirect
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
+	google.golang.org/grpc v1.73.0 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
+)
+"""
+GO_BOT24_AFTER = """module github.com/enjoydarts/sifto/api
+
+go 1.25.9
+
+require (
+	github.com/getsentry/sentry-go v0.36.2
+	github.com/go-chi/chi/v5 v5.3.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
+	github.com/inngest/inngest v1.19.3
+	github.com/inngest/inngestgo v0.16.5
+	github.com/jackc/pgx/v5 v5.11.0
+	github.com/mmcdole/gofeed v1.5.0
+	github.com/redis/go-redis/v9 v9.22.0
+)
+
+require (
+	github.com/PuerkitoBio/goquery v1.8.0 // indirect
+	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coder/websocket v1.8.12 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/gosimple/slug v1.12.0 // indirect
+	github.com/gosimple/unidecode v1.0.1 // indirect
+	github.com/gowebpki/jcs v1.0.0 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/lmittmann/tint v1.1.0 // indirect
+	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
+	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/oklog/ulid/v2 v2.1.1 // indirect
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
+)
+"""
+
 
 class FakeClock:
     def __init__(self):
@@ -29,6 +129,123 @@ class FakeClock:
 class PolicyTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(SPEC, 'approval automation must be implemented')
+
+    def test_real_go_bot24_tidy_graph_and_go_language_update_are_supported(self):
+        policy.validate_change('api/go.mod', GO_BOT24_BEFORE, GO_BOT24_AFTER)
+
+    def test_go_indirect_addition_removal_and_existing_promotion_are_supported(self):
+        original = 'module example.com/app\ngo 1.24.0\nrequire example.com/direct v1.2.3\nrequire example.com/transitive v0.1.0 // indirect\n'
+        for candidate in [original + 'require example.com/new/v2 v2.1.0 // indirect\n',
+                          original.replace('require example.com/transitive v0.1.0 // indirect\n', ''),
+                          original.replace('v0.1.0 // indirect', 'v0.2.0'),
+                          original.replace('go 1.24.0', 'go 1.99.0')]:
+            with self.subTest(candidate=candidate):
+                policy.validate_change('api/go.mod', original, candidate)
+
+    def test_go_module_direct_identity_and_directive_metadata_are_fixed(self):
+        original = 'module example.com/app\ngo 1.24.0\nrequire example.com/direct v1.2.3\n'
+        candidates = [original.replace('example.com/app', 'example.com/other'),
+                      original.replace('example.com/direct v1.2.3', 'example.com/direct/v2 v2.0.0'),
+                      original + 'require example.com/new v1.0.0\n',
+                      original.replace('require example.com/direct v1.2.3\n', ''),
+                      original.replace('v1.2.3', 'v1.2.4 // indirect'),
+                      original.replace('go 1.24.0', 'go 1.23.9'),
+                      original.replace('go 1.24.0', 'go 2.0.0'),
+                      original.replace('go 1.24.0', 'go 1.24.1 // metadata'),
+                      original + 'toolchain go1.25.9\n',
+                      original + 'replace example.com/direct => ./local\n',
+                      original + 'exclude example.com/direct v1.2.3\n',
+                      original + 'retract v1.2.3\n',
+                      original + 'tool example.com/tool\n',
+                      original + '// unrelated metadata\n']
+        for candidate in candidates:
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(policy.Refused):
+                    policy.validate_change('api/go.mod', original, candidate)
+
+    def test_go_patch_update_is_non_decreasing_and_numeric(self):
+        original = 'module example.com/app\ngo 1.24.2\nrequire example.com/direct v1.2.3\n'
+        policy.validate_change('api/go.mod', original, original.replace('go 1.24.2', 'go 1.24.10'))
+        policy.validate_change('api/go.mod', original, original.replace('go 1.24.2', 'go 1.25'))
+        for version in ('1.24.1', '1.23.99', '1.024.2', '1.24.02', '1.25rc1', 'latest'):
+            with self.subTest(version=version), self.assertRaises(policy.Refused):
+                policy.validate_change('api/go.mod', original, original.replace('go 1.24.2', 'go ' + version))
+
+    def test_go_duplicate_directives_modules_and_malformed_require_blocks_are_refused(self):
+        original = 'module example.com/app\ngo 1.24.0\nrequire example.com/direct v1.2.3\n'
+        candidates = [original + 'module example.com/app\n', original + 'go 1.24.1\n',
+                      original + 'require example.com/direct v1.2.4 // indirect\n',
+                      original.replace('require example.com/direct v1.2.3', 'require (\nexample.com/direct v1.2.4'),
+                      original + ')\n', original + 'require (\nrequire (\n)\n)\n',
+                      original + 'require ()\n', original.replace('go 1.24.0\n', ''),
+                      original.replace('module example.com/app\n', ''),
+                      original.replace('v1.2.3', 'v1.2.4 // indirect extra')]
+        for candidate in candidates:
+            with self.subTest(candidate=candidate), self.assertRaises(policy.Refused):
+                policy.validate_change('api/go.mod', original, candidate)
+
+    def test_go_module_paths_and_versions_are_public_canonical_data(self):
+        original = 'module example.com/app\ngo 1.24.0\nrequire example.com/direct v1.2.3\n'
+        for path in ('../local', '/tmp/module', 'https://example.com/dep', 'example.com/a/../b',
+                     'example.com//dep', 'example.com/.dep', 'example.com/dep.', 'localhost/dep',
+                     'Example.com/dep', 'example.com/CON/dep', 'example.com/dep/v01', 'example.com/dep/v1',
+                     'example.com/dep@v1', 'example.com/dep;id', 'example.com/dep\\name'):
+            with self.subTest(path=path), self.assertRaises(policy.Refused):
+                policy.validate_change('api/go.mod', original, original + 'require ' + path + ' v1.0.0 // indirect\n')
+        for version in ('1.0.0', 'v1.2', 'v01.2.3', 'v1.02.3', 'v1.2.3-01', 'v1.2.3+metadata',
+                        'v1.2.3;id', 'latest', 'https://example.com/version'):
+            with self.subTest(version=version), self.assertRaises(policy.Refused):
+                policy.validate_change('api/go.mod', original, original.replace('v1.2.3', version))
+
+    def test_go_pseudoversions_major_suffixes_and_legacy_incompatible_are_supported(self):
+        original = 'module example.com/app\ngo 1.24.0\nrequire example.com/direct v1.2.3\n'
+        for dependency in ('github.com/UpperCase/module v0.0.0-20240606120523-5a60cdf6a761',
+                           'example.com/dep/v2 v2.1.0', 'gopkg.in/yaml.v3 v3.0.1',
+                           'example.com/legacy v2.0.0+incompatible'):
+            with self.subTest(dependency=dependency):
+                policy.validate_change('api/go.mod', original, original + 'require ' + dependency + ' // indirect\n')
+        for dependency in ('example.com/dep/v2 v1.0.0', 'example.com/dep v2.1.0',
+                           'gopkg.in/yaml.v3 v2.1.0', 'example.com/dep v1.0.0+incompatible',
+                           'example.com/EXAMPL~1.COM v1.0.0', '127.0.0.1/dep v1.0.0'):
+            with self.subTest(dependency=dependency), self.assertRaises(policy.Refused):
+                policy.validate_change('api/go.mod', original, original + 'require ' + dependency + ' // indirect\n')
+
+    def test_image_security_compose_pin_is_ci_only_and_other_configuration_is_fixed(self):
+        path = 'infra/image-security/compose.yml'
+        original = 'services:\n  verifier:\n    image: python:3.12.15-slim\n    network_mode: none\n    read_only: true\n    cap_drop: [ALL]\n    volumes: [./tool:/tool:ro]\n'
+        pinned = original.replace('python:3.12.15-slim', 'python:3.12.15-slim@sha256:' + 'a' * 64)
+        policy.validate_change(path, original, pinned)
+        self.assertEqual(policy.surfaces([path]), ['ci'])
+        for candidate in (pinned.replace('network_mode: none', 'network_mode: host'),
+                          pinned.replace('read_only: true', 'read_only: false'),
+                          pinned.replace('cap_drop: [ALL]', 'cap_drop: []'),
+                          pinned.replace('./tool:/tool:ro', '/etc:/tool:ro'),
+                          pinned + '    environment: {TOKEN: fixture}\n'):
+            with self.subTest(candidate=candidate), self.assertRaises(policy.Refused):
+                policy.validate_change(path, original, candidate)
+        for unsupported in ('infra/image-security/other.yml', 'infra/image-security/secrets.yml'):
+            with self.assertRaises(policy.Refused):
+                policy.validate_change(unsupported, original, pinned)
+            with self.assertRaises(policy.Refused):
+                policy.surfaces([unsupported])
+
+    def test_renovate_npm_compose_pin_is_ci_only_and_runtime_configuration_is_fixed(self):
+        path = 'infra/dependency-ci/compose.renovate-npm.yml'
+        original = 'services:\n  test:\n    image: node:22.23.3-alpine\n    user: "1000:1000"\n    network_mode: none\n    read_only: true\n    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n    volumes: [./tool:/tool:ro]\n'
+        pinned = original.replace('node:22.23.3-alpine', 'node:22.23.3-alpine@sha256:' + 'b' * 64)
+        policy.validate_change(path, original, pinned)
+        self.assertEqual(policy.surfaces([path]), ['ci'])
+        for candidate in (pinned + '    environment: {TOKEN: fixture}\n',
+                          pinned.replace('./tool:/tool:ro', '/etc:/tool:rw'),
+                          pinned.replace('user: "1000:1000"', 'user: "0:0"'),
+                          pinned.replace('read_only: true', 'read_only: false'),
+                          pinned.replace('cap_drop: [ALL]', 'cap_drop: []'),
+                          pinned.replace('no-new-privileges:true', 'no-new-privileges:false'),
+                          pinned.replace('network_mode: none', 'network_mode: host')):
+            with self.subTest(candidate=candidate), self.assertRaises(policy.Refused):
+                policy.validate_change(path, original, candidate)
+        with self.assertRaises(policy.Refused):
+            policy.validate_change('infra/dependency-ci/compose.renovate-npm-other.yml', original, pinned)
 
     def test_versions_are_allowed_but_requirement_commands_are_rejected(self):
         policy.validate_change('worker/requirements.in', 'httpx==0.28.1\n', 'httpx==0.29.0\n')

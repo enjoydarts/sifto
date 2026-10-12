@@ -110,6 +110,12 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(fixture['security_opt'], ['no-new-privileges:true'])
         self.assertTrue({'volumes', 'ports', 'environment', 'env_file'}.isdisjoint(fixture))
 
+    def test_image_security_helpers_are_checked_before_dependency_approval(self):
+        job = read_yaml('.github/workflows/dependency-check.yml')['jobs']['policy']
+        step = next(step for step in job['steps'] if 'make image-security-test' in step.get('run', ''))
+        self.assertNotIn('if', step)
+        self.assertIsNot(step.get('continue-on-error'), True)
+
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
         for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'deploy', 'deploy-audio-concat']:
             workflow = read_yaml(f'.github/workflows/{name}.yml')

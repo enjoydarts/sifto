@@ -59,11 +59,16 @@ def candidate(api, number, head, base, source):
         path = entry.get('filename', '')
         require(entry.get('status') == 'modified' and 'previous_filename' not in entry, 'Dependency deletion/addition/rename refused')
         # Scope is checked before paths are sent to the content API.
-        from .policy import DOCKERFILES, COMPOSE, PYTHON_INPUTS, PYTHON_LOCKS, python_lock_summary
+        from .policy import DOCKERFILES, COMPOSE, PYTHON_INPUTS, PYTHON_LOCKS, python_lock_summary, npm_lock_summary
         require(path in DOCKERFILES | COMPOSE | PYTHON_INPUTS | PYTHON_LOCKS | {'api/go.mod', 'api/go.sum', 'web/package.json', 'web/package-lock.json'}, 'Unsupported dependency scope; executor activation is separate')
         before, after = blob(api, path, base), blob(api, path, head)
         validate_change(path, before, after)
-        changes = python_lock_summary(before, after) if path in PYTHON_LOCKS else [line for line in difflib.unified_diff(before.splitlines(), after.splitlines(), n=0) if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
+        if path in PYTHON_LOCKS:
+            changes = python_lock_summary(before, after)
+        elif path == 'web/package-lock.json':
+            changes = npm_lock_summary(before, after)
+        else:
+            changes = [line for line in difflib.unified_diff(before.splitlines(), after.splitlines(), n=0) if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))]
         require(sum(len(line) for line in changes) <= 16_000, 'Dependency diff exceeds approval summary limit; split the PR')
         entries.append({'path': path, 'before': hashlib.sha256(before.encode()).hexdigest(), 'after': hashlib.sha256(after.encode()).hexdigest(), 'additions': entry.get('additions'), 'deletions': entry.get('deletions'), 'changes': changes})
     if not emergency:

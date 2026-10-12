@@ -133,6 +133,58 @@ def npm_metadata_unchanged(path, before, after):
     return len(digest) == 64 and base64.b64encode(digest).decode() == encoded
 
 
+def npm_lock_summary(before, after):
+    """Summarize every accepted package change, retaining full blob hashes."""
+    validate_change('web/package-lock.json', before, after)
+    old, new = load_json(before)['packages'], load_json(after)['packages']
+    for package in (*old.values(), *new.values()):
+        if 'hasInstallScript' in package:
+            require(type(package['hasInstallScript']) is bool, 'Invalid npm install-script metadata')
+    added = new.keys() - old.keys()
+    removed = old.keys() - new.keys()
+    changed = sorted(path for path in old.keys() & new.keys() - {''} if old[path] != new[path])
+    lines = ['npm lock: %d -> %d packages; added %d, removed %d, changed %d' %
+             (len(old), len(new), len(added), len(removed), len(changed))]
+    for group in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'):
+        old_versions, new_versions = old[''].get(group, {}), new[''].get(group, {})
+        for name in sorted(old_versions):
+            if old_versions[name] != new_versions[name]:
+                lines.append('root %s/%s: %s -> %s' % (group, name, old_versions[name], new_versions[name]))
+
+    def label(path):
+        # Consume the validated path grammar, not substrings inside names:
+        # both @node_modules/pkg and @scope/node_modules are real packages.
+        parts, names, index = path.split('/'), [], 0
+        while index < len(parts):
+            if parts[index + 1].startswith('@'):
+                names.append(parts[index + 1] + '/' + parts[index + 2])
+                index += 3
+            else:
+                names.append(parts[index + 1])
+                index += 2
+        return ' > '.join(names)
+
+    def install_flag(package):
+        return str(package['hasInstallScript']).lower() if 'hasInstallScript' in package else 'absent'
+
+    for prefix, paths, packages in (('+', added, new), ('-', removed, old)):
+        for path in sorted(paths):
+            script = ' (hasInstallScript=%s)' % install_flag(packages[path]) if 'hasInstallScript' in packages[path] else ''
+            lines.append('%s%s: %s%s' % (prefix, label(path), packages[path]['version'], script))
+    for path in changed:
+        previous, current = old[path], new[path]
+        if previous['version'] == current['version']:
+            # The unchanged-version validator permits only exact registry-pair completion.
+            lines.append('%s: %s (registry pair completed)' % (label(path), current['version']))
+        else:
+            script = (' (hasInstallScript=%s -> %s)' % (install_flag(previous), install_flag(current))
+                      if install_flag(previous) != install_flag(current) else '')
+            lines.append('%s: %s -> %s%s' % (label(path), previous['version'], current['version'], script))
+    require(len(lines) - 1 <= 300 and len('\n'.join(lines)) <= 12_000,
+            'npm lock summary is too large; split the PR')
+    return lines
+
+
 def requirement_shape(text):
     shape = []
     names = set()

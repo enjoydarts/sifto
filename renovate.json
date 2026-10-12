@@ -46,6 +46,13 @@
       "enabled": false
     },
     {
+      "matchManagers": ["gomod"],
+      "matchFileNames": ["api/go.mod"],
+      "matchDepTypes": ["indirect"],
+      "matchPackageNames": ["google.golang.org/grpc", "golang.org/x/net"],
+      "enabled": true
+    },
+    {
       "matchFileNames": ["infra/maintenance/Dockerfile", "infra/maintenance/requirements.in", "infra/maintenance/requirements.txt"],
       "groupName": "Maintenance executor activation dependencies",
       "groupSlug": "maintenance-executor-activation",

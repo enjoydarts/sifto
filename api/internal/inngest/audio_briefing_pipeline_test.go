@@ -28,16 +28,17 @@ func TestRunAudioBriefingPipelineFnConfiguresJobScopedConcurrency(t *testing.T) 
 	}
 
 	cfg := fn.Config()
-	if len(cfg.Concurrency) != 1 {
-		t.Fatalf("len(concurrency) = %d, want 1", len(cfg.Concurrency))
+	limits := stepConcurrencyForTest(t, cfg)
+	if len(limits) != 1 {
+		t.Fatalf("len(concurrency) = %d, want 1", len(limits))
 	}
-	if cfg.Concurrency[0].Limit != 1 {
-		t.Fatalf("concurrency limit = %d, want 1", cfg.Concurrency[0].Limit)
+	if limits[0].Limit != 1 {
+		t.Fatalf("concurrency limit = %d, want 1", limits[0].Limit)
 	}
-	if cfg.Concurrency[0].Key == nil || *cfg.Concurrency[0].Key != "event.data.job_id" {
-		t.Fatalf("concurrency key = %v, want event.data.job_id", cfg.Concurrency[0].Key)
+	if limits[0].Key == nil || *limits[0].Key != "event.data.job_id" {
+		t.Fatalf("concurrency key = %v, want event.data.job_id", limits[0].Key)
 	}
-	if cfg.Concurrency[0].Scope != enums.ConcurrencyScopeFn {
-		t.Fatalf("concurrency scope = %v, want function scope", cfg.Concurrency[0].Scope)
+	if limits[0].Scope != enums.ConcurrencyScopeFn {
+		t.Fatalf("concurrency scope = %v, want function scope", limits[0].Scope)
 	}
 }

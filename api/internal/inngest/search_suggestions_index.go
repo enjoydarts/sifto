@@ -126,17 +126,19 @@ func searchSuggestionSourceDeleteFn(client inngestgo.Client, search *service.Mei
 func searchSuggestionTopicsRefreshFn(client inngestgo.Client, db *pgxpool.Pool, search *service.MeilisearchService) (inngestgo.ServableFunction, error) {
 	docRepo := repository.NewSearchSuggestionDocumentRepo(db)
 
+	options, err := functionOptsWithStepConcurrency(inngestgo.FunctionOpts{
+		ID: "search-suggestion-topics-refresh", Name: "Refresh Search Suggestion Topics",
+	}, []inngestgo.ConfigStepConcurrency{{
+		Limit: 1,
+		Key:   inngestgo.StrPtr("event.data.user_id"),
+		Scope: enums.ConcurrencyScopeFn,
+	}})
+	if err != nil {
+		return nil, err
+	}
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{
-			ID:   "search-suggestion-topics-refresh",
-			Name: "Refresh Search Suggestion Topics",
-			Concurrency: []inngestgo.ConfigStepConcurrency{{
-				Limit: 1,
-				Key:   inngestgo.StrPtr("event.data.user_id"),
-				Scope: enums.ConcurrencyScopeFn,
-			}},
-		},
+		options,
 		inngestgo.EventTrigger("search/suggestions.topics.refresh", nil),
 		func(ctx context.Context, input inngestgo.Input[searchSuggestionTopicsRefreshEvent]) (any, error) {
 			userID := input.Event.Data.UserID

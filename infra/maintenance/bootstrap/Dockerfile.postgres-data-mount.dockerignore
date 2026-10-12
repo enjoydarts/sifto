@@ -1,0 +1,5 @@
+**
+!bootstrap/
+bootstrap/**
+!bootstrap/52-sifto-data-mount.conf
+!bootstrap/test-postgres-data-mount-systemd.py

@@ -39,6 +39,61 @@ class ContainerIdentityTests(unittest.TestCase):
         changed = maintenance.normalize_recreation_identity(alternate, 'b' * 64)
         self.assertFalse(maintenance.recreation_identity_matches(self.identity, changed))
 
+    def test_compose_container_service_and_configured_alias_overlap_is_normalized(self):
+        # Compose appends container name, service name and configured aliases.
+        # All three can name the same endpoint without changing DNS identity.
+        raw = raw_identity()
+        raw['name'] = '/fixture-alias'
+        raw['compose'] = {'project_present': True, 'project': 'fixture-project',
+                          'service_present': True, 'service': 'fixture-alias'}
+        raw['networks'][0]['aliases'] = ['fixture-alias'] * 3
+        original = copy.deepcopy(raw)
+        expected = copy.deepcopy(self.identity)
+        expected['name'] = '/fixture-alias'
+        expected['compose'] = {'project': 'fixture-project', 'service': 'fixture-alias'}
+        normalized = maintenance.normalize_recreation_identity(raw, 'a' * 64)
+        self.assertEqual(normalized, expected)
+        self.assertTrue(maintenance.recreation_identity_matches(expected, normalized))
+        self.assertEqual(raw, original)
+
+    def test_raw_alias_overlap_and_duplicate_self_ids_preserve_order_independent_identity(self):
+        raw = raw_identity()
+        raw['networks'][0]['aliases'] = ['z-fixture', 'a' * 64, 'fixture-alias', 'a' * 12,
+                                         'z-fixture', 'a' * 12, 'fixture-alias', 'a' * 64]
+        original = copy.deepcopy(raw)
+        expected = copy.deepcopy(self.identity)
+        expected['networks'][0]['aliases'] = ['fixture-alias', 'z-fixture']
+        self.assertEqual(maintenance.normalize_recreation_identity(raw, 'a' * 64), expected)
+        reordered = copy.deepcopy(raw)
+        reordered['networks'][0]['aliases'].reverse()
+        self.assertEqual(maintenance.normalize_recreation_identity(reordered, 'a' * 64), expected)
+        self.assertEqual(raw, original)
+
+    def test_raw_aliases_validate_type_count_and_every_text_before_deduplication(self):
+        for aliases in ('fixture-alias', ('fixture-alias',), {}, [None], [True], [1],
+                        ['fixture-alias', []], ['fixture-alias', ''],
+                        ['fixture-alias', 'bad\x00alias'], ['fixture-alias', 'bad\x7falias'],
+                        ['fixture-alias', 'x' * 4097], ['fixture-alias'] * 257,
+                        ['a' * 64] * 257):
+            raw = raw_identity()
+            raw['networks'][0]['aliases'] = aliases
+            with self.subTest(aliases=aliases), self.assertRaises(ValueError):
+                maintenance.normalize_recreation_identity(raw, 'a' * 64)
+        for aliases, expected in ((None, []), ([], []), (['fixture-alias'] * 256, ['fixture-alias'])):
+            raw = raw_identity()
+            raw['networks'][0]['aliases'] = aliases
+            with self.subTest(count=None if aliases is None else len(aliases)):
+                self.assertEqual(maintenance.normalize_recreation_identity(raw, 'a' * 64)
+                                 ['networks'][0]['aliases'], expected)
+
+    def test_signed_canonical_aliases_remain_strictly_unique(self):
+        duplicate = copy.deepcopy(self.identity)
+        duplicate['networks'][0]['aliases'] = ['fixture-alias', 'fixture-alias']
+        with self.assertRaises(ValueError):
+            maintenance.canonical_recreation_identity(duplicate)
+        self.assertFalse(maintenance.recreation_identity_matches(self.identity, duplicate))
+        self.assertFalse(maintenance.recreation_identity_matches(duplicate, self.identity))
+
     def test_each_selected_identity_field_change_denies_recreation(self):
         for path, value in [
             (('name',), '/other-fixture'), (('compose', 'project'), 'fixture-project'),
@@ -77,16 +132,27 @@ class ContainerIdentityTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertFalse(maintenance.recreation_identity_matches(identity, candidate))
 
-    def test_duplicate_mount_destination_network_name_id_and_alias_are_refused(self):
+    def test_duplicate_mount_destination_network_name_and_id_are_refused(self):
         for mutate in (
             lambda raw: raw['mounts'].append(copy.deepcopy(raw['mounts'][0])),
             lambda raw: raw['networks'].append(copy.deepcopy(raw['networks'][0])),
-            lambda raw: raw['networks'].append({**copy.deepcopy(raw['networks'][0]), 'name': 'other-network'}),
-            lambda raw: raw['networks'][0]['aliases'].append('fixture-alias')):
+            lambda raw: raw['networks'].append({**copy.deepcopy(raw['networks'][0]), 'name': 'other-network'})):
             value = raw_identity()
             mutate(value)
             with self.assertRaises(ValueError):
                 maintenance.normalize_recreation_identity(value, 'a' * 64)
+
+    def test_duplicate_links_and_static_ipam_entries_are_still_refused(self):
+        for path, values in [(('links',), ['/fixture-other:/fixture-alias'] * 2),
+                             (('networks', 0, 'links'), ['/fixture-other:/fixture-alias'] * 2),
+                             (('networks', 0, 'static_ipam', 'link_local_ips'), ['169.254.1.10'] * 2)]:
+            raw = raw_identity()
+            destination = raw
+            for key in path[:-1]:
+                destination = destination[key]
+            destination[path[-1]] = values
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                maintenance.normalize_recreation_identity(raw, 'a' * 64)
 
     def test_compose_absence_is_distinct_from_present_empty_and_partial_labels(self):
         for compose in ({'project_present': True, 'project': '', 'service_present': True, 'service': ''},

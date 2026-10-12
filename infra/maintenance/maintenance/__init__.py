@@ -114,7 +114,11 @@ def normalize_recreation_identity(value, container_id):
     networks = []
     for network in value['networks']:
         _keys(network, ('name', 'network_id', 'aliases', 'static_ipam', 'links', 'driver_options_present'))
-        aliases = _strings([] if network['aliases'] is None else network['aliases'])
+        aliases = [] if network['aliases'] is None else network['aliases']
+        _require_identity(type(aliases) is list and len(aliases) <= 256)
+        aliases = [_text(alias) for alias in aliases]
+        # Compose can repeat container, service and configured DNS aliases.
+        aliases = sorted(set(aliases))
         ipam = network['static_ipam']
         if ipam is not None:
             _keys(ipam, ('ipv4_address', 'ipv6_address', 'link_local_ips'))

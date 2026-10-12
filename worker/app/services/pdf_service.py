@@ -30,13 +30,13 @@ def _title_from_url(url: str) -> str | None:
 
 
 def _extract_pdf_body_in_process(pdf_bytes: bytes, url: str) -> dict | None:
-    import fitz
+    import pymupdf
 
     if not pdf_bytes:
         return None
     ensure_response_size(pdf_bytes, 25 * 1024 * 1024)
 
-    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as doc:
         if doc.page_count > 1000:
             raise ValueError("PDF exceeds 1000 pages")
         pages = []

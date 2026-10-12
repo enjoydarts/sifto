@@ -9,10 +9,14 @@ case "$service" in
 esac
 image="sifto-runtime-ci-$service"
 
-# The only build argument is a fixed public fixture, never a host credential.
+# Web uses the configured production publishable key, never backend credentials.
 if [ "$service" = web ]; then
+    case "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" in
+        pk_live_?*) ;;
+        *) echo 'Web runtime CI requires a production NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY' >&2; exit 1 ;;
+    esac
     docker build --platform "$platform" --target runner -t "$image" \
-        --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_bWFpbnRlbmFuY2UtY2kuZXhhbXBsZS5jb20k \
+        --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" \
         -f web/Dockerfile "$context"
 else
     docker build --platform "$platform" --target runner -t "$image" \
@@ -21,7 +25,7 @@ fi
 test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "$expected_user"
 test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" = "$platform"
 
-# No env file, forwarded host environment, mounts, ports, or external network.
+# No env file, forwarded runtime environment, mounts, ports, or external network.
 # Do not override --user: the image's configured runtime user is under test.
 docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges \
     --entrypoint sh "$image" -eu -s -- "$expected_user" <<'SH'

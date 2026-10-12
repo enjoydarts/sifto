@@ -87,6 +87,7 @@ class AdviceTests(unittest.TestCase):
             (root / "secrets/anthropic_key").write_text("synthetic-key")
             git = Mock()
             git.head.return_value = "b" * 40
+            git.git.return_value = b""
             git.read_at.return_value = None
             git.write.return_value = "c" * 40
             def local_path(value):

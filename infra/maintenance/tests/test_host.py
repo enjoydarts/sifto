@@ -821,6 +821,16 @@ class HostTests(unittest.TestCase):
         self.assertEqual(self.mutations(), [])
         self.assertEqual(list((self.root / "state" / "plans").glob("*.json")), [])
 
+    def test_expired_old_approval_never_mutates_or_consumes_at_entry(self):
+        request = self.request()
+        self.agent.clock = lambda: request['envelope']['plan']['expires_at'] + 86400
+        self.runner.calls.clear()
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run("apply", request)
+        self.assertEqual(self.mutations(), [])
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(list((self.root / "state" / "plans").glob("*.json")), [])
+
     def test_state_change_during_simulation_never_mutates(self):
         request = self.request()
         self.runner.before_simulation = lambda: setattr(self.runner, "kernel", "different-kernel")
@@ -1031,6 +1041,16 @@ class HostTests(unittest.TestCase):
                 other.run("refresh", {})
         self.assertEqual(self.mutations(), [])
         self.assertEqual(other.run("refresh", {})["status"], "metadata_refreshed")
+
+    def test_execution_lock_blocks_scan_and_report_used_for_reproposal(self):
+        other = h.HostAgent(self.config, self.runner, clock=lambda: 1000,
+                            read_file=self.read_file, lock_probe=lambda: [])
+        with self.agent.locked():
+            for mode in ("scan", "report"):
+                with self.subTest(mode=mode), self.assertRaises(p.MaintenanceError):
+                    other.run(mode, {})
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(list((self.root / "state" / "plans").glob("*.json")), [])
 
     def test_private_state_and_receipts_have_root_only_modes(self):
         request = self.request()

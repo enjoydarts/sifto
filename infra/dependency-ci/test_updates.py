@@ -3,7 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import tempfile
 import os
 
@@ -620,12 +620,20 @@ class DeploymentTests(unittest.TestCase):
             if '/projects/' in path:
                 return {'id': 'prj_test', 'name': 'sifto'}
             if method == 'POST':
+                # The official GitSourceGitHub org/repo variant requires ref.
+                # Model the HTTP 400 boundary rather than accepting any body.
+                source = body.get('gitSource', {})
+                policy.require(set(source) == {'type', 'org', 'repo', 'ref', 'sha'}
+                               and source['type'] == 'github' and source['org'] == 'owner'
+                               and source['repo'] == 'repo' and source['ref'] == 'main' and source['sha'] == SHA,
+                               'Vercel gitSource schema rejected')
                 return {'id': 'dpl_test'}
             return {'id': 'dpl_test', 'readyState': 'READY', 'target': 'production', 'projectId': 'prj_test', 'gitSource': {'type': 'github', 'sha': SHA}, 'alias': ['sifto.net'], 'url': 'deployment.vercel.app'}
         self.assertTrue(hasattr(self.deploy, 'vercel'), 'immutable Vercel deployment must be implemented')
         self.deploy.vercel(request, 'team_test', 'prj_test', 'owner/repo', SHA, sleep=lambda _: None, verify_alias=lambda *_: None)
         body = next(call[2] for call in calls if call[0] == 'POST')
         self.assertEqual(body['gitSource']['sha'], SHA)
+        self.assertEqual(body['gitSource']['ref'], 'main')
         self.assertNotIn('withLatestCommit', body)
         self.assertEqual(len([c for c in calls if c[0] == 'POST']), 1)
 
@@ -638,6 +646,20 @@ class DeploymentTests(unittest.TestCase):
                 return {'id': 'dpl_test'} if method == 'POST' else state
             with self.assertRaises(policy.Refused):
                 self.deploy.vercel(request, 'team_test', 'prj_test', 'owner/repo', SHA, sleep=lambda _: None, verify_alias=lambda *_: None)
+
+    def test_vercel_lost_post_acknowledgement_never_replays_or_checks_alias(self):
+        calls = []
+        alias = Mock()
+        def request(method, path, body=None):
+            calls.append((method, path, body))
+            if method == 'POST':
+                raise github.Ambiguous('controlled lost acknowledgement')
+            return {'id': 'prj_test', 'name': 'sifto'}
+        with self.assertRaises(github.Ambiguous):
+            self.deploy.vercel(request, 'team_test', 'prj_test', 'owner/repo', SHA,
+                               sleep=lambda _: None, verify_alias=alias)
+        self.assertEqual(len([call for call in calls if call[0] == 'POST']), 1)
+        alias.assert_not_called()
 
 
 class NpmSummaryTests(unittest.TestCase):
@@ -792,13 +814,62 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}):
                 pipeline.execute(self.api, plan, policy.plan_hash(plan))
+                self.summary = Path(directory + '/summary').read_text()
 
     def test_approved_candidate_merges_once_then_explicitly_deploys_exact_merge(self):
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
         self.assertEqual(self.mutations[0][2]['sha'], SHA)
         self.assertEqual(self.mutations[1][2]['inputs']['expected_commit'], self.merged)
         self.assertEqual(self.mutations[1][2]['inputs']['approval_run'], '10')
+        self.assertEqual(self.mutations[2], ('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'}))
+
+    def test_failed_deploy_never_requests_next_proposals(self):
+        transport = self.transport
+        def controlled(method, path, body):
+            value = transport(method, path, body)
+            if '/actions/workflows/deploy.yml/runs' in path:
+                for run in value['workflow_runs']:
+                    run['conclusion'] = 'failure'
+            return value
+        self.api = github.GitHub(self.repo, transport=controlled)
+        with self.assertRaisesRegex(policy.Refused, 'Dispatched workflow failed'):
+            self.execute(self.plan())
+        self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
+
+    def test_main_drift_after_successful_deploy_prevents_next_proposal_request(self):
+        transport = self.transport
+        def controlled(method, path, body):
+            if path.split('?')[0] == '/git/ref/heads/main' and any('/deploy.yml/dispatches' in m[1] for m in self.mutations):
+                return {'object': {'sha': 'd' * 40}}
+            return transport(method, path, body)
+        self.api = github.GitHub(self.repo, transport=controlled)
+        with self.assertRaisesRegex(policy.Refused, 'Main advanced after deployment'):
+            self.execute(self.plan())
+        self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
+
+    def test_next_proposal_rejection_or_lost_ack_is_separate_from_deploy_and_never_replayed(self):
+        for error, outcome in [(policy.Refused('controlled rejection'), 'rejected'),
+                               (TimeoutError('controlled lost acknowledgement'), 'unconfirmed')]:
+            with self.subTest(outcome=outcome):
+                self.setUp()
+                transport = self.transport
+                def controlled(method, path, body):
+                    if method == 'POST' and path == '/actions/workflows/renovate.yml/dispatches':
+                        self.mutations.append((method, path, body))
+                        raise error
+                    return transport(method, path, body)
+                self.api = github.GitHub(self.repo, transport=controlled)
+                plan = self.plan()
+                self.execute(plan)
+                self.assertIn('All affected deployments succeeded', self.summary)
+                self.assertIn('Regeneration request: ' + outcome, self.summary)
+                self.assertIn('daily Renovate scan', self.summary)
+                self.assertEqual(len([m for m in self.mutations if '/renovate.yml/' in m[1]]), 1)
+                before = list(self.mutations)
+                with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '2'}), self.assertRaises(policy.Refused):
+                    pipeline.execute(self.api, plan, policy.plan_hash(plan))
+                self.assertEqual(self.mutations, before)
 
     def delayed_deployments(self, clock, ready_after, conclusion='success'):
         transport = self.transport
@@ -827,8 +898,8 @@ class PipelineTests(unittest.TestCase):
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
             self.execute(self.plan())
         self.assertEqual(clock.elapsed, 62 * 60)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
-        for mutation in self.mutations[1:]:
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST', 'POST'])
+        for mutation in self.mutations[1:-1]:
             self.assertEqual(mutation[2]['ref'], 'main')
             self.assertEqual(mutation[2]['inputs'], {'expected_commit': self.merged, 'approval_run': '10', 'approved_pr': '1', 'approved_head': SHA, 'approved_base': BASE})
 
@@ -885,7 +956,7 @@ class PipelineTests(unittest.TestCase):
         self.mergeable_state = 'unstable'
         self.preview_failure = True
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
         self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #1'})
 
     def test_unstable_pr_with_failed_fixed_ci_still_cannot_merge(self):
@@ -918,6 +989,7 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.Refused, 'Protected branch merge rejected'):
             self.execute(self.plan())
         self.assertEqual([m[0] for m in self.mutations], ['PUT'])
+        self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
 
     def test_blocked_behind_dirty_and_unknown_merge_states_cannot_attempt_merge(self):
         for state in ['blocked', 'behind', 'dirty', 'unknown', None, '']:
@@ -1045,7 +1117,8 @@ class PipelineTests(unittest.TestCase):
         plan['surfaces'] = ['ci', 'development']
         with patch.object(pipeline, 'candidate', return_value={k: v for k, v in plan.items() if k != 'ci_run'}):
             self.execute(plan)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual(self.mutations[-1], ('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'}))
 
     def test_retry_attempt_cannot_reuse_native_approval(self):
         plan = self.plan()
@@ -1206,7 +1279,8 @@ class ReproposalTests(unittest.TestCase):
                 return original(method, path, body)
             return fixture.transport(method, path, body)
         api = github.GitHub('owner/repo', transport=transport)
-        pipeline.discover(api)
+        with patch.dict(os.environ, {'GITHUB_SHA': BASE}):
+            pipeline.discover(api)
         self.assertEqual(self.mutations, [('POST', '/actions/workflows/dependency-update.yml/dispatches', {'ref': 'main', 'inputs': {'pr_number': '1', 'head_sha': SHA, 'base_sha': BASE, 'source_sha': BASE}})])
 
     def test_daily_discovery_respects_owner_denial_without_redispatch(self):
@@ -1220,7 +1294,8 @@ class ReproposalTests(unittest.TestCase):
             if path.startswith('/actions/'):
                 return original(method, path, body)
             return fixture.transport(method, path, body)
-        pipeline.discover(github.GitHub('owner/repo', transport=transport))
+        with patch.dict(os.environ, {'GITHUB_SHA': BASE}):
+            pipeline.discover(github.GitHub('owner/repo', transport=transport))
         self.assertEqual(self.mutations, [])
 
     def test_cancelled_prepare_before_gate_allows_a_fresh_run(self):
@@ -1270,6 +1345,158 @@ class ReproposalTests(unittest.TestCase):
             return original(method, path, body)
         self.api = github.GitHub('owner/repo', transport=transport)
         self.assertTrue(pipeline.deduplicated(self.api, self.plan))
+
+
+class SerialDiscoveryTests(unittest.TestCase):
+    """Exercise complete native-run inventories before dispatching one proposal."""
+    def setUp(self):
+        self.fixture = PipelineTests()
+        self.fixture.setUp()
+        self.runs = []
+        self.inventory = None
+        self.reads = []
+        self.api = github.GitHub('owner/repo', transport=self.transport)
+
+    def active(self, status='waiting'):
+        return {'id': 20, 'display_title': 'Dependency PR 9 ' + SHA + ' ' + BASE,
+                'status': status, 'conclusion': None, 'event': 'workflow_dispatch',
+                'head_sha': BASE, 'head_branch': 'main',
+                'path': '.github/workflows/dependency-update.yml', 'run_attempt': 1}
+
+    def transport(self, method, path, body):
+        if method == 'GET':
+            self.reads.append(path)
+            endpoint = path.split('?')[0]
+            if endpoint == '/pulls':
+                return [{'number': number, 'head': {'sha': SHA}} for number in (1, 2)]
+            if endpoint == '/actions/workflows/dependency-update.yml/runs':
+                return self.inventory if self.inventory is not None else {
+                    'workflow_runs': self.runs, 'total_count': len(self.runs)}
+            if endpoint.startswith('/pulls/2'):
+                path = path.replace('/pulls/2', '/pulls/1', 1)
+        return self.fixture.transport(method, path, body)
+
+    def discover(self):
+        with patch.dict(os.environ, {'GITHUB_SHA': BASE}):
+            pipeline.discover(self.api)
+
+    def test_active_waiting_and_queued_runs_block_every_new_candidate(self):
+        for status in ('in_progress', 'waiting', 'queued', 'requested', 'pending'):
+            with self.subTest(status=status):
+                self.setUp()
+                self.runs = [self.active(status)]
+                self.discover()
+                self.assertEqual(self.fixture.mutations, [])
+                self.assertFalse(any(path.startswith('/pulls') for path in self.reads))
+
+    def test_two_eligible_candidates_dispatch_only_the_first(self):
+        self.discover()
+        self.assertEqual(self.fixture.mutations, [('POST', '/actions/workflows/dependency-update.yml/dispatches', {
+            'ref': 'main', 'inputs': {'pr_number': '1', 'head_sha': SHA, 'base_sha': BASE, 'source_sha': BASE}})])
+        self.assertFalse(any(path.startswith('/pulls/2') for path in self.reads))
+
+    def test_first_invalid_candidate_is_skipped_and_only_next_valid_one_is_requested(self):
+        original = self.transport
+        def transport(method, path, body):
+            result = original(method, path, body)
+            if method == 'GET' and path.split('?')[0] == '/pulls/1':
+                result['head']['sha'] = 'd' * 40
+            return result
+        self.api = github.GitHub('owner/repo', transport=transport)
+        self.discover()
+        self.assertEqual(len(self.fixture.mutations), 1)
+        self.assertEqual(self.fixture.mutations[0][2]['inputs']['pr_number'], '2')
+
+    def test_completed_historical_run_does_not_block_a_new_candidate(self):
+        self.runs = [dict(self.active(), status='completed', conclusion='success',
+                          head_sha='d' * 40, display_title='Dependency PR 9 ' + SHA + ' ' + 'd' * 40)]
+        self.discover()
+        self.assertEqual(len(self.fixture.mutations), 1)
+
+    def test_coherent_old_source_active_run_is_benign_busy_after_merge(self):
+        self.runs = [dict(self.active('in_progress'), head_sha='d' * 40,
+                          display_title='Dependency PR 9 ' + SHA + ' ' + 'd' * 40)]
+        # Current main and discovery source are BASE; the active approval keeps
+        # its old source. Its consistent title/head identifies normal deployment.
+        self.discover()
+        self.assertEqual(self.fixture.mutations, [])
+        self.assertFalse(any(path.startswith('/pulls') for path in self.reads))
+
+    def test_all_inventory_rows_foreign_sources_and_incomplete_metadata_are_refused(self):
+        for field, value in [('path', '.github/workflows/other.yml'), ('head_sha', SHA),
+                             ('head_branch', 'foreign'), ('event', 'push'),
+                             ('run_attempt', 2), ('status', 'unknown'),
+                             ('display_title', 'Dependency PR 9 ' + SHA + ' ' + SHA),
+                             ('display_title', None), ('status', []), ('id', True)]:
+            with self.subTest(field=field):
+                self.setUp()
+                self.runs = [self.active(), dict(self.active(), id=21, **{field: value})] if field != 'id' else [dict(self.active(), id=value)]
+                with self.assertRaises(policy.Refused):
+                    self.discover()
+                self.assertEqual(self.fixture.mutations, [])
+        self.setUp()
+        self.runs = [self.active(), self.active()]
+        with self.assertRaises(policy.Refused):
+            self.discover()
+        self.setUp()
+        missing = self.active()
+        del missing['status']
+        self.runs = [missing]
+        with self.assertRaises(policy.Refused):
+            self.discover()
+
+    def test_missing_or_truncated_total_never_dispatches(self):
+        for response in ({'workflow_runs': []}, {'workflow_runs': [], 'total_count': 1}):
+            with self.subTest(response=response):
+                self.inventory = response
+                with self.assertRaises(policy.Refused):
+                    self.discover()
+                self.assertEqual(self.fixture.mutations, [])
+
+    def test_stale_discovery_source_and_new_active_run_before_post_are_refused(self):
+        with patch.dict(os.environ, {'GITHUB_SHA': SHA}), self.assertRaises(policy.Refused):
+            pipeline.discover(self.api)
+        self.assertEqual(self.fixture.mutations, [])
+        self.setUp()
+        original = self.transport
+        inventories = 0
+        def transport(method, path, body):
+            nonlocal inventories
+            if method == 'GET' and path.startswith('/actions/workflows/dependency-update.yml/runs'):
+                inventories += 1
+                if inventories >= 3:  # initial check, dedupe, pre-dispatch check
+                    self.runs = [self.active()]
+            return original(method, path, body)
+        self.api = github.GitHub('owner/repo', transport=transport)
+        self.discover()
+        self.assertEqual(self.fixture.mutations, [])
+
+    def test_main_changes_before_dispatch_without_weakening_candidate_base_guard(self):
+        original = self.transport
+        main_reads = 0
+        def transport(method, path, body):
+            nonlocal main_reads
+            if method == 'GET' and path.split('?')[0] == '/git/ref/heads/main':
+                main_reads += 1
+                if main_reads >= 3:
+                    return {'object': {'sha': 'd' * 40}}
+            return original(method, path, body)
+        self.api = github.GitHub('owner/repo', transport=transport)
+        with self.assertRaisesRegex(policy.Refused, 'Main advanced during dependency discovery'):
+            self.discover()
+        self.assertEqual(self.fixture.mutations, [])
+
+    def test_lost_approval_dispatch_acknowledgement_has_no_second_post(self):
+        original = self.transport
+        def transport(method, path, body):
+            if method == 'POST':
+                self.fixture.mutations.append((method, path, body))
+                raise TimeoutError('controlled lost acknowledgement')
+            return original(method, path, body)
+        self.api = github.GitHub('owner/repo', transport=transport)
+        with self.assertRaises(github.Ambiguous):
+            self.discover()
+        self.assertEqual(len(self.fixture.mutations), 1)
 
 
 class MergeabilityTests(unittest.TestCase):

@@ -1,7 +1,10 @@
 import base64
 import copy
+import json
 import unittest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from test_container_identity import raw_identity
+from maintenance import normalize_recreation_identity
 try:
     from maintenance import plan as p
 except ImportError:
@@ -42,6 +45,39 @@ class PlanTests(unittest.TestCase):
 
     def candidate(self):
         return p.build_plan(inventory(), self.sha, now=1000)
+
+    def test_all_selected_container_identity_fields_are_bound_into_signed_state(self):
+        value = inventory()
+        container = {'id': 'a' * 64, 'image_id': 'sha256:' + 'b' * 64, 'image': 'example/app:1',
+                     'recreation_identity': normalize_recreation_identity(raw_identity(), 'a' * 64)}
+        value['runtime']['containers'] = [container]
+        initial = p.state_sha256(value)
+        changed = copy.deepcopy(value)
+        changed['runtime']['containers'][0]['recreation_identity']['name'] = '/other-fixture'
+        self.assertNotEqual(initial, p.state_sha256(changed))
+        changed = copy.deepcopy(value)
+        changed['runtime']['containers'][0]['recreation_identity']['networks'][0]['network_id'] = '2' * 64
+        self.assertNotEqual(initial, p.state_sha256(changed))
+        changed = copy.deepcopy(value)
+        changed['runtime']['containers'][0]['recreation_identity']['networks'][0]['driver_options_present'] = True
+        self.assertNotEqual(initial, p.state_sha256(changed))
+        changed = copy.deepcopy(value)
+        changed['runtime']['containers'][0]['dynamic_ip'] = '192.0.2.99'
+        changed['runtime']['containers'][0]['health'] = 'unhealthy'
+        self.assertEqual(initial, p.state_sha256(changed))
+        del changed['runtime']['containers'][0]['recreation_identity']
+        with self.assertRaises(p.MaintenanceError):
+            p.state_sha256(changed)
+
+    def test_private_container_identity_is_not_in_external_ai_payload(self):
+        from maintenance.report import ai_payload
+        value = inventory()
+        value['runtime']['containers'] = [{'id': 'a' * 64, 'image_id': 'sha256:' + 'b' * 64,
+                                           'image': 'example/app:1', 'recreation_identity':
+                                           normalize_recreation_identity(raw_identity(), 'a' * 64)}]
+        payload = json.dumps(ai_payload(p.build_plan(value, self.sha, now=1000)))
+        for selected_private_value in ('/fixture-sentinel', '/srv/fixture/data', 'fixture-alias', '192.0.2.10'):
+            self.assertNotIn(selected_private_value, payload)
 
     def envelope(self):
         plan = self.candidate()

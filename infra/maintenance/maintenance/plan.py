@@ -9,6 +9,7 @@ import uuid
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from . import ContainerIdentityError, canonical_recreation_identity
 
 
 class MaintenanceError(ValueError):
@@ -110,9 +111,14 @@ def state_sha256(inventory):
         identities["containerd_version"] = runtime["containerd_version"]
     if "pgbouncer_version" in runtime:
         identities["pgbouncer_version"] = runtime["pgbouncer_version"]
-    identities["containers"] = sorted(
-        [{"id": x["id"], "image_id": x["image_id"], "image": x["image"]}
-         for x in runtime["containers"]], key=lambda x: x["id"])
+    identities['container_recreation_identity_schema_version'] = 1
+    try:
+        identities["containers"] = sorted(
+            [{"id": x["id"], "image_id": x["image_id"], "image": x["image"],
+              'recreation_identity': canonical_recreation_identity(x.get('recreation_identity'))}
+             for x in runtime["containers"]], key=lambda x: x["id"])
+    except ContainerIdentityError:
+        raise MaintenanceError('invalid container recreation identity') from None
     return plan_sha256({"host_id": inventory["host_id"], "platform": inventory["platform"],
                         "packages": sorted(inventory["packages"], key=lambda x: x["name"]),
                         "runtime": identities})

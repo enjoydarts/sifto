@@ -39,6 +39,7 @@ import uuid
 
 from .plan import (MaintenanceError, HASH, PACKAGE, SERVICE, SHA, VERSION, canonical_json, critical_restart_services,
                    expected_runtime, matches, normalize_closure, require, state_sha256, verify_envelope)
+from . import CONTAINER_FORMAT, ContainerIdentityError, normalize_recreation_identity, recreation_identity_matches
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_RECEIPT_HISTORY_COUNT = 10000
@@ -48,9 +49,6 @@ APT_LOCKS = ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock",
 APT_OPTIONS = ["-o", "DPkg::Lock::Timeout=0", "-o", "Acquire::Retries=0",
                "-o", "Acquire::http::Timeout=30", "-o", "Acquire::https::Timeout=30",
                "-o", "APT::Update::Error-Mode=any"]
-CONTAINER_FORMAT = ('{"id":{{json .Id}},"image_id":{{json .Image}},'
-                    '"image":{{json .Config.Image}},"status":{{json .State.Status}},'
-                    '"health":{{with index .State "Health"}}{{json .Status}}{{else}}"none"{{end}}}')
 POOL_PASSFILE = "/etc/sifto-maintenance/pgbouncer-health.pgpass"
 POOL_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,62}\Z")
 RECREATED_CONTAINER_IMAGE = re.compile(r"docker\.io/coollabsio/sentinel:[0-9]+\.[0-9]+\.[0-9]+\Z")
@@ -402,6 +400,12 @@ class HostAgent:
             containers = [strict_json(line) for line in output.splitlines()]
             require(len(containers) == len(container_ids)
                     and {x["id"] for x in containers} == set(container_ids), "container inspection mismatch")
+            for container in containers:
+                try:
+                    container['recreation_identity'] = normalize_recreation_identity(
+                        container.get('recreation_identity'), container['id'])
+                except ContainerIdentityError:
+                    raise MaintenanceError('invalid container recreation identity') from None
         services = {name: self.runner(["systemctl", "is-active", name], check=False).strip()
                     for name in self.config.get("monitored_services", ["docker.service", "ssh.service"])}
         engine = strict_json(self.runner(["docker", "version", "--format", "{{json .Server}} "]))
@@ -473,7 +477,8 @@ class HostAgent:
             return None
         replacement = replacements[0]
         if (replacement["id"] != container["id"] and replacement["status"] == "running"
-                and replacement["health"] == "healthy"):
+                and replacement["health"] == "healthy"
+                and recreation_identity_matches(container.get('recreation_identity'), replacement.get('recreation_identity'))):
             return replacement
         return None
 

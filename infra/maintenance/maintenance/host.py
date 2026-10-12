@@ -5,6 +5,8 @@ Root config at /etc/sifto-maintenance/config.json:
   state_path (/var/lib/sifto-maintenance), allowed_restart_services (unit names),
   host_role (application/database), database_enabled (maintenance enable bool),
   allowed_approvers (GitHub logins; empty denies apply),
+  allowed_recreated_container_images (optional; application-only Sentinel image
+  references, empty by default),
   monitored_services (optional unit names), database_restart_services (explicit
   native PG cluster units, required for server/common/library updates),
   pgbouncer_health (optional {database, user}; identifiers only).
@@ -49,6 +51,7 @@ CONTAINER_FORMAT = ('{"id":{{json .Id}},"image_id":{{json .Image}},'
                     '"health":{{with index .State "Health"}}{{json .Status}}{{else}}"none"{{end}}}')
 POOL_PASSFILE = "/etc/sifto-maintenance/pgbouncer-health.pgpass"
 POOL_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,62}\Z")
+RECREATED_CONTAINER_IMAGE = re.compile(r"docker\.io/coollabsio/sentinel:[0-9]+\.[0-9]+\.[0-9]+\Z")
 
 
 def valid_pool_config(value):
@@ -112,6 +115,12 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     require(matches(SHA, config["approved_workflow_sha"]), "invalid pinned executor SHA")
     require(type(config["database_enabled"]) is bool, "invalid database flag")
     require(config["host_role"] in ("application", "database"), "invalid host role")
+    recreated_images = config.setdefault("allowed_recreated_container_images", [])
+    require(type(recreated_images) is list and len(recreated_images) <= 8
+            and all(matches(RECREATED_CONTAINER_IMAGE, image) for image in recreated_images)
+            and len(set(recreated_images)) == len(recreated_images)
+            and (not recreated_images or config["host_role"] == "application"),
+            "invalid recreated container image allowlist")
     require(type(config.get("health_wait_seconds", 120)) is int
             and 0 <= config.get("health_wait_seconds", 120) <= 300, "invalid health wait")
     require(type(config.get("allowed_approvers", [])) is list
@@ -397,6 +406,24 @@ class HostAgent:
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
                 "reboot_required_packages": self.read_file("/var/run/reboot-required.pkgs").splitlines()}
 
+    def _healthy_recreated_container(self, container, before, current):
+        if (self.config["host_role"] != "application"
+                or container["image"] not in self.config.get("allowed_recreated_container_images", [])):
+            return None
+
+        def same_image(candidate):
+            return candidate["image"] == container["image"] and candidate["image_id"] == container["image_id"]
+
+        originals = [candidate for candidate in before if same_image(candidate)]
+        replacements = [candidate for candidate in current if same_image(candidate)]
+        if len(originals) != 1 or len(replacements) != 1:
+            return None
+        replacement = replacements[0]
+        if (replacement["id"] != container["id"] and replacement["status"] == "running"
+                and replacement["health"] == "healthy"):
+            return replacement
+        return None
+
     def _health(self, inventory, expected=None):
         require(inventory["dpkg_state"]["ready"], "pending dpkg configuration requires operator recovery")
         require(all(value == "active" for value in inventory["runtime"]["services"].values()), "monitored service is inactive")
@@ -405,6 +432,11 @@ class HostAgent:
         for container in expected["runtime"]["containers"]:
             if container["status"] == "running":
                 actual = current.get(container["id"])
+                # A present original must pass the existing identity/health rules;
+                # only a completely missing opted-in Sentinel may be recreated.
+                if actual is None:
+                    actual = self._healthy_recreated_container(container, expected["runtime"]["containers"],
+                                                              inventory["runtime"]["containers"])
                 require(actual is not None and actual["status"] == "running"
                         and actual["image_id"] == container["image_id"] and actual["image"] == container["image"]
                         and actual["health"] in ("none", "healthy"), "container health check failed")

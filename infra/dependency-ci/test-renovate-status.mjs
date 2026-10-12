@@ -2,11 +2,12 @@
 // Compose disables networking and mounts no tokens or credentials.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from '/usr/local/renovate/node_modules/yaml/dist/index.js';
 import { GlobalConfig } from '/usr/local/renovate/dist/config/global.js';
+import { getOptions } from '/usr/local/renovate/dist/config/options/index.js';
 import { setPlatformApi } from '/usr/local/renovate/dist/modules/platform/index.js';
 import { initRepo } from '/usr/local/renovate/dist/modules/platform/github/index.js';
 import { githubApi } from '/usr/local/renovate/dist/modules/platform/github/common.js';
@@ -14,6 +15,8 @@ import { setStability } from '/usr/local/renovate/dist/workers/repository/update
 import { REPOSITORY_CHANGED } from '/usr/local/renovate/dist/constants/error-messages.js';
 import { init as initLogger } from '/usr/local/renovate/dist/logger/index.js';
 import { applyPackageRules } from '/usr/local/renovate/dist/util/package-rules/index.js';
+import { extractAllPackageFiles } from '/usr/local/renovate/dist/modules/manager/pip-compile/extract.js';
+import { extractHeaderCommand } from '/usr/local/renovate/dist/modules/manager/pip-compile/common.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -23,7 +26,8 @@ assert.equal(installedVersion, action.with['renovate-version']);
 const directory = mkdtempSync(join(tmpdir(), 'renovate-status-'));
 const branchName = 'renovate-ci/status-fixture';
 const repository = 'fixture/dependency-ci';
-const context = 'renovate/minimum-release-age';
+const context = getOptions().find((option) => option.name === 'statusCheckNames').default.minimumReleaseAge;
+assert.equal(context, 'renovate/stability-days');
 const calls = [];
 let currentStatuses = [];
 let canWriteStatuses = false;
@@ -31,20 +35,47 @@ let canWriteStatuses = false;
 try {
   await initLogger();
   const repositoryConfig = JSON.parse(readFileSync('/fixtures/renovate.json', 'utf8'));
+  GlobalConfig.set({ localDir: directory });
+  const lockPaths = ['worker', 'infra/maintenance', 'infra/audio-concat'].map((path) => `${path}/requirements.txt`);
+  for (const lockPath of lockPaths) {
+    mkdirSync(join(directory, lockPath.replace('/requirements.txt', '')), { recursive: true });
+    for (const path of [lockPath, lockPath.replace('.txt', '.in')]) copyFileSync(`/fixtures/${path}`, join(directory, path));
+    const header = extractHeaderCommand(readFileSync(`/fixtures/${lockPath}`, 'utf8'), lockPath);
+    assert.equal(header.commandType, 'uv');
+    assert.equal(header.pythonVersion, '3.12');
+    assert.deepEqual(header.sourceFiles, ['requirements.in']);
+  }
+  const extracted = await extractAllPackageFiles(repositoryConfig, lockPaths);
+  assert.equal(extracted.length, 3);
+  for (const file of extracted) {
+    assert.ok(file.packageFile.endsWith('/requirements.in'));
+    assert.equal(file.lockFiles.length, 1);
+    assert.ok(file.deps.some((dep) => dep.depType === 'indirect' && dep.lockedVersion));
+    assert.ok(file.deps.some((dep) => dep.currentValue && dep.lockedVersion));
+    assert.ok(file.deps.every((dep) => dep.datasource === 'pypi'));
+  }
+  console.log(`Renovate ${installedVersion}: uv Python 3.12 headers extract all three direct inputs and hashed transitive dependencies.`);
   const activationGroup = 'Maintenance executor activation dependencies';
   for (const updateType of ['minor', 'patch']) {
-    for (const packageFile of ['worker/requirements.txt', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.txt']) {
-      const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip_requirements', updateType });
+    for (const packageFile of ['worker/requirements.in', 'worker/requirements.txt', 'infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt']) {
+      const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', updateType });
       assert.equal(config.groupName, packageFile.startsWith('infra/maintenance/') ? activationGroup : '{{manager}} minor and patch dependencies');
       assert.equal(config.automerge, false);
     }
   }
   for (const updateType of ['digest', 'pinDigest']) {
-    for (const packageFile of ['api/Dockerfile', 'infra/maintenance/bootstrap/Dockerfile.test', 'infra/maintenance/Dockerfile']) {
+    for (const packageFile of ['api/Dockerfile', 'infra/dependency-ci/compose.python-locks.yml', 'infra/maintenance/Dockerfile']) {
       const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'dockerfile', updateType });
       assert.equal(config.groupName, packageFile === 'infra/maintenance/Dockerfile' ? activationGroup : 'Docker image digests');
       assert.equal(config.automerge, false);
     }
+  }
+  for (const packageFile of ['worker/requirements.txt', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.txt']) {
+    const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', depType: 'indirect', updateType: 'patch', enabled: false });
+    assert.equal(config.enabled, true);
+    assert.equal(config.rangeStrategy, 'update-lockfile');
+    assert.equal(config.minimumReleaseAge, '7 days');
+    assert.equal(config.groupName, packageFile.startsWith('infra/maintenance/') ? activationGroup : '{{manager}} minor and patch dependencies');
   }
   console.log(`Renovate ${installedVersion}: live executor dependencies are separate from Worker/Audio minor-patch and ordinary Docker digest groups.`);
   execFileSync('git', ['init', '--initial-branch=main', directory], { stdio: 'pipe' });

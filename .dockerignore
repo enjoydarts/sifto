@@ -27,3 +27,4 @@
 .dependency-inventory
 .dependency-vulnerabilities.txt
 .dependency-image-artifacts
+.image-security

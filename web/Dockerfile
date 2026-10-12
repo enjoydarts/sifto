@@ -19,6 +19,7 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 
 FROM node:22.23.3-alpine AS runner

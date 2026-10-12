@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const clerkEnabled = Boolean(clerkPublishableKey && process.env.CLERK_SECRET_KEY);
+  const clerkEnabled = Boolean(clerkPublishableKey);
 
   return (
     <html lang="ja">

@@ -67,6 +67,14 @@ services:
       CLERK_SECRET_KEY: sk_test_dependency_ci_dummy_not_a_real_clerk_secret
       NODE_OPTIONS: --max-old-space-size=6144
     command: [sh, -ec, 'npm run lint && npm run build']
+  audio:
+    build:
+      context: ../..
+      dockerfile: infra/audio-concat/Dockerfile
+    command: [sh, -ec, 'pip check && python -X pycache_prefix=/tmp/pycache -m compileall -q app && python -B -m unittest app.test_concat_job']
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
   contract:
     build: ../maintenance
     volumes:
@@ -102,3 +110,9 @@ services:
       - ./test-renovate-status.mjs:/fixtures/test-renovate-status.mjs:ro
       - ../../.github/workflows/renovate.yml:/fixtures/renovate.yml:ro
       - ../../renovate.json:/fixtures/renovate.json:ro
+      - ../../worker/requirements.in:/fixtures/worker/requirements.in:ro
+      - ../../worker/requirements.txt:/fixtures/worker/requirements.txt:ro
+      - ../maintenance/requirements.in:/fixtures/infra/maintenance/requirements.in:ro
+      - ../maintenance/requirements.txt:/fixtures/infra/maintenance/requirements.txt:ro
+      - ../audio-concat/requirements.in:/fixtures/infra/audio-concat/requirements.in:ro
+      - ../audio-concat/requirements.txt:/fixtures/infra/audio-concat/requirements.txt:ro

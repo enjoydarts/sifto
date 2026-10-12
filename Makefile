@@ -183,6 +183,25 @@ maintenance-backup-test: maintenance-backup-unit-test
 
 # Public PR checks use an isolated project with no .env, host ports, or secrets.
 DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
+export PYTHON_LOCK_UID ?= $(shell id -u)
+export PYTHON_LOCK_GID ?= $(shell id -g)
+PYTHON_LOCK_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.python-locks.yml
+.PHONY: dependency-python-locks dependency-python-locks-check dependency-python-locks-test dependency-python-locks-mounts-test dependency-audio
+dependency-python-locks:
+	$(PYTHON_LOCK_COMPOSE) run --rm -T generate
+
+dependency-python-locks-check:
+	$(PYTHON_LOCK_COMPOSE) run --rm -T locks check
+
+dependency-python-locks-test:
+	$(PYTHON_LOCK_COMPOSE) run --rm -T --entrypoint python locks -B /repository/infra/dependency-ci/test_python_locks.py
+
+dependency-python-locks-mounts-test:
+	$(PYTHON_LOCK_COMPOSE) --profile generate config --format json | $(PYTHON_LOCK_COMPOSE) run --rm -T --entrypoint python generate -B /repository/infra/dependency-ci/test_python_lock_mounts.py
+
+dependency-audio:
+	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps audio
+
 .PHONY: dependency-check dependency-api dependency-worker dependency-web dependency-contract dependency-renovate-validate dependency-security dependency-inventory dependency-clean
 dependency-api:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T api
@@ -193,7 +212,7 @@ dependency-worker:
 dependency-web:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps web
 
-dependency-contract:
+dependency-contract: dependency-python-locks-mounts-test
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_updates.py
 	sh -n infra/dependency-ci/init-db.sh
@@ -213,7 +232,7 @@ dependency-inventory:
 	cp infra/maintenance/requirements.txt .dependency-inventory/maintenance/
 	cp infra/audio-concat/requirements.txt .dependency-inventory/audio-concat/
 
-dependency-check: dependency-contract dependency-renovate-validate dependency-api dependency-worker dependency-web maintenance-test maintenance-syntax
+dependency-check: dependency-python-locks-check dependency-python-locks-test dependency-contract dependency-renovate-validate dependency-api dependency-worker dependency-web dependency-audio maintenance-test maintenance-syntax
 
 dependency-clean:
 	$(DEPENDENCY_COMPOSE) down --volumes --remove-orphans

@@ -50,6 +50,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     name: Validate deployment configuration
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     outputs:
       deploy_api: ${{ steps.authorize.outputs.deploy_api }}
       deploy_worker: ${{ steps.authorize.outputs.deploy_worker }}
@@ -87,6 +88,7 @@ jobs:
     needs: validate
     if: needs.validate.outputs.deploy_api == 'true'
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -231,6 +233,7 @@ jobs:
     name: Sync Inngest
     needs: deploy-api
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     env:
       INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
     steps:

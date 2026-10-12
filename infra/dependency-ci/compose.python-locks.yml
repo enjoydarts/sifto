@@ -1,0 +1,26 @@
+services:
+  locks:
+    image: ghcr.io/astral-sh/uv:0.13.0-python3.12-trixie-slim@sha256:17af15d103f32869a63825517f9e8867ce98598937e3e5f5ce1e24313c552406
+    working_dir: /repository
+    user: "${PYTHON_LOCK_UID:?Set PYTHON_LOCK_UID to the caller uid}:${PYTHON_LOCK_GID:?Set PYTHON_LOCK_GID to the caller gid}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      UV_CACHE_DIR: /tmp/uv-cache
+      UV_PYTHON_DOWNLOADS: never
+      UV_DEFAULT_INDEX: https://pypi.org/simple
+    tmpfs: [/tmp]
+    volumes:
+      - ../..:/repository:ro
+    entrypoint: [python, -B, /repository/infra/dependency-ci/python_locks.py]
+    command: [check]
+  generate:
+    extends: locks
+    profiles: [generate]
+    volumes:
+      - ../..:/repository:ro
+      - ../../worker:/repository/worker:rw
+      - ../maintenance:/repository/infra/maintenance:rw
+      - ../audio-concat:/repository/infra/audio-concat:rw
+    command: [generate]

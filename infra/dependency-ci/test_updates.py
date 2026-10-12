@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 import tempfile
 import os
+from datetime import datetime, timezone
 
 SPEC = importlib.util.find_spec('dependency_updates')
 if SPEC:
@@ -13,6 +14,106 @@ if SPEC:
 
 SHA = 'a' * 40
 BASE = 'b' * 40
+
+
+class PythonReleaseAgeTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.find_spec('dependency_updates.release_age')
+        self.assertIsNotNone(spec, 'Python transitive artifact-age policy is missing')
+        from dependency_updates import release_age
+        self.age = release_age
+        self.cutoff = '2026-10-05T00:00:00Z'
+
+    def lock(self, version, hashes=('a' * 64,)):
+        lines = '\n'.join('    --hash=sha256:' + value + (' \\' if i + 1 < len(hashes) else '')
+                          for i, value in enumerate(hashes))
+        return policy.UV_HEADER + 'botocore==' + version + ' \\\n' + lines + '\n    # via boto3\n'
+
+    def release(self, version='1.43.108', timestamp='2026-10-02T12:00:00Z', digest='a' * 64):
+        return {'info': {'name': 'botocore', 'version': version},
+                'urls': [{'digests': {'sha256': digest}, 'upload_time_iso_8601': timestamp,
+                          'yanked': False}]}
+
+    def verify(self, metadata, after=None):
+        reads = []
+        def fetch(name, version):
+            reads.append((name, version))
+            return metadata
+        evidence = self.age.verify_python_release_age(self.lock('1.43.107'),
+                                                     after or self.lock('1.43.108'),
+                                                     self.cutoff, fetch)
+        self.assertEqual(reads, [('botocore', '1.43.108')])
+        return evidence
+
+    def test_cutoff_is_exact_168_hours_and_timezone_independent(self):
+        self.assertEqual(self.age.release_cutoff(datetime(2026, 10, 12, tzinfo=timezone.utc)), self.cutoff)
+
+    def test_mature_hashes_produce_deterministic_evidence(self):
+        evidence = self.verify(self.release())
+        self.assertEqual(evidence, self.verify(self.release()))
+        self.assertEqual(evidence, [{'name': 'botocore', 'version': '1.43.108',
+                                    'artifacts': [{'sha256': 'a' * 64, 'uploaded': '2026-10-02T12:00:00Z'}]}])
+
+    def test_immature_transitive_is_refused_despite_old_enough_direct(self):
+        with self.assertRaisesRegex(policy.Refused, 'seven-day'):
+            self.age.verify_python_release_age(self.lock('1.43.108'), self.lock('1.43.111'), self.cutoff,
+                                              lambda *_: self.release('1.43.111', '2026-10-09T12:00:00Z'))
+
+    def test_recent_extra_wheel_on_an_old_release_is_refused_by_hash(self):
+        metadata = self.release()
+        metadata['urls'].append(self.release(timestamp='2026-10-09T12:00:00Z', digest='b' * 64)['urls'][0])
+        with self.assertRaisesRegex(policy.Refused, 'seven-day'):
+            self.verify(metadata, self.lock('1.43.108', ('a' * 64, 'b' * 64)))
+
+    def test_unknown_yanked_missing_or_ambiguous_metadata_is_refused(self):
+        invalid = []
+        for key, value in [('yanked', True), ('upload_time_iso_8601', None),
+                           ('upload_time_iso_8601', '2026-10-02'),
+                           ('digests', {'sha256': 'b' * 64})]:
+            metadata = self.release()
+            metadata['urls'][0][key] = value
+            invalid.append(metadata)
+        for info in [{'name': 'another', 'version': '1.43.108'},
+                     {'name': 'botocore', 'version': '1.43.111'}]:
+            invalid.append({**self.release(), 'info': info})
+        invalid.extend([{}, {'info': self.release()['info'], 'urls': []}])
+        for metadata in invalid:
+            with self.subTest(metadata=metadata), self.assertRaises(policy.Refused):
+                self.verify(metadata)
+
+    def test_unchanged_and_removed_packages_need_no_new_release_requests(self):
+        fetch = Mock(side_effect=AssertionError('Unexpected release metadata read'))
+        original = self.lock('1.43.108')
+        self.assertEqual(self.age.verify_python_release_age(original, original, self.cutoff, fetch), [])
+        fetch.assert_not_called()
+
+    def test_hash_only_change_is_still_age_checked(self):
+        with self.assertRaises(policy.Refused):
+            self.age.verify_python_release_age(self.lock('1.43.108'), self.lock('1.43.108', ('b' * 64,)),
+                                              self.cutoff, lambda *_: self.release())
+
+    def test_public_metadata_transport_is_bounded_and_never_follows_redirects(self):
+        from urllib.error import HTTPError
+        for failure in (TimeoutError(), HTTPError('https://pypi.org', 302, 'redirect', {}, None),
+                        ValueError('Invalid JSON')):
+            with self.subTest(failure=type(failure).__name__):
+                transport = Mock(side_effect=failure)
+                with self.assertRaises(policy.Refused):
+                    self.age.PyPI(transport=transport).release('botocore', '1.43.108')
+                transport.assert_called_once()
+        for name, version in (('../private', '1.0'), ('botocore', '1/../../private'),
+                              ('https://internal', '1.0'), ('botocore', '')):
+            transport = Mock(side_effect=AssertionError('Unvalidated metadata target'))
+            with self.subTest(name=name, version=version), self.assertRaises(policy.Refused):
+                self.age.PyPI(transport=transport).release(name, version)
+            transport.assert_not_called()
+
+    def test_changed_package_and_artifact_inventory_limits_fail_closed(self):
+        metadata = self.release()
+        metadata['urls'] *= 5001
+        with self.assertRaises(policy.Refused):
+            self.verify(metadata)
+
 
 # Public data captured from the actual Go Bot PR #24; no candidate code runs.
 GO_BOT24_BEFORE = """module github.com/enjoydarts/sifto/api

@@ -30,6 +30,8 @@ help:
 	  '  make migrate-up    # Apply DB migrations to local Postgres via golang-migrate' \
 	  '  make fmt-go        # Run gofmt (api container preferred)' \
 	  '  make fmt-go-check  # Check gofmt formatting'
+	@printf '%s\n' \
+	  '  make image-security IMAGE_COMPONENT=api # Final-image SBOM and CVEs (requires docker-container Buildx builder and 5 GiB free)'
 
 build:
 	$(COMPOSE) build api worker web audio-concat-local
@@ -206,3 +208,20 @@ dependency-check: dependency-contract dependency-renovate-validate dependency-ap
 
 dependency-clean:
 	$(DEPENDENCY_COMPOSE) down --volumes --remove-orphans
+
+# Final production Dockerfile stages, exported locally; never push/deploy.
+IMAGE_COMPONENT ?= api
+IMAGE_SECURITY_COMPOSE := docker compose --env-file /dev/null -f infra/image-security/compose.yml
+.PHONY: image-security-build image-security-scan image-security image-security-test
+image-security-build:
+	sh infra/image-security/build.sh "$(IMAGE_COMPONENT)"
+
+image-security-scan:
+	sh infra/image-security/scan.sh "$(IMAGE_COMPONENT)"
+
+image-security: image-security-build
+	$(MAKE) image-security-scan IMAGE_COMPONENT="$(IMAGE_COMPONENT)"
+
+image-security-test:
+	$(IMAGE_SECURITY_COMPOSE) run --rm -T --no-deps verifier python -B /tool/test_report.py
+	sh -n infra/image-security/build.sh infra/image-security/scan.sh

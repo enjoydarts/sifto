@@ -11,6 +11,55 @@ concurrency:
   group: dependency-security
   cancel-in-progress: false
 jobs:
+  images:
+    # Manual runs on public branches are read-only and enable end-to-end testing.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, worker, audio-concat, maintenance, web]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Verify archive identity and scan evidence validation
+        run: make image-security-test
+      - name: Build final production image archive for deployment platform
+        env:
+          IMAGE_COMPONENT: ${{ matrix.component }}
+        run: make image-security-build
+      - name: Generate SBOM and scan final image OS and library vulnerabilities
+        env:
+          IMAGE_COMPONENT: ${{ matrix.component }}
+        run: make image-security-scan
+      - name: Publish image inventory summary
+        if: always()
+        env:
+          IMAGE_COMPONENT: ${{ matrix.component }}
+        run: |
+          if [ -f ".image-security/$IMAGE_COMPONENT/summary.md" ]; then
+            cat ".image-security/$IMAGE_COMPONENT/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' "Image inventory incomplete for $IMAGE_COMPONENT; inspect build/scan errors and attached artifacts." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve SBOM, findings and immutable image correlation
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-security-${{ matrix.component }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            .image-security/${{ matrix.component }}/*.json
+            .image-security/${{ matrix.component }}/*.txt
+            .image-security/${{ matrix.component }}/*.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
   # Keep this advisory inventory separate from required functional PR checks.
   # Findings fail the job and need human triage; no baseline CVEs are suppressed.
   inventory:

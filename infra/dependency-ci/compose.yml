@@ -45,6 +45,7 @@ services:
     build:
       context: ../..
       dockerfile: worker/Dockerfile
+      target: dev
     environment:
       LLM_CATALOG_PATH: /app/shared/llm_catalog.json
       TZ: Asia/Tokyo

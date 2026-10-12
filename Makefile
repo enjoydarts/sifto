@@ -150,6 +150,17 @@ test-worker:
 
 check-worker-full: check-worker test-worker
 
+# Isolated final-image checks: no .env, application secrets, or external runtime network.
+.PHONY: app-runtime-api app-runtime-worker app-runtime-web
+app-runtime-api:
+	sh infra/runtime-ci/check.sh api
+
+app-runtime-worker:
+	sh infra/runtime-ci/check.sh worker
+
+app-runtime-web:
+	sh infra/runtime-ci/check.sh web
+
 .PHONY: maintenance-test maintenance-syntax maintenance-backup-unit-test
 maintenance-test: maintenance-backup-unit-test
 	docker compose -f infra/maintenance/compose.yml --profile test run --build --rm -T test

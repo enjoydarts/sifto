@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 from maintenance import plan as p
 from test_plan import SIMULATION
+from test_container_identity import raw_identity
 
 try:
     from maintenance import host as h
@@ -89,9 +90,15 @@ class FakeRunner:
             return "c" * 64 + "\n"
         if argv[:2] == ["docker", "inspect"]:
             if self.containers is not None:
-                return "".join(json.dumps(container) + "\n" for container in self.containers)
+                selected = []
+                for container in self.containers:
+                    value = copy.deepcopy(container)
+                    value.setdefault('recreation_identity', raw_identity())
+                    selected.append(value)
+                return "".join(json.dumps(container) + "\n" for container in selected)
             return json.dumps({"id": "c" * 64, "image_id": self.image_id,
-                               "image": "example/app:1", "status": "running", "health": self.container_health}) + "\n"
+                               "image": "example/app:1", "status": "running", "health": self.container_health,
+                               "recreation_identity": raw_identity()}) + "\n"
         if argv[:2] == ["systemctl", "is-active"]:
             return "active\n" if self.service_active else "inactive\n"
         if argv[0] == "apt-get" and "-s" in argv:
@@ -169,8 +176,11 @@ class HostTests(unittest.TestCase):
                 or cmd[:2] in (["systemctl", "restart"], ["systemctl", "reboot"])]
 
     def sentinel_containers(self):
+        identity = raw_identity()
+        identity['networks'][0]['aliases'] = ['fixture-alias']
         return [{"id": "a" * 64, "image_id": "sha256:" + "b" * 64,
-                 "image": "docker.io/coollabsio/sentinel:1.0.2", "status": "running", "health": "healthy"},
+                 "image": "docker.io/coollabsio/sentinel:1.0.2", "status": "running", "health": "healthy",
+                 "recreation_identity": identity},
                 {"id": "c" * 64, "image_id": "sha256:" + "d" * 64,
                  "image": "example/app:1", "status": "running", "health": "none"}]
 
@@ -187,6 +197,37 @@ class HostTests(unittest.TestCase):
             self.agent._health(after, before)
         except p.MaintenanceError as exc:
             self.fail(f"healthy opted-in Sentinel recreation was rejected: {exc}")
+
+    def test_sentinel_replacement_requires_each_selected_metadata_field(self):
+        before, after = self.sentinel_health_inventories()
+        for path, value in [(('name',), '/other-fixture'), (('network_mode',), 'other-network'),
+                            (('mounts', 0, 'source'), '/srv/other-fixture'),
+                            (('mounts', 0, 'destination'), '/other-destination'),
+                            (('mounts', 0, 'rw'), False), (('mounts', 0, 'propagation'), 'rshared'),
+                            (('mounts', 1, 'volume_name'), 'other-volume'),
+                            (('networks', 0, 'name'), 'other-network'),
+                            (('networks', 0, 'network_id'), '2' * 64),
+                            (('networks', 0, 'aliases'), ['other-alias']),
+                            (('networks', 0, 'driver_options_present'), True),
+                            (('networks', 0, 'static_ipam', 'ipv4_address'), '192.0.2.11')]:
+            changed = copy.deepcopy(after)
+            target = changed['runtime']['containers'][0]['recreation_identity']
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            with self.subTest(path=path), self.assertRaisesRegex(p.MaintenanceError, 'container health check failed'):
+                self.agent._health(changed, before)
+
+    def test_legacy_receipt_cannot_authorize_recreation_but_existing_id_rules_remain(self):
+        before, after = self.sentinel_health_inventories()
+        del before['runtime']['containers'][0]['recreation_identity']
+        preserved = copy.deepcopy(before)
+        with self.assertRaisesRegex(p.MaintenanceError, 'container health check failed'):
+            self.agent._health(after, before)
+        self.assertEqual(before, preserved)
+        after['runtime']['containers'][0]['id'] = before['runtime']['containers'][0]['id']
+        after['runtime']['containers'][0]['recreation_identity']['name'] = '/other-fixture'
+        self.agent._health(after, before)
 
     def test_sentinel_replacement_without_application_opt_in_is_rejected(self):
         before, after = self.sentinel_health_inventories()
@@ -276,6 +317,34 @@ class HostTests(unittest.TestCase):
         self.assertEqual(self.agent.run("verify", {"plan_id": result["plan_id"]})["status"], "verified")
         with self.assertRaises(p.MaintenanceError):
             self.agent.run("apply", request)
+
+    def test_metadata_drift_during_solver_denies_before_consumption(self):
+        request = self.sentinel_upgrade_request()
+        self.runner.before_simulation = lambda: self.runner.containers[0]['recreation_identity'].update(name='/other-fixture')
+        with self.assertRaisesRegex(p.MaintenanceError, 'host state changed during preflight'):
+            self.agent.run('apply', request)
+        self.assertEqual(self.mutations(), [])
+        self.assertEqual(list((self.root / 'state/plans').glob('*.json')), [])
+
+    def test_recreated_metadata_drift_after_restart_fails_and_cannot_be_repaired_into_verified(self):
+        request = self.sentinel_upgrade_request()
+        restart = self.runner.after_restart
+        def changed_recreation():
+            restart()
+            self.runner.containers[0]['recreation_identity']['name'] = '/other-fixture'
+        self.runner.after_restart = changed_recreation
+        with self.assertRaisesRegex(p.MaintenanceError, 'container health check failed'):
+            self.agent.run('apply', request)
+        identifier = request['envelope']['plan']['plan_id']
+        path = self.root / 'state/plans' / (identifier + '.json')
+        failed = path.read_bytes()
+        self.assertEqual(json.loads(failed)['status'], 'failed')
+        self.runner.containers[0]['recreation_identity']['name'] = '/fixture-sentinel'
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run('verify', {'plan_id': identifier})
+        with self.assertRaises(p.MaintenanceError):
+            self.agent.run('apply', request)
+        self.assertEqual(path.read_bytes(), failed)
 
     def test_opted_in_sentinel_upgrade_dry_run_preserves_containers_and_journal(self):
         request = self.sentinel_upgrade_request(dry_run=True)

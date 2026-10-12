@@ -1,0 +1,12 @@
+# Keep local dependencies, generated output, and credentials out of COPY . .
+node_modules
+.next
+out
+coverage
+.env*
+*.pem
+*.key
+.clerk
+.vercel
+.git
+*.log

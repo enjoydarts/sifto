@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Optional immutable candidate head guard
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -18,6 +23,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Validate dispatched immutable head
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - run: make dependency-api
       - if: always()
         run: make dependency-clean
@@ -29,6 +38,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Validate dispatched immutable head
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - run: make dependency-worker
       - if: always()
         run: make dependency-clean
@@ -40,6 +53,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Validate dispatched immutable head
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - run: make dependency-web
       - if: always()
         run: make dependency-clean
@@ -51,9 +68,16 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Validate dispatched immutable head
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - run: |
+          make dependency-python-locks-check
+          make dependency-python-locks-test
           make dependency-contract
           make dependency-renovate-validate
+          make dependency-audio
           make maintenance-test
           make maintenance-syntax
       - if: always()

@@ -1,0 +1,30 @@
+# Local credentials and tooling are never part of a build context.
+.git
+.worktrees
+.agents
+.codex
+.aws
+**/.git
+**/.env*
+**/*.pem
+**/*.key
+**/.clerk
+**/.vercel
+
+# Build outputs and caches must be produced inside the image.
+**/node_modules
+**/.next
+**/out
+**/coverage
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.log
+.dependency-inventory
+.dependency-vulnerabilities.txt
+.dependency-image-artifacts
+.image-security

@@ -5,6 +5,8 @@ Root config at /etc/sifto-maintenance/config.json:
   state_path (/var/lib/sifto-maintenance), allowed_restart_services (unit names),
   host_role (application/database), database_enabled (maintenance enable bool),
   allowed_approvers (GitHub logins; empty denies apply),
+  allowed_recreated_container_images (optional; application-only Sentinel image
+  references, empty by default),
   monitored_services (optional unit names), database_restart_services (explicit
   native PG cluster units, required for server/common/library updates),
   pgbouncer_health (optional {database, user}; identifiers only).
@@ -22,12 +24,14 @@ readiness is an operator action; an approval cannot change these conditions.
 """
 
 import base64
+import codecs
 import contextlib
 import fcntl
 import json
 import os
 from pathlib import Path
 import re
+import selectors
 import stat
 import subprocess
 import time
@@ -49,6 +53,7 @@ CONTAINER_FORMAT = ('{"id":{{json .Id}},"image_id":{{json .Image}},'
                     '"health":{{with index .State "Health"}}{{json .Status}}{{else}}"none"{{end}}}')
 POOL_PASSFILE = "/etc/sifto-maintenance/pgbouncer-health.pgpass"
 POOL_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,62}\Z")
+RECREATED_CONTAINER_IMAGE = re.compile(r"docker\.io/coollabsio/sentinel:[0-9]+\.[0-9]+\.[0-9]+\Z")
 
 
 def valid_pool_config(value):
@@ -112,6 +117,12 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     require(matches(SHA, config["approved_workflow_sha"]), "invalid pinned executor SHA")
     require(type(config["database_enabled"]) is bool, "invalid database flag")
     require(config["host_role"] in ("application", "database"), "invalid host role")
+    recreated_images = config.setdefault("allowed_recreated_container_images", [])
+    require(type(recreated_images) is list and len(recreated_images) <= 8
+            and all(matches(RECREATED_CONTAINER_IMAGE, image) for image in recreated_images)
+            and len(set(recreated_images)) == len(recreated_images)
+            and (not recreated_images or config["host_role"] == "application"),
+            "invalid recreated container image allowlist")
     require(type(config.get("health_wait_seconds", 120)) is int
             and 0 <= config.get("health_wait_seconds", 120) <= 300, "invalid health wait")
     require(type(config.get("allowed_approvers", [])) is list
@@ -133,18 +144,69 @@ class SubprocessRunner:
     # Do not inherit PATH, PYTHONPATH, sudo caller environment or apt configuration.
     ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "LANG": "C",
            "DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_MODE": "l"}
+    MAX_STDOUT_BYTES = 16 * 1024 * 1024
+    MAX_STDERR_BYTES = 16 * 1024 * 1024
 
     def __call__(self, argv, *, timeout=60, check=True, env=None, pass_fds=()):
+        output = bytearray()
+        exceeded = invalid_encoding = False
         try:
-            result = subprocess.run(argv, shell=False, env=self.ENV if env is None else env,
-                                    pass_fds=pass_fds, stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=timeout, check=False, encoding="utf-8", errors="strict")
-        except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:
+            with subprocess.Popen(argv, shell=False, env=self.ENV if env is None else env,
+                                  pass_fds=pass_fds, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0) as process:
+                deadline = None if timeout is None else time.monotonic() + timeout
+                try:
+                    with selectors.DefaultSelector() as selector:
+                        for stream, limit in ((process.stdout, self.MAX_STDOUT_BYTES),
+                                              (process.stderr, self.MAX_STDERR_BYTES)):
+                            os.set_blocking(stream.fileno(), False)
+                            selector.register(stream, selectors.EVENT_READ,
+                                              {"count": 0, "limit": limit,
+                                               "decoder": codecs.getincrementaldecoder("utf-8")("strict")})
+                        while selector.get_map():
+                            remaining = None if deadline is None else deadline - time.monotonic()
+                            if remaining is not None and remaining <= 0:
+                                raise subprocess.TimeoutExpired(argv, timeout)
+                            for key, _ in selector.select(remaining):
+                                stream, state = key.fileobj, key.data
+                                try:
+                                    chunk = os.read(stream.fileno(), 64 * 1024)
+                                except BlockingIOError:
+                                    continue
+                                state["count"] = min(state["count"] + len(chunk), state["limit"] + 1)
+                                if state["count"] > state["limit"]:
+                                    exceeded = True
+                                    # Keep draining both pipes: APT/dpkg must never
+                                    # receive SIGPIPE or be killed for noisy output.
+                                    if stream is process.stdout:
+                                        output.clear()
+                                elif stream is process.stdout:
+                                    output.extend(chunk)
+                                if state["decoder"] is not None:
+                                    try:
+                                        state["decoder"].decode(chunk, final=not chunk)
+                                    except UnicodeError:
+                                        invalid_encoding = True
+                                        state["decoder"] = None
+                                if not chunk:
+                                    selector.unregister(stream)
+                                    stream.close()
+                    remaining = None if deadline is None else max(0, deadline - time.monotonic())
+                    process.wait(timeout=remaining)
+                except (OSError, subprocess.TimeoutExpired):
+                    # Preserve finite timeout behavior for probes. Install uses
+                    # timeout=None and output validation never enters this path.
+                    process.kill()
+                    process.wait()
+                    raise
+        except (OSError, subprocess.TimeoutExpired) as exc:
             raise MaintenanceError("command execution failed or timed out") from exc
-        require(not check or result.returncode == 0, "command failed: " + argv[0])
-        require(len(result.stdout.encode("utf-8")) <= 16 * 1024 * 1024, "command output exceeds limit")
-        return result.stdout
+        # Report validation only after completion; no stderr body or decoding
+        # exception (which can contain credentials) is exposed to the caller.
+        require(not invalid_encoding, "command execution failed or timed out")
+        require(not check or process.returncode == 0, "command failed: " + argv[0])
+        require(not exceeded, "command output exceeds limit")
+        return output.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
     def compare_versions(self, left, operator, right):
         result = subprocess.run(["dpkg", "--compare-versions", left, operator, right],
@@ -397,6 +459,24 @@ class HostAgent:
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
                 "reboot_required_packages": self.read_file("/var/run/reboot-required.pkgs").splitlines()}
 
+    def _healthy_recreated_container(self, container, before, current):
+        if (self.config["host_role"] != "application"
+                or container["image"] not in self.config.get("allowed_recreated_container_images", [])):
+            return None
+
+        def same_image(candidate):
+            return candidate["image"] == container["image"] and candidate["image_id"] == container["image_id"]
+
+        originals = [candidate for candidate in before if same_image(candidate)]
+        replacements = [candidate for candidate in current if same_image(candidate)]
+        if len(originals) != 1 or len(replacements) != 1:
+            return None
+        replacement = replacements[0]
+        if (replacement["id"] != container["id"] and replacement["status"] == "running"
+                and replacement["health"] == "healthy"):
+            return replacement
+        return None
+
     def _health(self, inventory, expected=None):
         require(inventory["dpkg_state"]["ready"], "pending dpkg configuration requires operator recovery")
         require(all(value == "active" for value in inventory["runtime"]["services"].values()), "monitored service is inactive")
@@ -405,6 +485,11 @@ class HostAgent:
         for container in expected["runtime"]["containers"]:
             if container["status"] == "running":
                 actual = current.get(container["id"])
+                # A present original must pass the existing identity/health rules;
+                # only a completely missing opted-in Sentinel may be recreated.
+                if actual is None:
+                    actual = self._healthy_recreated_container(container, expected["runtime"]["containers"],
+                                                              inventory["runtime"]["containers"])
                 require(actual is not None and actual["status"] == "running"
                         and actual["image_id"] == container["image_id"] and actual["image"] == container["image"]
                         and actual["health"] in ("none", "healthy"), "container health check failed")

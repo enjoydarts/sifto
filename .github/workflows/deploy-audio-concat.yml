@@ -1,4 +1,5 @@
 name: Deploy Audio Concat Job
+run-name: Approved dependency deployment ${{ inputs.approval_run }} ${{ inputs.expected_commit || github.sha }}
 
 on:
   push:
@@ -9,31 +10,76 @@ on:
       - "infra/gcp/**"
       - ".github/workflows/deploy-audio-concat.yml"
   workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact approved merged main commit
+        required: true
+        type: string
+      approval_run:
+        description: Native dependency approval workflow run
+        required: true
+        type: string
+      approved_pr:
+        description: Approved dependency PR number
+        required: true
+        type: string
+      approved_head:
+        description: Approved dependency head SHA
+        required: true
+        type: string
+      approved_base:
+        description: Approved dependency base SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
   id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
+  APPROVAL_RUN: ${{ inputs.approval_run }}
+  APPROVED_PR: ${{ inputs.approved_pr }}
+  APPROVED_HEAD: ${{ inputs.approved_head }}
+  APPROVED_BASE: ${{ inputs.approved_base }}
+  PYTHONPATH: infra/dependency-ci
 
 jobs:
   deploy-audio-concat:
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 30
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
-      - uses: google-github-actions/auth@v3
+      - name: Validate exact main and native dependency approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B -m dependency_updates.deploy validate
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         id: auth
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
           token_format: access_token
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ secrets.GCP_ARTIFACT_REGISTRY_HOST }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
       - name: Build and push image
         env:
@@ -64,3 +110,24 @@ jobs:
             --task-timeout=3600s \
             --set-env-vars=AUDIO_BRIEFING_R2_ENDPOINT=${{ secrets.AUDIO_BRIEFING_R2_ENDPOINT }},AUDIO_BRIEFING_R2_STANDARD_BUCKET=${{ secrets.AUDIO_BRIEFING_R2_STANDARD_BUCKET }},AUDIO_BRIEFING_R2_BUCKET=${{ secrets.AUDIO_BRIEFING_R2_BUCKET }},AUDIO_BRIEFING_R2_REGION=${{ secrets.AUDIO_BRIEFING_R2_REGION }} \
             --set-secrets=AUDIO_BRIEFING_R2_ACCESS_KEY_ID=${{ secrets.AUDIO_BRIEFING_R2_ACCESS_KEY_SECRET_NAME }}:latest,AUDIO_BRIEFING_R2_SECRET_ACCESS_KEY=${{ secrets.AUDIO_BRIEFING_R2_SECRET_KEY_SECRET_NAME }}:latest
+
+      - name: Verify exact deployed Cloud Run Job image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          JOB_NAME: ${{ secrets.AUDIO_BRIEFING_CLOUD_RUN_JOB }}
+        run: |
+          set -euo pipefail
+          gcloud run jobs describe "$JOB_NAME" --project="$PROJECT_ID" --region="$REGION" --format=json > /tmp/audio-job.json
+          python3 - <<'PY'
+          import json, os
+          with open("/tmp/audio-job.json") as handle:
+              job = json.load(handle)
+          containers = job.get("spec", {}).get("template", {}).get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+          if len(containers) != 1 or containers[0].get("image") != os.environ["IMAGE_URI"]:
+              raise SystemExit("Actual Audio Concat image differs from approved commit")
+          conditions = job.get("status", {}).get("conditions", [])
+          if not any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions):
+              raise SystemExit("Audio Concat job is not ready")
+          print("Exact Audio Concat image and readiness verified")
+          PY

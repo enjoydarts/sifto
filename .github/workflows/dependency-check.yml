@@ -73,8 +73,11 @@ jobs:
           EXPECTED_HEAD: ${{ inputs.expected_head }}
         run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - run: |
+          make dependency-python-locks-check
+          make dependency-python-locks-test
           make dependency-contract
           make dependency-renovate-validate
+          make dependency-audio
           make maintenance-test
           make maintenance-syntax
       - if: always()

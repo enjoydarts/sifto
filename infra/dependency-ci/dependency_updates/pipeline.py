@@ -136,8 +136,41 @@ def unconsumed_preparation(api, listed, plan):
     return all(final.get(key) == value for key, value in expected.items()) and api.get('/actions/runs/%d/approvals' % run_id) == []
 
 
+def active_approval(api):
+    # Read the full workflow inventory, without a head filter that could hide
+    # an approval or deployment still running from the previous main.
+    runs = api.pages('/actions/workflows/' + WORKFLOW + '/runs?event=workflow_dispatch',
+                     'workflow_runs', require_total=True)
+    active, identifiers = False, set()
+    for run in runs:
+        require(type(run) is dict and type(run.get('id')) is int and run['id'] > 0
+                and run['id'] not in identifiers and type(run.get('display_title')) is str
+                and type(run.get('status')) is str, 'Invalid native approval run inventory')
+        identifiers.add(run['id'])
+        title = re.fullmatch(r'Dependency PR [1-9][0-9]{0,6} [0-9a-f]{40} ([0-9a-f]{40})',
+                             run.get('display_title', ''))
+        require(title is not None and title[1] == run.get('head_sha')
+                and run.get('event') == 'workflow_dispatch' and run.get('head_branch') == 'main'
+                and run.get('path') == '.github/workflows/' + WORKFLOW
+                and type(run.get('run_attempt')) is int and run['run_attempt'] > 0
+                and run.get('status') in {'completed', 'queued', 'waiting', 'in_progress', 'requested', 'pending'},
+                'Native approval run identity or status mismatch')
+        if run['status'] != 'completed':
+            # After merge, this run keeps its old source while deployment uses
+            # the merged main. A coherent old-source run is still ordinary busy.
+            require(run['run_attempt'] == 1 and run.get('conclusion') is None,
+                    'Active native approval metadata mismatch')
+            active = True
+    return active
+
+
 def discover(api):
     source = main_sha(api)
+    require(type(source) is str and SHA.fullmatch(source) and source == os.environ.get('GITHUB_SHA'),
+            'Discovery workflow source must equal exact current main')
+    if active_approval(api):
+        print('Native dependency approval or deployment is active; no new request')
+        return
     for pr in api.pages('/pulls?state=open&base=main'):
         try:
             plan = candidate(api, pr['number'], pr['head']['sha'], source, source)
@@ -145,8 +178,13 @@ def discover(api):
             print('PR %d skipped: %s' % (pr['number'], exc))
             continue
         if not deduplicated(api, plan):
+            require(main_sha(api) == source, 'Main advanced during dependency discovery')
+            if active_approval(api):
+                print('Native dependency approval or deployment became active; no new request')
+                return
             api.request('POST', '/actions/workflows/' + WORKFLOW + '/dispatches', {'ref': 'main', 'inputs': {'pr_number': str(plan['pr']), 'head_sha': plan['head'], 'base_sha': source, 'source_sha': source}})
             print('Requested native dependency approval for PR %d' % pr['number'])
+            return
 
 
 def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch'):
@@ -251,6 +289,20 @@ def execute(api, plan, digest):
         require(audio.get('path') == '.github/workflows/deploy-audio-concat.yml', 'Unexpected Audio Concat workflow')
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
             summary.write('\nAudio Concat deployment run %d succeeded for `%s`.\n' % (audio['id'], merged))
+    require(main_sha(api) == merged, 'Main advanced after deployment; regeneration stopped')
+    # Regeneration is a separate, unprivileged follow-up. It gets fresh inputs,
+    # CI and owner approval; it cannot reuse this consumed merge authorization.
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        summary.write('\nAll affected deployments succeeded for `%s`. Merge approval remains consumed.\n' % merged)
+    regeneration = 'requested'
+    try:
+        api.request('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'})
+    except Ambiguous:
+        regeneration = 'unconfirmed'
+    except Refused:
+        regeneration = 'rejected'
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        summary.write('\nRegeneration request: %s. No request replay in this run; the daily Renovate scan provides the next opportunity.\n' % regeneration)
 
 
 def entrypoint():

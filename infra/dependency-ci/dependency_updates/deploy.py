@@ -153,7 +153,7 @@ def vercel(request, team, project, repo, commit, sleep=time.sleep, verify_alias=
     owner, repository = repo.split('/')
     configuration = request('GET', '/v9/projects/' + project + '?teamId=' + team)
     require(configuration.get('id') == project and re.fullmatch(r'[a-z0-9-]{1,100}', configuration.get('name', '')), 'Vercel project identity mismatch')
-    result = request('POST', '/v13/deployments?teamId=' + team, {'name': configuration['name'], 'project': project, 'target': 'production', 'gitSource': {'type': 'github', 'org': owner, 'repo': repository, 'sha': commit}})
+    result = request('POST', '/v13/deployments?teamId=' + team, {'name': configuration['name'], 'project': project, 'target': 'production', 'gitSource': {'type': 'github', 'org': owner, 'repo': repository, 'ref': 'main', 'sha': commit}})
     deployment = result.get('id')
     require(isinstance(deployment, str) and re.fullmatch(r'dpl_[a-zA-Z0-9_-]{1,100}', deployment), 'Vercel deployment acknowledgement missing')
     for _ in range(120):

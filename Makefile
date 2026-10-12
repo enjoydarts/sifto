@@ -172,6 +172,8 @@ maintenance-backup-test: maintenance-backup-unit-test
 
 # Public PR checks use an isolated project with no .env, host ports, or secrets.
 DEPENDENCY_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.yml
+export PYTHON_LOCK_UID ?= $(shell id -u)
+export PYTHON_LOCK_GID ?= $(shell id -g)
 PYTHON_LOCK_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.python-locks.yml
 .PHONY: dependency-python-locks dependency-python-locks-check dependency-python-locks-test dependency-python-locks-mounts-test dependency-audio
 dependency-python-locks:

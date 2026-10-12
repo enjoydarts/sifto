@@ -1,6 +1,7 @@
 """Check resolved Compose mounts and the generator's actual write boundaries."""
 import json
 import errno
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +14,14 @@ ALLOWED = {'/repository/worker', '/repository/infra/maintenance', '/repository/i
 
 
 class GeneratorMountTests(unittest.TestCase):
+    def test_resolved_lock_services_run_as_the_calling_user(self):
+        expected = '%d:%d' % (os.getuid(), os.getgid())
+        for service in ['locks', 'generate']:
+            with self.subTest(service=service):
+                self.assertEqual(CONFIG['services'][service].get('user'), expected)
+                self.assertEqual(CONFIG['services'][service]['cap_drop'], ['ALL'])
+                self.assertIn('no-new-privileges:true', CONFIG['services'][service]['security_opt'])
+
     def test_resolved_compose_keeps_repository_readonly_and_only_three_overlays_writable(self):
         locks = CONFIG['services']['locks']
         generator = CONFIG['services']['generate']

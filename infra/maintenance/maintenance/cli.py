@@ -288,13 +288,32 @@ def authorize(executor, repo, inputs, store):
     require(len(key) == 32, "invalid_signer")
     envelope = sign_plan(plan, approval, key)
     path = "approvals/" + plan["plan_id"] + "/" + run_id + ".json"
-    parent = store.head()
-    commit = store.write(parent, {path: envelope, "audit/approval-" + run_id + ".json": {
+    files = {path: canonical_json(envelope), "audit/approval-" + run_id + ".json": canonical_json({
         "operation": "authorize", "approved_by": reviewer, "executor_sha": executor,
         "pipeline_sha": os.environ.get("MAINTENANCE_PIPELINE_SHA"), "plan_commit": inputs["private_commit"],
-        "plan_sha256": plan_sha256(plan), "dry_run": inputs["dry_run"]}})
+        "plan_sha256": plan_sha256(plan), "dry_run": inputs["dry_run"]})}
+    previous = None
+    # Retry only the append of these exact signed bytes, never signing or apply.
+    # The fourth read can reconcile an ambiguous third push; it cannot write.
+    for index in range(4):
+        parent = store.head()
+        require(parent != previous, "authorization_write_failed_without_new_parent")
+        # read_at(optional=True) maps empty blobs to None, so check presence
+        # separately to avoid treating an empty conflicting record as absent.
+        present = set(store.git("ls-tree", "--name-only", parent, "--", *sorted(files)).decode().splitlines())
+        if present:
+            require(present == set(files) and all(store.read_at(parent, name) == raw
+                    for name, raw in files.items()), "immutable_authorization_conflict")
+            commit = parent
+            break
+        require(index < 3, "authorization_write_retries_exhausted")
+        try:
+            commit = store.write(parent, files)
+            break
+        except MaintenanceError:
+            previous = parent
     output("approval_commit", commit)
-    output("approval_sha256", hashlib.sha256(canonical_json(envelope)).hexdigest())
+    output("approval_sha256", hashlib.sha256(files[path]).hexdigest())
     summary("Maintenance authorization recorded. Plan SHA256: " + plan_sha256(plan) + "\n")
 
 

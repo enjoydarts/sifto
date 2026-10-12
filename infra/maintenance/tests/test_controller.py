@@ -320,6 +320,7 @@ class ControllerTests(unittest.TestCase):
             history = [{'state': 'approved', 'user': {'login': 'enjoydarts'}, 'environments': [{'name': 'production-maintenance'}]}]
             git = Mock()
             git.head.return_value = 'b' * 40
+            git.git.return_value = b''
             git.write.return_value = 'c' * 40
             inputs = {'private_commit': 'd' * 40, 'dry_run': True}
             def local_path(value):
@@ -327,12 +328,12 @@ class ControllerTests(unittest.TestCase):
             with patch.object(cli, 'Path', side_effect=local_path), patch.object(cli, 'load_plan', return_value=plan), patch.object(cli, 'github', return_value=history), patch.object(cli.time, 'time', return_value=1001), patch.object(cli, 'output') as outputs, patch.object(cli, 'summary'), patch.dict('os.environ', {'GITHUB_RUN_ID': '123', 'GITHUB_ACTOR': 'wrong-actor', 'MAINTENANCE_ALLOWED_APPROVERS': '["enjoydarts"]', 'MAINTENANCE_PIPELINE_SHA': 'e' * 40}):
                 cli.authorize(self.sha, 'enjoydarts/sifto-operations', inputs, git)
             files = git.write.call_args.args[1]
-            envelope = next(v for k, v in files.items() if k.startswith('approvals/'))
+            envelope = json.loads(next(v for k, v in files.items() if k.startswith('approvals/')))
             self.assertEqual(envelope['approval']['approved_by'], 'enjoydarts')
             self.assertEqual(envelope['approval']['workflow_sha'], self.sha)
             self.assertEqual(envelope['approval']['execution_mode'], 'dry_run')
             self.assertLessEqual(envelope['approval']['expires_at'], plan['expires_at'])
-            self.assertEqual(files['audit/approval-123.json']['pipeline_sha'], 'e' * 40)
+            self.assertEqual(json.loads(files['audit/approval-123.json'])['pipeline_sha'], 'e' * 40)
             self.assertEqual(outputs.call_args_list[0].args, ('approval_commit', 'c' * 40))
 
     def test_execution_history_blocks_unresolved_and_unknown_but_root_diagnosis_preserves_consumption(self):

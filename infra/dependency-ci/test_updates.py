@@ -640,6 +640,89 @@ class DeploymentTests(unittest.TestCase):
                 self.deploy.vercel(request, 'team_test', 'prj_test', 'owner/repo', SHA, sleep=lambda _: None, verify_alias=lambda *_: None)
 
 
+class NpmSummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.assertTrue(hasattr(policy, 'npm_lock_summary'), 'npm semantic summary is missing')
+
+    def lock(self, packages, dependencies=None):
+        return json.dumps({'lockfileVersion': 3, 'packages': {
+            '': {'dependencies': dependencies or {'dep': '^1.0.0'}}, **packages}})
+
+    def test_all_rows_root_versions_registry_completion_and_script_flags_are_visible(self):
+        import base64
+        path = 'node_modules/dep/node_modules/@node_modules/pkg'
+        original = {'node_modules/removed': {'version': '1.0.0'},
+                    'node_modules/dep': {'version': '1.0.0', 'hasInstallScript': False},
+                    path: {'version': '1.0.0'}}
+        updated = {'node_modules/added': {'version': '2.0.0', 'hasInstallScript': True},
+                   'node_modules/dep': {'version': '1.0.1', 'hasInstallScript': True},
+                   path: {'version': '1.0.0',
+                          'resolved': 'https://registry.npmjs.org/@node_modules/pkg/-/pkg-1.0.0.tgz',
+                          'integrity': 'sha512-' + base64.b64encode(bytes(64)).decode()}}
+        summary = policy.npm_lock_summary(self.lock(original), self.lock(updated, {'dep': '^1.0.1'}))
+        text = '\n'.join(summary)
+        for expected in ('added 1, removed 1, changed 2', 'root dependencies/dep: ^1.0.0 -> ^1.0.1',
+                         '+added: 2.0.0 (hasInstallScript=true)', '-removed: 1.0.0',
+                         'dep: 1.0.0 -> 1.0.1 (hasInstallScript=false -> true)',
+                         'dep > @node_modules/pkg: 1.0.0 (registry pair completed)'):
+            self.assertIn(expected, text)
+        self.assertEqual(len(summary), 6)
+        self.assertEqual(summary, policy.npm_lock_summary(
+            self.lock(dict(reversed(list(original.items())))),
+            self.lock(dict(reversed(list(updated.items()))), {'dep': '^1.0.1'})))
+
+    def test_root_only_diff_keeps_a_header_and_each_dependency_change(self):
+        summary = policy.npm_lock_summary(self.lock({}), self.lock({}, {'dep': '^1.0.1'}))
+        self.assertEqual(len(summary), 2)
+        self.assertIn('added 0, removed 0, changed 0', summary[0])
+        self.assertEqual(summary[1], 'root dependencies/dep: ^1.0.0 -> ^1.0.1')
+
+    def test_nested_labels_preserve_node_modules_in_either_scoped_name_component(self):
+        paths = {
+            'node_modules/@scope/node_modules/node_modules/pkg': '@scope/node_modules > pkg',
+            'node_modules/@node_modules/pkg/node_modules/@scope/node_modules': '@node_modules/pkg > @scope/node_modules',
+            'node_modules/node_modules/node_modules/pkg': 'node_modules > pkg',
+        }
+        before = self.lock({path: {'version': '1.0.0'} for path in paths})
+        after = self.lock({path: {'version': '1.0.1'} for path in paths})
+        summary = policy.npm_lock_summary(before, after)
+        for expected in paths.values():
+            self.assertIn(expected + ': 1.0.0 -> 1.0.1', summary)
+        self.assertEqual(len(summary), 4)
+
+    def test_change_count_accepts_300_and_refuses_301_without_elision(self):
+        for count in (300, 301):
+            before = self.lock({'node_modules/pkg%03d' % index: {'version': '1.0.0'} for index in range(count)})
+            after = self.lock({'node_modules/pkg%03d' % index: {'version': '1.0.1'} for index in range(count)})
+            if count == 300:
+                self.assertEqual(len(policy.npm_lock_summary(before, after)), 301)
+            else:
+                with self.assertRaisesRegex(policy.Refused, 'summary is too large'):
+                    policy.npm_lock_summary(before, after)
+
+    def test_summary_character_limit_includes_newlines_and_rejects_one_extra(self):
+        def inputs(size):
+            return (self.lock({'node_modules/' + 'a' * size: {'version': '1.0.0'}}),
+                    self.lock({'node_modules/' + 'a' * size: {'version': '1.0.1'}}))
+        length = len('\n'.join(policy.npm_lock_summary(*inputs(1))))
+        boundary = 1 + 12_000 - length
+        self.assertEqual(len('\n'.join(policy.npm_lock_summary(*inputs(boundary)))), 12_000)
+        with self.assertRaisesRegex(policy.Refused, 'summary is too large'):
+            policy.npm_lock_summary(*inputs(boundary + 1))
+
+    def test_summary_never_bypasses_unknown_script_link_transport_or_type_validation(self):
+        before = self.lock({'node_modules/dep': {'version': '1.0.0'}})
+        for field, value in (('unknown', True), ('scripts', {'install': 'fixture'}), ('link', True),
+                             ('resolved', 'https://example.invalid/dep.tgz'), ('hasInstallScript', 1)):
+            after = self.lock({'node_modules/dep': {'version': '1.0.1', field: value}})
+            with self.subTest(field=field), self.assertRaises(policy.Refused):
+                policy.npm_lock_summary(before, after)
+        for malformed in ('{', '{"lockfileVersion":3,"packages":{}}',
+                          '{"lockfileVersion":3,"lockfileVersion":3,"packages":{"":{}}}'):
+            with self.subTest(malformed=malformed), self.assertRaises(policy.Refused):
+                policy.npm_lock_summary(before, malformed)
+
+
 class PipelineTests(unittest.TestCase):
     """Exercise orchestration through its real controlled REST boundary."""
     def setUp(self):
@@ -868,6 +951,43 @@ class PipelineTests(unittest.TestCase):
         updated = updated.replace('anyio==4.15.1', 'anyio==4.15.2')
         with self.assertRaises(policy.Refused):
             policy.assert_unchanged(plan, self.plan(), digest)
+
+    def test_large_npm_diff_uses_complete_summary_and_keeps_full_blob_hashes(self):
+        import base64
+        import hashlib
+        original = {'lockfileVersion': 3, 'packages': {'': {'dependencies': {'dep': '^1.0.0'}}}}
+        for index in range(200):
+            original['packages']['node_modules/pkg%03d' % index] = {
+                'version': '1.0.0', 'integrity': 'sha512-' + base64.b64encode(bytes(64)).decode()}
+        updated = json.loads(json.dumps(original))
+        for package in updated['packages'].values():
+            if 'version' in package:
+                package['version'] = '1.0.1'
+                package['integrity'] = 'sha512-' + base64.b64encode(bytes([1]) * 64).decode()
+        original, updated = json.dumps(original, indent=2), json.dumps(updated, indent=2)
+        self.paths = ['web/package-lock.json']
+        transport = self.transport
+        def content_transport(method, path, body):
+            if path.startswith('/contents/'):
+                text = original if 'ref=' + BASE in path else updated
+                return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
+            return transport(method, path, body)
+        self.api = github.GitHub(self.repo, transport=content_transport)
+        plan = self.plan()
+        self.assertLess(len(policy.canonical(plan)), 48_000)
+        entry = plan['files'][0]
+        self.assertEqual(len(entry['changes']), 201)
+        self.assertEqual(entry['before'], hashlib.sha256(original.encode()).hexdigest())
+        self.assertEqual(entry['after'], hashlib.sha256(updated.encode()).hexdigest())
+        self.assertEqual(plan['diff_hash'], policy.plan_hash(plan['files']))
+        self.assertEqual((plan['head'], plan['base'], plan['source']), (SHA, BASE, BASE))
+        digest = policy.plan_hash(plan)
+        # Even a full-blob formatting change with identical semantic rows
+        # invalidates the exact prepared candidate and its approval.
+        updated += '\n'
+        with self.assertRaises(policy.Refused):
+            policy.assert_unchanged(plan, self.plan(), digest)
+        self.assertEqual(self.mutations, [])
 
     def test_no_approval_or_stale_head_base_diff_or_wrong_check_never_merges(self):
         for changed in ['approval', 'head', 'base', 'diff', 'check']:

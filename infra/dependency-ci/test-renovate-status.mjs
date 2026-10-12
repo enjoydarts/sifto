@@ -21,6 +21,7 @@ import { constructPipCompileCmd } from '/usr/local/renovate/dist/modules/manager
 import { generateUpdate } from '/usr/local/renovate/dist/workers/repository/process/lookup/generate.js';
 import { get as getVersioning } from '/usr/local/renovate/dist/modules/versioning/index.js';
 import { getRangeStrategy } from '/usr/local/renovate/dist/modules/manager/index.js';
+import { extractPackageFile as extractGoMod } from '/usr/local/renovate/dist/modules/manager/gomod/extract.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -40,6 +41,65 @@ try {
   await initLogger();
   const repositoryConfig = JSON.parse(readFileSync('/fixtures/renovate.json', 'utf8'));
   GlobalConfig.set({ localDir: directory });
+  // Exercise the real Go parser's disabled indirect dependencies, then apply
+  // repository rules. No Go command, module download or datasource lookup runs.
+  const goMod = `module example.invalid/dependency-fixture
+
+go 1.26.0
+
+require github.com/inngest/inngestgo v0.15.1
+
+require (
+  google.golang.org/grpc v1.82.1 // indirect
+  golang.org/x/net v0.58.0 // indirect
+  golang.org/x/text v0.42.0 // indirect
+  golang.org/x/sys v0.48.0 // indirect
+  google.golang.org/protobuf v1.36.10 // indirect
+  golang.org/x/net/neighbor v1.0.0 // indirect
+)
+`;
+  const enabledGoIndirect = new Set(['google.golang.org/grpc', 'golang.org/x/net']);
+  const indirectNames = [...enabledGoIndirect, 'golang.org/x/text', 'golang.org/x/sys', 'google.golang.org/protobuf', 'golang.org/x/net/neighbor'];
+  for (const packageFile of ['api/go.mod', 'go.mod', 'api/extra/go.mod', 'infra/maintenance/go.mod']) {
+    const goFile = extractGoMod(goMod);
+    assert.ok(goFile);
+    const indirect = goFile.deps.filter((dep) => dep.depType === 'indirect');
+    assert.deepEqual(indirect.map((dep) => dep.depName).sort(), [...indirectNames].sort());
+    for (const dep of indirect) {
+      assert.equal(dep.enabled, false, `parser default for ${dep.depName}`);
+      assert.equal(dep.datasource, 'go');
+      for (const updateType of ['minor', 'patch']) {
+        const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageFile, manager: 'gomod', updateType });
+        assert.equal(config.enabled, packageFile === 'api/go.mod' && enabledGoIndirect.has(dep.depName), `${packageFile}: ${dep.depName}`);
+        assert.equal(config.minimumReleaseAge, '7 days');
+        assert.equal(config.automerge, false);
+        assert.equal(config.platformAutomerge, false);
+        assert.equal(config.branchPrefix, 'renovate-ci/');
+        assert.equal(config.groupName, packageFile.startsWith('infra/maintenance/') ? undefined : '{{manager}} minor and patch dependencies');
+      }
+    }
+    const direct = goFile.deps.find((dep) => dep.depName === 'github.com/inngest/inngestgo');
+    assert.ok(direct);
+    assert.notEqual(direct.depType, 'indirect');
+    const directConfig = await applyPackageRules({ ...repositoryConfig, ...direct, packageFile, manager: 'gomod', updateType: 'minor' });
+    assert.equal(directConfig.enabled, direct.enabled);
+    assert.notEqual(directConfig.enabled, false);
+  }
+  const directGoFile = extractGoMod(goMod.replaceAll(' // indirect', ''));
+  assert.ok(directGoFile);
+  for (const depName of enabledGoIndirect) {
+    const dep = directGoFile.deps.find((entry) => entry.depName === depName);
+    assert.ok(dep);
+    assert.notEqual(dep.depType, 'indirect');
+    const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageFile: 'api/go.mod', manager: 'gomod', updateType: 'minor' });
+    assert.equal(config.enabled, dep.enabled, `direct default for ${depName}`);
+  }
+  const targetDep = extractGoMod(goMod).deps.find((dep) => dep.depName === 'google.golang.org/grpc');
+  for (const manager of ['npm', 'pip-compile']) {
+    const config = await applyPackageRules({ ...repositoryConfig, ...targetDep, packageFile: 'api/go.mod', manager, updateType: 'patch' });
+    assert.equal(config.enabled, false, `other manager ${manager}`);
+  }
+  console.log(`Renovate ${installedVersion}: only api/go.mod indirect grpc and x/net are enabled; other paths, managers and indirect dependencies retain defaults and approval controls.`);
   const lockPaths = ['worker', 'infra/maintenance', 'infra/audio-concat'].map((path) => `${path}/requirements.txt`);
   for (const lockPath of lockPaths) {
     mkdirSync(join(directory, lockPath.replace('/requirements.txt', '')), { recursive: true });

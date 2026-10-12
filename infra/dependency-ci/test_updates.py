@@ -15,6 +15,17 @@ SHA = 'a' * 40
 BASE = 'b' * 40
 
 
+class FakeClock:
+    def __init__(self):
+        self.elapsed = 0
+
+    def monotonic(self):
+        return self.elapsed
+
+    def sleep(self, seconds):
+        self.elapsed += seconds
+
+
 class PolicyTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(SPEC, 'approval automation must be implemented')
@@ -301,6 +312,8 @@ class PipelineTests(unittest.TestCase):
         self.labels = []
         self.body = ''
         self.check_path = '.github/workflows/dependency-check.yml'
+        self.mergeable_state = 'clean'
+        self.preview_failure = False
         self.api = github.GitHub(self.repo, transport=self.transport)
 
     def transport(self, method, path, body):
@@ -316,7 +329,7 @@ class PipelineTests(unittest.TestCase):
         if endpoint == '/branches/main':
             return {'protected': True, 'commit': {'sha': self.base}}
         if endpoint == '/pulls/1':
-            return {'state': 'open', 'draft': False, 'merged': False, 'user': {'login': self.author}, 'head': {'sha': self.head, 'ref': self.branch, 'repo': {'full_name': 'other/repo' if self.fork else self.repo}}, 'base': {'sha': self.base, 'ref': 'main', 'repo': {'full_name': self.repo}}, 'changed_files': len(self.paths), 'labels': self.labels, 'body': self.body, 'mergeable': True, 'mergeable_state': 'clean'}
+            return {'state': 'open', 'draft': False, 'merged': False, 'user': {'login': self.author}, 'head': {'sha': self.head, 'ref': self.branch, 'repo': {'full_name': 'other/repo' if self.fork else self.repo}}, 'base': {'sha': self.base, 'ref': 'main', 'repo': {'full_name': self.repo}}, 'changed_files': len(self.paths), 'labels': self.labels, 'body': self.body, 'mergeable': True, 'mergeable_state': self.mergeable_state}
         if endpoint.startswith('/compare/'):
             return {'merge_base_commit': {'sha': self.base}, 'status': 'ahead'}
         if endpoint == '/pulls/1/files':
@@ -326,7 +339,10 @@ class PipelineTests(unittest.TestCase):
             text = 'httpx==0.28.1\n' if 'ref=' + BASE in path else self.after
             return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
         if endpoint.endswith('/statuses'):
-            return [{'context': 'renovate/stability-days', 'state': 'success', 'creator': {'login': 'github-actions[bot]'}}]
+            statuses = [{'context': 'renovate/stability-days', 'state': 'success', 'creator': {'login': 'github-actions[bot]'}}]
+            if self.preview_failure:
+                statuses.append({'context': 'Vercel', 'state': 'failure', 'creator': {'login': 'vercel[bot]'}})
+            return statuses
         if endpoint == '/actions/runs/10':
             return {'event': 'workflow_dispatch', 'head_branch': 'main', 'head_sha': BASE, 'path': '.github/workflows/dependency-update.yml', 'run_attempt': 1, 'actor': {'login': 'github-actions[bot]'}, 'display_title': 'Dependency PR 1 ' + SHA + ' ' + BASE}
         if endpoint.endswith('/approvals'):
@@ -356,6 +372,134 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.mutations[0][2]['sha'], SHA)
         self.assertEqual(self.mutations[1][2]['inputs']['expected_commit'], self.merged)
         self.assertEqual(self.mutations[1][2]['inputs']['approval_run'], '10')
+
+    def delayed_deployments(self, clock, ready_after, conclusion='success'):
+        transport = self.transport
+
+        def controlled(method, path, body):
+            workflows = ('deploy.yml', 'deploy-audio-concat.yml')
+            for index, workflow in enumerate(workflows):
+                if '/actions/workflows/' + workflow + '/runs' in path:
+                    dispatched = any(m[1] == '/actions/workflows/' + workflow + '/dispatches' for m in self.mutations)
+                    completed = clock.elapsed >= ready_after.get(workflow, float('inf'))
+                    run = {'id': 16 + index, 'event': 'workflow_dispatch', 'head_sha': self.merged,
+                           'path': '.github/workflows/' + workflow,
+                           'status': 'completed' if completed else 'in_progress',
+                           'conclusion': conclusion if completed else None}
+                    # A successful foreign head must never satisfy this wait.
+                    foreign = dict(run, id=99, head_sha='d' * 40, status='completed', conclusion='success')
+                    return {'workflow_runs': [foreign, run] if dispatched else [], 'total_count': 2 if dispatched else 0}
+            return transport(method, path, body)
+
+        self.api = github.GitHub(self.repo, transport=controlled)
+
+    def test_application_and_audio_can_each_succeed_after_thirty_minutes(self):
+        self.paths.append('infra/audio-concat/requirements.in')
+        clock = FakeClock()
+        self.delayed_deployments(clock, {'deploy.yml': 31 * 60, 'deploy-audio-concat.yml': 62 * 60})
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            self.execute(self.plan())
+        self.assertEqual(clock.elapsed, 62 * 60)
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+        for mutation in self.mutations[1:]:
+            self.assertEqual(mutation[2]['ref'], 'main')
+            self.assertEqual(mutation[2]['inputs'], {'expected_commit': self.merged, 'approval_run': '10', 'approved_pr': '1', 'approved_head': SHA, 'approved_base': BASE})
+
+    def test_deployment_deadline_expires_once_without_merge_or_dispatch_replay(self):
+        self.paths.append('infra/audio-concat/requirements.in')
+        clock = FakeClock()
+        self.delayed_deployments(clock, {})
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Timed out waiting for exact workflow run'):
+                self.execute(self.plan())
+        self.assertEqual(clock.elapsed, 145 * 60)
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual(self.mutations[1][1], '/actions/workflows/deploy.yml/dispatches')
+
+    def test_audio_deadline_expires_once_after_application_success(self):
+        self.paths.append('infra/audio-concat/requirements.in')
+        clock = FakeClock()
+        self.delayed_deployments(clock, {'deploy.yml': 0})
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Timed out waiting for exact workflow run'):
+                self.execute(self.plan())
+        self.assertEqual(clock.elapsed, 50 * 60)
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+        self.assertEqual(self.mutations[-1][1], '/actions/workflows/deploy-audio-concat.yml/dispatches')
+
+    def test_failed_deployment_after_thirty_minutes_stops_without_audio_or_replay(self):
+        self.paths.append('infra/audio-concat/requirements.in')
+        clock = FakeClock()
+        self.delayed_deployments(clock, {'deploy.yml': 31 * 60}, conclusion='failure')
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Dispatched workflow failed'):
+                self.execute(self.plan())
+        self.assertEqual(clock.elapsed, 31 * 60)
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+
+    def test_wrong_deployment_path_stops_after_single_merge_and_dispatch(self):
+        transport = self.transport
+
+        def controlled(method, path, body):
+            result = transport(method, path, body)
+            if '/actions/workflows/deploy.yml/runs' in path:
+                for run in result['workflow_runs']:
+                    run['path'] = '.github/workflows/spoof.yml'
+            return result
+
+        self.api = github.GitHub(self.repo, transport=controlled)
+        with self.assertRaisesRegex(policy.Refused, 'Unexpected deployment workflow'):
+            self.execute(self.plan())
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+
+    def test_nonrequired_preview_failure_does_not_block_verified_dependency_merge(self):
+        # GitHub reports unstable when optional preview checks fail; the four
+        # exact-head dependency jobs still succeed and PUT uses normal rules.
+        self.mergeable_state = 'unstable'
+        self.preview_failure = True
+        self.execute(self.plan())
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #1'})
+
+    def test_unstable_pr_with_failed_fixed_ci_still_cannot_merge(self):
+        self.mergeable_state = 'unstable'
+        plan = self.plan()
+        transport = self.transport
+
+        def controlled(method, path, body):
+            result = transport(method, path, body)
+            if path.split('?')[0].endswith('/jobs'):
+                result['jobs'][0]['conclusion'] = 'failure'
+            return result
+
+        self.api = github.GitHub(self.repo, transport=controlled)
+        with self.assertRaisesRegex(policy.Refused, 'four exact-head CI jobs'):
+            self.execute(plan)
+        self.assertEqual(self.mutations, [])
+
+    def test_native_merge_rejection_of_unstable_pr_cannot_start_deployment(self):
+        self.mergeable_state = 'unstable'
+        transport = self.transport
+
+        def controlled(method, path, body):
+            if method == 'PUT':
+                self.mutations.append((method, path, body))
+                return {'merged': False}
+            return transport(method, path, body)
+
+        self.api = github.GitHub(self.repo, transport=controlled)
+        with self.assertRaisesRegex(policy.Refused, 'Protected branch merge rejected'):
+            self.execute(self.plan())
+        self.assertEqual([m[0] for m in self.mutations], ['PUT'])
+
+    def test_blocked_behind_dirty_and_unknown_merge_states_cannot_attempt_merge(self):
+        for state in ['blocked', 'behind', 'dirty', 'unknown', None, '']:
+            with self.subTest(state=state):
+                self.setUp()
+                self.mergeable_state = state
+                with self.assertRaisesRegex(policy.Refused, 'ready to merge'):
+                    self.execute(self.plan())
+                self.assertEqual(self.mutations, [])
 
     def test_large_python_hash_diff_has_bounded_summary_and_immutable_full_blob(self):
         import base64
@@ -445,6 +589,59 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaises(policy.Refused):
                 pipeline.execute(self.api, plan, policy.plan_hash(plan))
         self.assertEqual(self.mutations, [])
+
+
+class WorkflowWaitTests(unittest.TestCase):
+    def test_ci_has_its_own_short_finite_deadline_without_redispatch(self):
+        clock = FakeClock()
+        mutations = []
+
+        def transport(method, path, body):
+            if method == 'POST':
+                mutations.append((path, body))
+            return {'workflow_runs': [], 'total_count': 0}
+
+        api = github.GitHub('owner/repo', transport=transport)
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Timed out waiting for exact workflow run'):
+                pipeline.dispatch_once(api, 'dependency-check.yml', 'renovate-ci/pip', SHA, {'expected_head': SHA})
+        self.assertEqual(clock.elapsed, 35 * 60)
+        self.assertEqual(len(mutations), 1)
+
+    def test_wait_deadline_includes_api_latency_and_does_not_reset_on_new_polls(self):
+        clock = FakeClock()
+
+        def transport(*args):
+            clock.elapsed += 3
+            return {'workflow_runs': [], 'total_count': 0}
+
+        api = github.GitHub('owner/repo', transport=transport)
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Timed out waiting for exact workflow run'):
+                pipeline.await_run(api, 'deploy.yml', SHA, 0, timeout_seconds=20)
+        self.assertEqual(clock.elapsed, 20)
+
+    def test_success_response_after_wait_deadline_cannot_authorize_next_deployment(self):
+        clock = FakeClock()
+        mutations = []
+
+        def transport(method, path, body):
+            if method == 'POST':
+                mutations.append((path, body))
+                return None
+            if not mutations:
+                return {'workflow_runs': [], 'total_count': 0}
+            clock.elapsed += 21
+            run = {'id': 16, 'event': 'workflow_dispatch', 'head_sha': SHA,
+                   'path': '.github/workflows/deploy.yml', 'status': 'completed', 'conclusion': 'success'}
+            return {'workflow_runs': [run], 'total_count': 1}
+
+        api = github.GitHub('owner/repo', transport=transport)
+        with patch.dict(pipeline.RUN_WAIT_SECONDS, {'deploy.yml': 20}), patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            with self.assertRaisesRegex(policy.Refused, 'Timed out waiting for exact workflow run'):
+                pipeline.dispatch_once(api, 'deploy.yml', 'main', SHA, {'expected_commit': SHA})
+        self.assertEqual(clock.elapsed, 21)
+        self.assertEqual(mutations, [('/actions/workflows/deploy.yml/dispatches', {'ref': 'main', 'inputs': {'expected_commit': SHA}})])
 
 
 class DeploymentAuthorizationTests(unittest.TestCase):

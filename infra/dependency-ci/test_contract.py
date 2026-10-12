@@ -120,6 +120,44 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertIn('dependency_updates.pipeline execute', str(execution))
         self.assertIn('dependency_updates.pipeline discover', (ROOT / '.github/workflows/renovate.yml').read_text())
 
+    def test_workflow_waits_and_approval_job_cover_the_actual_job_dag(self):
+        from dependency_updates import pipeline
+
+        def longest_path(workflow):
+            jobs = read_yaml('.github/workflows/' + workflow)['jobs']
+            elapsed = {}
+
+            def duration(name):
+                if name not in elapsed:
+                    job = jobs[name]
+                    timeout = job.get('timeout-minutes')
+                    self.assertIs(type(timeout), int, workflow + '/' + name + ' needs an explicit finite timeout')
+                    self.assertGreater(timeout, 0)
+                    self.assertLessEqual(timeout, 360)
+                    needs = job.get('needs', [])
+                    if isinstance(needs, str):
+                        needs = [needs]
+                    elapsed[name] = timeout + max((duration(parent) for parent in needs), default=0)
+                return elapsed[name]
+
+            return max(duration(name) for name in jobs)
+
+        budgets = pipeline.RUN_WAIT_SECONDS
+        self.assertEqual(set(budgets), {'dependency-check.yml', 'deploy.yml', 'deploy-audio-concat.yml'})
+        for workflow, seconds in budgets.items():
+            self.assertIs(type(seconds), int)
+            self.assertGreater(seconds, 0)
+            self.assertLess(seconds, 360 * 60)
+            # Allow queue/setup time beyond native job execution, including all
+            # sequential dependencies. Web and Inngest sync run in parallel.
+            queue_minutes = 10 if workflow == 'dependency-check.yml' else 20
+            self.assertGreaterEqual(seconds, (longest_path(workflow) + queue_minutes) * 60)
+        approval = read_yaml('.github/workflows/dependency-update.yml')['jobs']
+        self.assertGreaterEqual(approval['prepare']['timeout-minutes'] * 60, budgets['dependency-check.yml'] + 10 * 60)
+        execution_timeout = approval['approve-merge-deploy']['timeout-minutes']
+        self.assertLessEqual(execution_timeout, 360)
+        self.assertGreaterEqual(execution_timeout * 60, budgets['deploy.yml'] + budgets['deploy-audio-concat.yml'] + 10 * 60)
+
     def test_bot_merge_has_an_explicit_exact_commit_deployment_entrypoint(self):
         workflow = read_yaml('.github/workflows/deploy.yml')
         events = workflow.get('on', workflow.get(True))

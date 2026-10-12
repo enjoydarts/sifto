@@ -56,7 +56,8 @@ jobs:
     needs: prepare
     environment: production-maintenance
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    # Deploy 145m + Audio 50m + 10m approval/merge/setup allowance.
+    timeout-minutes: 205
     permissions:
       contents: write
       pull-requests: write

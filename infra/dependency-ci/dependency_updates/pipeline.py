@@ -12,6 +12,15 @@ from .policy import (Refused, SHA, assert_unchanged, canonical, plan_hash, requi
 
 WORKFLOW = 'dependency-update.yml'
 MAX_FILES = 30
+# CI jobs run in parallel (25m + 10m queue allowance). Deploy's longest
+# job path is validate 5m + migrate 30m + worker/API/web 30m each = 125m;
+# Inngest sync's 10m runs alongside web. Both deployments allow 20m for queues.
+# Keep dependency-update.yml job timeouts and the DAG contract test aligned.
+RUN_WAIT_SECONDS = {
+    'dependency-check.yml': 35 * 60,
+    'deploy.yml': 145 * 60,
+    'deploy-audio-concat.yml': 50 * 60,
+}
 
 
 def main_sha(api):
@@ -135,23 +144,28 @@ def discover(api):
             print('Requested native dependency approval for PR %d' % pr['number'])
 
 
-def await_run(api, workflow, head, after_id, event='workflow_dispatch', attempts=180):
-    for _ in range(attempts):
+def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch'):
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
         runs = api.pages('/actions/workflows/' + workflow + '/runs?event=' + event + '&head_sha=' + head, 'workflow_runs')
+        require(time.monotonic() < deadline, 'Timed out waiting for exact workflow run')
         matches = [r for r in runs if r['id'] > after_id and r.get('head_sha') == head and r.get('event') == event]
         require(len(matches) <= 1, 'Ambiguous workflow run identity')
         if matches and matches[0].get('status') == 'completed':
             require(matches[0].get('conclusion') == 'success', 'Dispatched workflow failed')
             return matches[0]
-        time.sleep(10)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(10, remaining))
     raise Refused('Timed out waiting for exact workflow run')
 
 
 def dispatch_once(api, workflow, ref, head, inputs):
+    require(workflow in RUN_WAIT_SECONDS, 'Unsupported workflow wait budget')
     existing = api.pages('/actions/workflows/' + workflow + '/runs?event=workflow_dispatch&head_sha=' + head, 'workflow_runs')
     latest = max((r['id'] for r in existing), default=0)
     api.request('POST', '/actions/workflows/' + workflow + '/dispatches', {'ref': ref, 'inputs': inputs})
-    return await_run(api, workflow, head, latest)
+    return await_run(api, workflow, head, latest, RUN_WAIT_SECONDS[workflow])
 
 
 def prepare(api, number, head, base, source):
@@ -190,7 +204,9 @@ def merge_once(api, plan):
     branch = api.get('/branches/main')
     require(current.get('state') == 'open' and current.get('merged') is False and current.get('head', {}).get('sha') == plan['head'] and current.get('base', {}).get('sha') == plan['base'] and current.get('base', {}).get('ref') == 'main', 'PR changed immediately before merge')
     require(branch.get('protected') is True and branch.get('commit', {}).get('sha') == plan['base'], 'Protected main base changed immediately before merge')
-    require(current.get('mergeable') is True and current.get('mergeable_state') == 'clean', 'GitHub has not confirmed the candidate is ready to merge')
+    # Optional preview failures can mark the PR unstable even after fixed CI
+    # passed. The ordinary merge endpoint still enforces all protected rules.
+    require(current.get('mergeable') is True and current.get('mergeable_state') in {'clean', 'unstable'}, 'GitHub has not confirmed the candidate is ready to merge')
     try:
         result = api.request('PUT', '/pulls/%d/merge' % plan['pr'], {'sha': plan['head'], 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #%d' % plan['pr']})
     except Ambiguous:

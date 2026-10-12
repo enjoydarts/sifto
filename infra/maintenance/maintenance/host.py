@@ -24,12 +24,14 @@ readiness is an operator action; an approval cannot change these conditions.
 """
 
 import base64
+import codecs
 import contextlib
 import fcntl
 import json
 import os
 from pathlib import Path
 import re
+import selectors
 import stat
 import subprocess
 import time
@@ -142,18 +144,69 @@ class SubprocessRunner:
     # Do not inherit PATH, PYTHONPATH, sudo caller environment or apt configuration.
     ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "LANG": "C",
            "DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_MODE": "l"}
+    MAX_STDOUT_BYTES = 16 * 1024 * 1024
+    MAX_STDERR_BYTES = 16 * 1024 * 1024
 
     def __call__(self, argv, *, timeout=60, check=True, env=None, pass_fds=()):
+        output = bytearray()
+        exceeded = invalid_encoding = False
         try:
-            result = subprocess.run(argv, shell=False, env=self.ENV if env is None else env,
-                                    pass_fds=pass_fds, stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=timeout, check=False, encoding="utf-8", errors="strict")
-        except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:
+            with subprocess.Popen(argv, shell=False, env=self.ENV if env is None else env,
+                                  pass_fds=pass_fds, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0) as process:
+                deadline = None if timeout is None else time.monotonic() + timeout
+                try:
+                    with selectors.DefaultSelector() as selector:
+                        for stream, limit in ((process.stdout, self.MAX_STDOUT_BYTES),
+                                              (process.stderr, self.MAX_STDERR_BYTES)):
+                            os.set_blocking(stream.fileno(), False)
+                            selector.register(stream, selectors.EVENT_READ,
+                                              {"count": 0, "limit": limit,
+                                               "decoder": codecs.getincrementaldecoder("utf-8")("strict")})
+                        while selector.get_map():
+                            remaining = None if deadline is None else deadline - time.monotonic()
+                            if remaining is not None and remaining <= 0:
+                                raise subprocess.TimeoutExpired(argv, timeout)
+                            for key, _ in selector.select(remaining):
+                                stream, state = key.fileobj, key.data
+                                try:
+                                    chunk = os.read(stream.fileno(), 64 * 1024)
+                                except BlockingIOError:
+                                    continue
+                                state["count"] = min(state["count"] + len(chunk), state["limit"] + 1)
+                                if state["count"] > state["limit"]:
+                                    exceeded = True
+                                    # Keep draining both pipes: APT/dpkg must never
+                                    # receive SIGPIPE or be killed for noisy output.
+                                    if stream is process.stdout:
+                                        output.clear()
+                                elif stream is process.stdout:
+                                    output.extend(chunk)
+                                if state["decoder"] is not None:
+                                    try:
+                                        state["decoder"].decode(chunk, final=not chunk)
+                                    except UnicodeError:
+                                        invalid_encoding = True
+                                        state["decoder"] = None
+                                if not chunk:
+                                    selector.unregister(stream)
+                                    stream.close()
+                    remaining = None if deadline is None else max(0, deadline - time.monotonic())
+                    process.wait(timeout=remaining)
+                except (OSError, subprocess.TimeoutExpired):
+                    # Preserve finite timeout behavior for probes. Install uses
+                    # timeout=None and output validation never enters this path.
+                    process.kill()
+                    process.wait()
+                    raise
+        except (OSError, subprocess.TimeoutExpired) as exc:
             raise MaintenanceError("command execution failed or timed out") from exc
-        require(not check or result.returncode == 0, "command failed: " + argv[0])
-        require(len(result.stdout.encode("utf-8")) <= 16 * 1024 * 1024, "command output exceeds limit")
-        return result.stdout
+        # Report validation only after completion; no stderr body or decoding
+        # exception (which can contain credentials) is exposed to the caller.
+        require(not invalid_encoding, "command execution failed or timed out")
+        require(not check or process.returncode == 0, "command failed: " + argv[0])
+        require(not exceeded, "command output exceeds limit")
+        return output.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
     def compare_versions(self, left, operator, right):
         result = subprocess.run(["dpkg", "--compare-versions", left, operator, right],

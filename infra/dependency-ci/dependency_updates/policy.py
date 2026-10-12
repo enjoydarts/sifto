@@ -1,0 +1,185 @@
+"""Fail-closed, data-only candidate and approval validation."""
+import hashlib
+import json
+import re
+
+CHECKS = ('Dependency API', 'Dependency Worker', 'Dependency Web', 'Dependency Policy')
+SHA = re.compile(r'^[0-9a-f]{40}$')
+VERSION = r'[~^]?[0-9][a-zA-Z0-9.+_-]*(?:\.[a-zA-Z0-9.+_-]+)*'
+IMAGE = r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*(?:@sha256:[0-9a-f]{64})?'
+DOCKERFILES = {'api/Dockerfile', 'worker/Dockerfile', 'web/Dockerfile', 'infra/audio-concat/Dockerfile', 'infra/dependency-ci/web.Dockerfile', 'infra/dependency-ci/postgres.Dockerfile', 'infra/maintenance/Dockerfile', 'infra/maintenance/backup/Dockerfile.proof-test', 'infra/maintenance/bootstrap/Dockerfile.test'}
+COMPOSE = {'docker-compose.yml', 'infra/dependency-ci/compose.yml', 'infra/maintenance/compose.yml', 'infra/maintenance/bootstrap/compose.yml', 'infra/maintenance/backup/compose.yml'}
+
+
+class Refused(Exception):
+    """A fixed public reason; never include remote response bodies or secrets."""
+
+
+def require(condition, reason):
+    if not condition:
+        raise Refused(reason)
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+
+
+def plan_hash(value):
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def assert_unchanged(prepared, current, digest):
+    require(plan_hash(prepared) == digest and prepared == current, 'Candidate or plan changed; prepare and approve again')
+
+
+def versions(value):
+    require(isinstance(value, dict), 'Dependency mapping required')
+    for name, version in value.items():
+        require(re.fullmatch(r'(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+', name) and isinstance(version, str) and re.fullmatch(VERSION, version), 'Unsupported dependency name or version')
+    return sorted(value)
+
+
+def load_json(text):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, 'Duplicate JSON dependency key refused')
+            result[key] = value
+        return result
+    return json.loads(text, object_pairs_hook=unique)
+
+
+def manifest_shape(text):
+    value = load_json(text)
+    for key in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'):
+        if key in value:
+            value[key] = versions(value[key])
+    return value
+
+
+def lock_shape(text):
+    value = load_json(text)
+    require(value.get('lockfileVersion') == 3 and isinstance(value.get('packages'), dict), 'Only npm lockfile v3 is supported')
+    root = value['packages'].pop('', None)
+    require(root is not None, 'npm lockfile root is required')
+    root = manifest_shape(json.dumps(root))
+    # Transitive package metadata may change with versions, but scripts/links and
+    # non-registry transports cannot enter the lockfile through dependency data.
+    for path, package in value['packages'].items():
+        require(re.fullmatch(r'(?:node_modules/(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+/)*node_modules/(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+', path), 'Unsupported npm package path')
+        require(isinstance(package, dict) and not package.get('link') and 'scripts' not in package, 'Unsupported npm lock entry')
+        require(re.fullmatch(VERSION, package.get('version', '')), 'Unsupported npm lock version')
+        if 'resolved' in package:
+            require(re.fullmatch(r'https://registry\.npmjs\.org/[a-zA-Z0-9@%/_.+-]+\.tgz', package['resolved']), 'Only npm registry tarballs are supported')
+        if 'integrity' in package:
+            require(re.fullmatch(r'sha(?:256|512)-[A-Za-z0-9+/=]+', package['integrity']), 'Unsupported npm integrity')
+        require(set(package) <= {'version', 'resolved', 'integrity', 'dev', 'optional', 'devOptional', 'hasInstallScript', 'license', 'engines', 'funding', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'bin', 'os', 'cpu', 'libc', 'inBundle', 'deprecated'}, 'Unsupported npm lock metadata')
+    value['packages'] = {'': root}
+    return value
+
+
+def requirement_shape(text):
+    shape = []
+    for line in text.splitlines():
+        if not line or line.startswith('#'):
+            shape.append(line)
+            continue
+        match = re.fullmatch(r'([a-zA-Z0-9_.-]+(?:\[[a-zA-Z0-9_,.-]+\])?)==([a-zA-Z0-9_.-]+)', line)
+        require(match is not None, 'Only fixed public pip requirements are supported')
+        shape.append(match[1])
+    return shape
+
+
+def docker_shape(path, text):
+    def image_name(reference):
+        reference = reference.split('@')[0]
+        prefix, slash, last = reference.rpartition('/')
+        name = last.split(':')[0]
+        return prefix + slash + name + '<version>'
+    if path in DOCKERFILES:
+        text = re.sub(r'(?m)^(FROM(?: --platform=[a-zA-Z0-9_/$.-]+)? )(' + IMAGE + r')(?=(?: AS [a-zA-Z0-9_-]+)?\s*$)', lambda match: match[1] + image_name(match[2]), text)
+        if path == 'api/Dockerfile':
+            text = re.sub(r'go install github\.com/air-verse/air@v[0-9]+\.[0-9]+\.[0-9]+(?=\s|$)', 'go install github.com/air-verse/air@<version>', text)
+    else:
+        text = re.sub(r'(?m)^( +image: )([\x22\x27]?)(' + IMAGE + r')\2(?=\s*(?:#.*)?$)', lambda match: match[1] + match[2] + image_name(match[3]) + match[2], text)
+    return text
+
+
+def mod_shape(text):
+    # Require directives and their comments remain byte-for-byte unchanged;
+    # substitute only module versions, never go/toolchain/replace directives.
+    result = []
+    inside = False
+    for line in text.splitlines():
+        if line == 'require (':
+            inside = True
+        elif inside and line == ')':
+            inside = False
+        elif inside or line.startswith('require '):
+            pattern = r'^(\s*(?:require )?[a-zA-Z0-9./_-]+ )v[0-9][a-zA-Z0-9.+_-]*(\s*(?:// indirect)?)$'
+            replaced = re.sub(pattern, r'\1<version>\2', line)
+            require(replaced != line, 'Unsupported Go module dependency directive')
+            line = replaced
+        result.append(line)
+    require(not inside, 'Malformed Go require block')
+    return result
+
+
+def validate_change(path, before, after):
+    require(path != 'infra/maintenance/Dockerfile', 'Live maintenance executor image requires separate pinned executor activation')
+    require(before != after and len(before.encode()) <= 2_000_000 and len(after.encode()) <= 2_000_000, 'Empty or oversized dependency change')
+    try:
+        if path == 'web/package.json':
+            equal = manifest_shape(before) == manifest_shape(after)
+        elif path == 'web/package-lock.json':
+            equal = lock_shape(before) == lock_shape(after)
+            old_packages, new_packages = load_json(before)['packages'], load_json(after)['packages']
+            for package in old_packages.keys() & new_packages.keys() - {''}:
+                if old_packages[package].get('version') == new_packages[package].get('version'):
+                    require(old_packages[package] == new_packages[package], 'npm metadata cannot change independently of dependency versions')
+        elif path in {'worker/requirements.txt', 'infra/audio-concat/requirements.txt'}:
+            equal = requirement_shape(before) == requirement_shape(after)
+        elif path == 'api/go.mod':
+            equal = mod_shape(before) == mod_shape(after)
+        elif path == 'api/go.sum':
+            for text in (before, after):
+                require(all(re.fullmatch(r'[a-zA-Z0-9./_-]+ v[0-9][a-zA-Z0-9.+_-]*(?:/go.mod)? h1:[A-Za-z0-9+/=]+', line) for line in text.splitlines()), 'Unsupported Go checksum entry')
+            equal = True
+        elif path in DOCKERFILES | COMPOSE:
+            equal = docker_shape(path, before) == docker_shape(path, after)
+        else:
+            raise Refused('Unsupported dependency path (maintenance executor activation is separate)')
+        require(equal, 'Dependency change modifies non-version structure')
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise Refused('Malformed dependency data') from None
+
+
+def surfaces(paths):
+    result = set()
+    for path in paths:
+        require(path not in {'infra/maintenance/Dockerfile', 'infra/maintenance/requirements.txt'}, 'Live maintenance executor dependencies require separate pinned executor activation')
+        if path in {'api/go.mod', 'api/go.sum', 'api/Dockerfile'}:
+            result.add('api')
+        elif path in {'worker/requirements.txt', 'worker/Dockerfile'}:
+            result.add('worker')
+        elif path in {'web/package.json', 'web/package-lock.json'}:
+            result.add('web')
+        elif path.startswith('infra/audio-concat/'):
+            result.add('audio')
+        elif path in {'docker-compose.yml', 'web/Dockerfile'}:
+            result.add('development')
+        elif path.startswith('infra/dependency-ci/') or path in {'infra/maintenance/bootstrap/Dockerfile.test', 'infra/maintenance/backup/Dockerfile.proof-test'}:
+            result.add('ci')
+        else:
+            raise Refused('Resource activation for this dependency path is unsupported')
+    return sorted(result)
+
+
+def verify_approval(approvals, actor):
+    require(actor != 'enjoydarts', 'Native gate cannot be self-approved')
+    require(any(a.get('state') == 'approved' and a.get('user', {}).get('login') == 'enjoydarts' and any(e.get('name') == 'production-maintenance' for e in a.get('environments', [])) for a in approvals), 'Actual owner approval of production-maintenance is required')
+
+
+def verify_checks(run, jobs, head):
+    require(run.get('head_sha') == head and run.get('event') == 'workflow_dispatch' and run.get('path') == '.github/workflows/dependency-check.yml' and run.get('status') == 'completed' and run.get('conclusion') == 'success', 'Exact candidate fixed CI run has not succeeded')
+    require(len(jobs) == 4 and {j.get('name') for j in jobs} == set(CHECKS) and all(j.get('conclusion') == 'success' and j.get('head_sha') == head for j in jobs), 'All four exact-head CI jobs must succeed')

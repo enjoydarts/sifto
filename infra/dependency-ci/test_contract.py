@@ -16,7 +16,7 @@ def read_yaml(path):
 
 
 class DependencyAutomationContract(unittest.TestCase):
-    def test_updates_always_require_human_merge(self):
+    def test_renovate_cannot_merge_before_native_owner_approval(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
         self.assertIs(config['automerge'], False)
         self.assertIs(config['platformAutomerge'], False)
@@ -28,6 +28,20 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertTrue(config['pinDigests'])
         self.assertTrue({'dockerfile', 'docker-compose', 'gomod', 'pip_requirements', 'npm', 'custom.regex'}.issubset(config['enabledManagers']))
         self.assertNotIn('github-actions', config['enabledManagers'])
+
+    def test_renovate_pr_text_points_to_native_approval_and_automatic_merge(self):
+        config = json.loads((ROOT / 'renovate.json').read_text())
+        self.assertIn('production-maintenance', config.get('prFooter', ''))
+        self.assertIn('merges and deploys', config.get('prFooter', ''))
+        self.assertNotIn('{{{configDescription}}}', config.get('prBodyTemplate', '{{{configDescription}}}'))
+
+    def test_live_executor_dependencies_have_an_exclusive_activation_group(self):
+        rules = json.loads((ROOT / 'renovate.json').read_text())['packageRules']
+        rule = rules[-1]
+        self.assertEqual(set(rule.get('matchFileNames', [])), {'infra/maintenance/Dockerfile', 'infra/maintenance/requirements.txt'})
+        self.assertEqual(rule.get('groupName'), 'Maintenance executor activation dependencies')
+        self.assertEqual(rule.get('groupSlug'), 'maintenance-executor-activation')
+        self.assertIs(rule.get('automerge'), False)
 
     def test_air_version_is_extractable_and_llm_catalog_is_not_managed(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
@@ -60,6 +74,7 @@ class DependencyAutomationContract(unittest.TestCase):
             'pull-requests': 'write',
             # Renovate publishes pending/success for minimumReleaseAge before PR creation.
             'statuses': 'write',
+            'actions': 'write',
         })
 
     def test_public_pr_checks_have_no_write_permissions_or_secrets(self):
@@ -78,7 +93,7 @@ class DependencyAutomationContract(unittest.TestCase):
             self.assertIn(target, text)
 
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
-        for name in ['renovate', 'dependency-check', 'dependency-security']:
+        for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'deploy', 'deploy-audio-concat']:
             workflow = read_yaml(f'.github/workflows/{name}.yml')
             for job in workflow['jobs'].values():
                 for step in job['steps']:
@@ -87,6 +102,39 @@ class DependencyAutomationContract(unittest.TestCase):
                     self.assertRegex(step['uses'], r'@[a-f0-9]{40}$')
                     if step['uses'].startswith('actions/checkout@'):
                         self.assertIs(step['with']['persist-credentials'], False)
+
+    def test_approval_pipeline_uses_trusted_main_and_one_environment_gate(self):
+        workflow = read_yaml('.github/workflows/dependency-update.yml')
+        self.assertEqual(set(workflow.get('on', workflow.get(True))), {'workflow_dispatch'})
+        self.assertEqual(workflow['permissions'], {})
+        gates = [job.get('environment') for job in workflow['jobs'].values() if 'environment' in job]
+        self.assertEqual(gates, ['production-maintenance'])
+        for job in workflow['jobs'].values():
+            self.assertIn("github.ref == 'refs/heads/main'", job['if'])
+            checkout = next(step for step in job['steps'] if step.get('uses', '').startswith('actions/checkout@'))
+            self.assertEqual(checkout['with']['ref'], '${{ github.sha }}')
+        execution = workflow['jobs']['approve-merge-deploy']
+        self.assertEqual(execution['needs'], 'prepare')
+        self.assertIn('dependency_updates.pipeline execute', str(execution))
+        self.assertIn('dependency_updates.pipeline discover', (ROOT / '.github/workflows/renovate.yml').read_text())
+
+    def test_bot_merge_has_an_explicit_exact_commit_deployment_entrypoint(self):
+        workflow = read_yaml('.github/workflows/deploy.yml')
+        events = workflow.get('on', workflow.get(True))
+        self.assertIn('push', events)
+        self.assertIn('workflow_dispatch', events)
+        self.assertIn('expected_commit', events['workflow_dispatch']['inputs'])
+        self.assertEqual(workflow['concurrency']['group'], 'production-deploy')
+
+    def test_audio_dispatch_proves_the_exact_deployed_image(self):
+        workflow = read_yaml('.github/workflows/deploy-audio-concat.yml')
+        inputs = workflow.get('on', workflow.get(True))['workflow_dispatch']['inputs']
+        self.assertIn('expected_commit', inputs)
+        self.assertEqual(workflow['concurrency']['group'], 'production-deploy')
+        text = (ROOT / '.github/workflows/deploy-audio-concat.yml').read_text()
+        self.assertIn('dependency_updates.deploy validate', text)
+        self.assertIn('gcloud run jobs describe', text)
+        self.assertIn('Actual Audio Concat image differs', text)
 
     def test_ci_compose_has_no_host_ports_or_real_credentials(self):
         config = read_yaml('infra/dependency-ci/compose.yml')

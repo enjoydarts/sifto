@@ -67,11 +67,65 @@ def assess(inventory, executor, *, now=None):
         return result
 
 
-def reserve_candidate(ledger, plan, *, force=False):
+REPROPOSAL_COOLDOWN = 86400
+
+
+def candidate_fingerprint(plan):
     stable = {key: value for key, value in plan.items() if key not in ("plan_id", "created_at", "expires_at")}
-    fingerprint = hashlib.sha256(canonical_json(stable)).hexdigest()
-    if fingerprint in ledger and not force:
-        return False
+    return hashlib.sha256(canonical_json(stable)).hexdigest()
+
+
+def validate_ledger(ledger):
+    require(type(ledger) is dict and all(matches(HASH, key) for key in ledger), "invalid_ledger")
+    identifiers = set()
+    for record in ledger.values():
+        require(type(record) is dict and set(record) == {"plan_id", "expires_at"}
+                and type(record["expires_at"]) is int and record["expires_at"] > 0, "invalid_ledger")
+        try:
+            require(str(uuid.UUID(record["plan_id"])) == record["plan_id"], "invalid_ledger")
+        except (ValueError, TypeError, AttributeError):
+            raise MaintenanceError("invalid_ledger") from None
+        require(record["plan_id"] not in identifiers, "invalid_ledger")
+        identifiers.add(record["plan_id"])
+    return ledger
+
+
+def read_ledger(store, parent):
+    # Optional reads collapse an empty blob to None. An existing empty ledger
+    # must not reset deduplication, so establish presence at the same parent.
+    present = set(store.git("ls-tree", "--name-only", parent, "--", "ledger.json").decode().splitlines())
+    require(present <= {"ledger.json"}, "invalid_ledger")
+    if not present:
+        return {}
+    raw = store.read_at(parent, "ledger.json")
+    require(type(raw) is bytes and bool(raw), "invalid_ledger")
+    return validate_ledger(strict_json(raw))
+
+
+def reserve_candidate(ledger, plan, store, parent, *, force=False, now=None):
+    validate_ledger(ledger)
+    validate_plan(plan)
+    now = int(time.time()) if now is None else now
+    require(type(force) is bool and type(now) is int and plan["created_at"] <= now < plan["expires_at"],
+            "candidate_plan_not_current")
+    require(all(plan["plan_id"] != record["plan_id"] for record in ledger.values()), "candidate_plan_id_reused")
+    path = "plans/" + plan["plan_id"] + "/plan.json"
+    validate_ref(parent, path)
+    require(not store.git("ls-tree", "--name-only", parent, "--", path).strip(), "candidate_plan_id_reused")
+    fingerprint = candidate_fingerprint(plan)
+    previous = ledger.get(fingerprint)
+    if previous is not None:
+        raw = store.read_at(parent, "plans/" + previous["plan_id"] + "/plan.json")
+        require(type(raw) is bytes and bool(raw), "immutable_prior_plan_missing")
+        prior_plan = strict_json(raw)
+        # Historical plans may be expired; their signed scope must remain valid.
+        validate_plan(prior_plan)
+        require(prior_plan["plan_id"] == previous["plan_id"]
+                and prior_plan["expires_at"] == previous["expires_at"]
+                and prior_plan["created_at"] <= now
+                and candidate_fingerprint(prior_plan) == fingerprint, "immutable_prior_plan_mismatch")
+        if not force and now < previous["expires_at"] + REPROPOSAL_COOLDOWN:
+            return False
     ledger[fingerprint] = {"plan_id": plan["plan_id"], "expires_at": plan["expires_at"]}
     return True
 
@@ -205,9 +259,7 @@ def scan(executor, repo, inputs, store):
     hosts = parse_hosts(Path("/secrets/hosts.json").read_bytes())
     client = Client("/private", "/secrets/host_key", "/secrets/known_hosts", "scan")
     parent = store.head()
-    ledger_raw = store.read_at(parent, "ledger.json", optional=True)
-    ledger = strict_json(ledger_raw) if ledger_raw else {}
-    require(type(ledger) is dict and all(matches(HASH, key) for key in ledger), "invalid_ledger")
+    ledger = read_ledger(store, parent)
     files, requests, counts = {}, [], {"eligible": 0, "blocked": 0, "unknown": 0, "current": 0}
     roles = {role: dict.fromkeys(counts, 0) for role in ("application", "database")}
     scan_id = str(uuid.uuid4())
@@ -250,7 +302,7 @@ def scan(executor, repo, inputs, store):
                            "status": "unavailable", "warning_ja": "承認可能な計画がありません。AI 解析は実施していません。"}
         files[prefix + "/assessment.json"] = result
         files[prefix + "/report.md"] = render(result, advice, coolify).encode()
-        if plan and reserve_candidate(ledger, plan, force=inputs["force_request"]):
+        if plan and reserve_candidate(ledger, plan, store, parent, force=inputs["force_request"]):
             files["plans/" + plan["plan_id"] + "/plan.json"] = plan
             files["plans/" + plan["plan_id"] + "/report.md"] = files[prefix + "/report.md"]
             requests.append(plan)

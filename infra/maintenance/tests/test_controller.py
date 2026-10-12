@@ -94,13 +94,16 @@ class ControllerTests(unittest.TestCase):
         self.assertIn("AI 利用不可", rendered)
         self.assertIn(plan_sha256(result["plan"]), rendered)
 
-    def test_dedupe_survives_new_uuid_and_expiry_until_force(self):
+    def test_dedupe_survives_expiry_during_cooldown_until_force(self):
         first = build_plan(ready(), self.sha, now=1000)
         second = build_plan(ready(), self.sha, now=99999)
         ledger = {}
-        self.assertTrue(cli.reserve_candidate(ledger, first))
-        self.assertFalse(cli.reserve_candidate(ledger, second))
-        self.assertTrue(cli.reserve_candidate(ledger, second, force=True))
+        git = Mock()
+        git.git.return_value = b''
+        git.read_at.return_value = json.dumps(first).encode()
+        self.assertTrue(cli.reserve_candidate(ledger, first, git, 'b' * 40, now=1000))
+        self.assertFalse(cli.reserve_candidate(ledger, second, git, 'b' * 40, now=99999))
+        self.assertTrue(cli.reserve_candidate(ledger, second, git, 'b' * 40, force=True, now=99999))
 
     def test_actual_review_history_identity_required_not_actor(self):
         approved = [{"state": "approved", "user": {"login": "enjoydarts"},
@@ -172,6 +175,7 @@ class ControllerTests(unittest.TestCase):
             transport.call.side_effect = [inventory, MaintenanceError('private-address-failed')]
             git = Mock()
             git.head.return_value = 'b' * 40
+            git.git.return_value = b''
             git.read_at.return_value = None
             git.write.return_value = 'c' * 40
             def local_path(value):

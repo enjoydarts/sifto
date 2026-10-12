@@ -100,3 +100,4 @@ services:
     volumes:
       - ./test-renovate-status.mjs:/fixtures/test-renovate-status.mjs:ro
       - ../../.github/workflows/renovate.yml:/fixtures/renovate.yml:ro
+      - ../../renovate.json:/fixtures/renovate.json:ro

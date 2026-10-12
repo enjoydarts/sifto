@@ -1,12 +1,45 @@
 name: Deploy
+run-name: Approved dependency deployment ${{ inputs.approval_run }} ${{ inputs.expected_commit || github.sha }}
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact approved merged main commit
+        required: true
+        type: string
+      approval_run:
+        description: Native dependency approval workflow run
+        required: true
+        type: string
+      approved_pr:
+        description: Approved dependency PR number
+        required: true
+        type: string
+      approved_head:
+        description: Approved dependency head SHA
+        required: true
+        type: string
+      approved_base:
+        description: Approved dependency base SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
+
+env:
+  EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
+  APPROVAL_RUN: ${{ inputs.approval_run }}
+  APPROVED_PR: ${{ inputs.approved_pr }}
+  APPROVED_HEAD: ${{ inputs.approved_head }}
+  APPROVED_BASE: ${{ inputs.approved_base }}
+  PYTHONPATH: infra/dependency-ci
 
 concurrency:
   group: production-deploy
@@ -14,8 +47,13 @@ concurrency:
 
 jobs:
   validate:
+    if: github.ref == 'refs/heads/main'
     name: Validate deployment configuration
     runs-on: ubuntu-26.04
+    outputs:
+      deploy_api: ${{ steps.authorize.outputs.deploy_api }}
+      deploy_worker: ${{ steps.authorize.outputs.deploy_worker }}
+      deploy_web: ${{ steps.authorize.outputs.deploy_web }}
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
       COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
@@ -23,6 +61,15 @@ jobs:
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact main and native approval
+        id: authorize
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B -m dependency_updates.deploy validate
       - name: Check required settings
         run: |
           set -euo pipefail
@@ -38,12 +85,16 @@ jobs:
   migrate:
     name: Run DB migrations
     needs: validate
+    if: needs.validate.outputs.deploy_api == 'true'
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Connect Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -120,145 +171,61 @@ jobs:
         run: migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
 
   deploy-worker:
-    name: Deploy Worker
-    needs: migrate
+    name: Deploy and verify exact worker commit
+    needs: [validate, migrate]
+    if: always() && needs.validate.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') && needs.validate.outputs.deploy_worker == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 25
-    env:
-      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
-      COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
-      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    timeout-minutes: 30
     steps:
-      - name: Start Worker deployment
-        run: |
-          set -euo pipefail
-          response="$(
-            curl --fail-with-body --retry 3 --request POST \
-              -H "Authorization: Bearer $COOLIFY_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "$(jq -nc --arg uuid "$COOLIFY_WORKER_UUID" '{uuid: $uuid, force: false}')" \
-              "$COOLIFY_URL/api/v1/deploy"
-          )"
-          deployment_uuid="$(
-            jq -r '
-              .deployment_uuid
-              // .deployments[0].deployment_uuid
-              // .[0].deployment_uuid
-              // empty
-            ' <<<"$response"
-          )"
-          if [ -z "$deployment_uuid" ]; then
-            echo "Coolify did not return a Worker deployment UUID."
-            jq -c . <<<"$response" || true
-            exit 1
-          fi
-          echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
-
-      - name: Wait for Worker deployment
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 120); do
-            response="$(
-              curl --fail-with-body --retry 3 \
-                -H "Authorization: Bearer $COOLIFY_TOKEN" \
-                "$COOLIFY_URL/api/v1/deployments/$deployment_uuid"
-            )"
-            status="$(jq -r '.status // empty' <<<"$response")"
-            echo "Worker deployment status: ${status:-unknown} ($attempt/120)"
-            case "$status" in
-              finished|success)
-                exit 0
-                ;;
-              failed|cancelled|cancelled_by_user)
-                jq -c . <<<"$response" || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
-          echo "Timed out waiting for Worker deployment."
-          exit 1
-
-      - name: Verify Worker health
-        run: curl --fail-with-body --retry 6 --retry-all-errors https://worker.sifto.net/health
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Pin Coolify source, deploy once, verify commit and health
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: python3 -B -m dependency_updates.deploy worker
 
   deploy-api:
-    name: Deploy API
-    needs: deploy-worker
+    name: Deploy and verify exact api commit
+    needs: [validate, migrate, deploy-worker]
+    if: always() && needs.validate.result == 'success' && needs.migrate.result == 'success' && (needs.deploy-worker.result == 'success' || needs.deploy-worker.result == 'skipped') && needs.validate.outputs.deploy_api == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 25
-    env:
-      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
-      COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
-      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    timeout-minutes: 30
     steps:
-      - name: Start API deployment
-        run: |
-          set -euo pipefail
-          response="$(
-            curl --fail-with-body --retry 3 --request POST \
-              -H "Authorization: Bearer $COOLIFY_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "$(jq -nc --arg uuid "$COOLIFY_API_UUID" '{uuid: $uuid, force: false}')" \
-              "$COOLIFY_URL/api/v1/deploy"
-          )"
-          deployment_uuid="$(
-            jq -r '
-              .deployment_uuid
-              // .deployments[0].deployment_uuid
-              // .[0].deployment_uuid
-              // empty
-            ' <<<"$response"
-          )"
-          if [ -z "$deployment_uuid" ]; then
-            echo "Coolify did not return an API deployment UUID."
-            jq -c . <<<"$response" || true
-            exit 1
-          fi
-          echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
-
-      - name: Wait for API deployment
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 120); do
-            response="$(
-              curl --fail-with-body --retry 3 \
-                -H "Authorization: Bearer $COOLIFY_TOKEN" \
-                "$COOLIFY_URL/api/v1/deployments/$deployment_uuid"
-            )"
-            status="$(jq -r '.status // empty' <<<"$response")"
-            echo "API deployment status: ${status:-unknown} ($attempt/120)"
-            case "$status" in
-              finished|success)
-                exit 0
-                ;;
-              failed|cancelled|cancelled_by_user)
-                jq -c . <<<"$response" || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
-          echo "Timed out waiting for API deployment."
-          exit 1
-
-      - name: Verify API commit
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Pin Coolify source, deploy once, verify commit and health
         env:
-          EXPECTED_COMMIT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 30); do
-            response="$(curl --fail-with-body --silent --show-error https://api.sifto.net/health || true)"
-            actual_commit="$(jq -r '.commit // empty' <<<"$response" 2>/dev/null || true)"
-            if [ "$actual_commit" = "$EXPECTED_COMMIT" ]; then
-              echo "API is serving commit $actual_commit."
-              exit 0
-            fi
-            echo "Waiting for API commit $EXPECTED_COMMIT; current=${actual_commit:-unavailable} ($attempt/30)"
-            sleep 10
-          done
-          echo "API did not serve the expected commit."
-          exit 1
+          GH_TOKEN: ${{ github.token }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: python3 -B -m dependency_updates.deploy api
+
+  deploy-web:
+    if: always() && needs.validate.result == 'success' && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped') && (needs.deploy-worker.result == 'success' || needs.deploy-worker.result == 'skipped') && needs.validate.outputs.deploy_web == 'true'
+    name: Deploy and verify exact Web commit
+    needs: [validate, deploy-api, deploy-worker]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Explicit immutable Vercel deployment after Bot merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: python3 -B -m dependency_updates.deploy web
 
   sync-inngest:
     name: Sync Inngest
@@ -270,9 +237,9 @@ jobs:
       - name: Sync Inngest app
         run: |
           set -euo pipefail
-          curl --fail-with-body --retry 3 \
+          curl --fail --silent --show-error \
             -X POST \
             -H "Authorization: Bearer $INNGEST_API_KEY" \
             -H "Content-Type: application/json" \
             --data '{"url":"https://api.sifto.net/api/inngest"}' \
-            "https://api.inngest.com/v2/apps/sifto-api/syncs"
+            "https://api.inngest.com/v2/apps/sifto-api/syncs" > /dev/null

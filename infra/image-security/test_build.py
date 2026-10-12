@@ -44,6 +44,10 @@ shift
         for key in (None, "", "pk_test_" + self.key[8:], "sk_live_secret", "pk_live_",
                     "pk_live_invalid!", "pk_live_" + base64.b64encode(b"not-a-clerk-host").decode(),
                     "pk_live_" + base64.b64encode(b"clerk.example.com$\nother.example.com$").decode(),
+                    self.key + "=", self.key + "==", self.key[:12] + "=" + self.key[12:],
+                    "pk_live_" + base64.b64encode(b"clerk-a.example.com$").decode().rstrip("=") + "==",
+                    "pk_live_" + base64.b64encode(b"clerk-abc.example.com$").decode().rstrip("=") + "=",
+                    "pk_live_" + base64.b64encode(b"clerk-abc.example.com$").decode()[:-3] + "B==",
                     self.key + "\n"):
             with self.subTest(key_kind="missing" if key is None else "invalid"):
                 result, args = self.run_build("web", key)
@@ -52,6 +56,17 @@ shift
                 self.assertIn("pk_live_", result.stderr)
                 self.assertEqual(args, [], "Invalid config must not invoke Docker")
                 self.assertFalse((self.directory / ".image-security").exists())
+
+    def test_valid_padded_and_unpadded_keys_preserve_public_build_argument(self):
+        for hostname in (b"clerk-a.example.com$", b"clerk-abc.example.com$"):
+            encoded = base64.b64encode(hostname).decode()
+            self.assertTrue(encoded.endswith("="), "Fixture must exercise optional padding")
+            for payload in (encoded, encoded.rstrip("=")):
+                with self.subTest(hostname=hostname.decode(), padded=payload.endswith("=")):
+                    key = "pk_live_" + payload
+                    result, args = self.run_build("web", key)
+                    self.assertEqual(result.returncode, 93, result.stderr)
+                    self.assertIn(f"{PUBLIC_KEY}={key}", args)
 
     def test_web_passes_only_public_config_to_final_production_build(self):
         result, args = self.run_build("web", self.key)

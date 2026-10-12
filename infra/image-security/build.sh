@@ -17,9 +17,18 @@ if [ "$component" = web ]; then
   case "$public_key" in
     pk_live_?*)
       encoded_host=${public_key#pk_live_}
+      # Clerk's buildPublishableKey omits trailing base64 padding. Restore only
+      # the required padding for decoding; accept canonical padded keys too.
+      unpadded_host=${encoded_host%%=*}
+      padded_host=$unpadded_host
+      case $((${#unpadded_host} % 4)) in
+        2) padded_host="${unpadded_host}==" ;;
+        3) padded_host="${unpadded_host}=" ;;
+      esac
       if printf '%s' "$encoded_host" | LC_ALL=C grep -Eq '^[A-Za-z0-9+/]+={0,2}$' && \
-        decoded_host=$(printf '%s' "$encoded_host" | base64 --decode 2>/dev/null) && \
-        [ "$(printf '%s' "$decoded_host" | base64 | tr -d '\n')" = "$encoded_host" ] && \
+        { [ "$encoded_host" = "$unpadded_host" ] || [ "$encoded_host" = "$padded_host" ]; } && \
+        decoded_host=$(printf '%s' "$padded_host" | base64 --decode 2>/dev/null) && \
+        [ "$(printf '%s' "$decoded_host" | base64 | tr -d '\n=')" = "$unpadded_host" ] && \
         [ "$(printf '%s' "$decoded_host" | wc -l)" -eq 0 ] && \
         printf '%s' "$decoded_host" | LC_ALL=C grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+\$$'; then
         valid_public_key=true

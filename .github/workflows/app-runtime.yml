@@ -1,0 +1,44 @@
+name: App Runtime
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Optional immutable candidate head guard
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: app-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    name: App Runtime ${{ matrix.service }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            runner: ubuntu-26.04-arm
+          - service: worker
+            runner: ubuntu-26.04-arm
+          - service: web
+            runner: ubuntu-26.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Validate dispatched immutable head
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - name: Build and verify production runtime
+        env:
+          SERVICE: ${{ matrix.service }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ matrix.service == 'web' && vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '' }}
+        run: make "app-runtime-$SERVICE"

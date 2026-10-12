@@ -223,5 +223,9 @@ image-security: image-security-build
 	$(MAKE) image-security-scan IMAGE_COMPONENT="$(IMAGE_COMPONENT)"
 
 image-security-test:
-	$(IMAGE_SECURITY_COMPOSE) run --rm -T --no-deps verifier python -B /tool/test_report.py
+	@mkdir -p .image-security/test .image-security/cache
+	@set -eu; export IMAGE_SECURITY_UID=$$(id -u) IMAGE_SECURITY_GID=$$(id -g); \
+	  $(IMAGE_SECURITY_COMPOSE) config --format json > .image-security/test/compose.json; \
+	  $(IMAGE_SECURITY_COMPOSE) run --rm -T --no-deps verifier sh -ec 'python -B /tool/test_report.py && python -B /tool/test_compose.py'
+	docker run --rm --network none --read-only --security-opt no-new-privileges:true --tmpfs /dev/shm:rw,nosuid,nodev,noexec,size=16m --mount type=bind,source="$(CURDIR)/infra/image-security",target=/tool,readonly python:3.12.15-slim python -B /tool/test_dac.py
 	sh -n infra/image-security/build.sh infra/image-security/scan.sh

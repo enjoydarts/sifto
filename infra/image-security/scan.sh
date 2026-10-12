@@ -3,8 +3,12 @@ set -eu
 component=${1:?usage: scan.sh COMPONENT}
 case "$component" in api|worker|audio-concat|maintenance|web) ;; *) exit 2 ;; esac
 IMAGE_SECURITY_DIR="$(pwd)/.image-security/$component"
+IMAGE_SECURITY_CACHE_DIR="$(pwd)/.image-security/cache"
+IMAGE_SECURITY_UID=$(id -u)
+IMAGE_SECURITY_GID=$(id -g)
 IMAGE_COMPONENT=$component
-export IMAGE_SECURITY_DIR IMAGE_COMPONENT
+export IMAGE_SECURITY_DIR IMAGE_SECURITY_CACHE_DIR IMAGE_SECURITY_UID IMAGE_SECURITY_GID IMAGE_COMPONENT
+mkdir -p "$IMAGE_SECURITY_CACHE_DIR"
 test -f "$IMAGE_SECURITY_DIR/metadata.json"
 test -f "$IMAGE_SECURITY_DIR/image.tar"
 compose() { docker compose --env-file /dev/null -f infra/image-security/compose.yml "$@"; }

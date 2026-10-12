@@ -17,12 +17,16 @@ if [ "$available_kib" -lt 5242880 ]; then
   exit 2
 fi
 IMAGE_SECURITY_DIR="$(pwd)/.image-security/$component"
+IMAGE_SECURITY_CACHE_DIR="$(pwd)/.image-security/cache"
+IMAGE_SECURITY_UID=$(id -u)
+IMAGE_SECURITY_GID=$(id -g)
 IMAGE_COMPONENT=$component
 IMAGE_SOURCE_SHA=$(git rev-parse HEAD)
 IMAGE_SOURCE_DIRTY=false
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then IMAGE_SOURCE_DIRTY=true; fi
-export IMAGE_SECURITY_DIR IMAGE_COMPONENT IMAGE_SOURCE_SHA IMAGE_SOURCE_DIRTY
-mkdir -p "$IMAGE_SECURITY_DIR"
+export IMAGE_SECURITY_DIR IMAGE_SECURITY_CACHE_DIR IMAGE_SECURITY_UID IMAGE_SECURITY_GID
+export IMAGE_COMPONENT IMAGE_SOURCE_SHA IMAGE_SOURCE_DIRTY
+mkdir -p "$IMAGE_SECURITY_DIR" "$IMAGE_SECURITY_CACHE_DIR"
 # Prevent reusing reports from an earlier image when a build/scan fails.
 rm -f "$IMAGE_SECURITY_DIR/image.tar" "$IMAGE_SECURITY_DIR/image-id.txt" \
   "$IMAGE_SECURITY_DIR/build-metadata.json" "$IMAGE_SECURITY_DIR/metadata.json" \

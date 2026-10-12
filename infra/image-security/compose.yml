@@ -2,6 +2,7 @@ name: sifto-image-security
 services:
   trivy:
     image: aquasec/trivy:0.75.0
+    user: "${IMAGE_SECURITY_UID:?Set the caller UID}:${IMAGE_SECURITY_GID:?Set the caller GID}"
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -12,11 +13,12 @@ services:
       # Overlay the archive's reports alias so the writable output mount cannot
       # grant write access to the same archive through a second path.
       - ${IMAGE_SECURITY_DIR:-../../.image-security/test}/image.tar:/reports/image.tar:ro
-      - trivy-cache:/cache
+      - ${IMAGE_SECURITY_CACHE_DIR:-../../.image-security/cache}:/cache
     environment:
       TRIVY_CACHE_DIR: /cache
   verifier:
     image: python:3.12.15-slim
+    user: "${IMAGE_SECURITY_UID:?Set the caller UID}:${IMAGE_SECURITY_GID:?Set the caller GID}"
     network_mode: none
     read_only: true
     cap_drop: [ALL]
@@ -28,5 +30,5 @@ services:
       - ${IMAGE_SECURITY_DIR:-../../.image-security/test}/image.tar:/reports/image.tar:ro
     environment:
       IMAGE_COMPONENT:
-volumes:
-  trivy-cache:
+      IMAGE_SECURITY_UID:
+      IMAGE_SECURITY_GID:

@@ -300,6 +300,118 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(policy.Refused):
             policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
 
+    def test_npm12_generated_peer_bundle_and_workspace_metadata_are_supported(self):
+        original = {'lockfileVersion': 3, 'packages': {'': {'dependencies': {'dep': '^1.0.0'}},
+                    'node_modules/dep': {'version': '1.0.0'}}}
+        candidate = json.loads(json.dumps(original))
+        candidate['packages']['node_modules/dep'] = {
+            'version': '1.0.1', 'peer': True, 'workspaces': ['docs', 'benchmarks'],
+            'bundleDependencies': ['@emnapi/core', 'tslib'],
+            'dependencies': {'@emnapi/core': '^1.0.0', 'tslib': '^2.0.0'}}
+        policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+
+    def test_npm12_metadata_cannot_introduce_scripts_links_or_unsafe_paths(self):
+        original = {'lockfileVersion': 3, 'packages': {'': {'dependencies': {'dep': '^1.0.0'}},
+                    'node_modules/dep': {'version': '1.0.0'}}}
+        mutations = [
+            {'peer': 'true'}, {'peer': 1}, {'scripts': {'install': 'evil'}}, {'link': True},
+            {'workspaces': '../outside'}, {'workspaces': ['../outside']}, {'workspaces': ['/tmp']},
+            {'workspaces': ['https://evil.test']}, {'workspaces': ['docs\\outside']},
+            {'workspaces': ['docs', 'docs']}, {'workspaces': [None]}, {'workspaces': ['a/../b']},
+            {'workspaces': ['docs\n']}, {'workspaces': ['docs'] * 129},
+            {'workspaces': ['.']}, {'workspaces': ['..']}, {'workspaces': []},
+            {'workspaces': ['packages/*']}, {'workspaces': ['%2e%2e/outside']},
+            {'bundleDependencies': True}, {'bundleDependencies': ['not-declared']},
+            {'bundleDependencies': ['tslib', 'tslib'], 'dependencies': {'tslib': '^2.0.0'}},
+            {'bundleDependencies': ['file:evil']}, {'bundleDependencies': ['../evil']},
+            {'bundleDependencies': [None]}, {'bundleDependencies': ['tslib'] * 257},
+            {'bundleDependencies': ['tslib'], 'dependencies': ['tslib']},
+            {'bundleDependencies': ['tslib'], 'optionalDependencies': 'tslib'},
+            {'unknown': True}, {'resolved': 'https://evil.test/dep.tgz'},
+        ]
+        for mutation in mutations:
+            candidate = json.loads(json.dumps(original))
+            candidate['packages']['node_modules/dep'].update({'version': '1.0.1', **mutation})
+            with self.subTest(mutation=mutation), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+
+    def test_install_can_complete_missing_registry_integrity_pair_for_same_version(self):
+        original = {'lockfileVersion': 3, 'packages': {'': {'dependencies': {'argparse': '^2.0.1'}},
+                    'node_modules/argparse': {'version': '2.0.1', 'dev': True, 'license': 'Python-2.0'}}}
+        candidate = json.loads(json.dumps(original))
+        candidate['packages']['node_modules/argparse'].update({
+            'resolved': 'https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz',
+            'integrity': 'sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=='})
+        policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+        for field, value in [('resolved', 'https://registry.npmjs.org/other/-/other-2.0.1.tgz'),
+                             ('resolved', 'https://registry.npmjs.org/argparse/-/argparse-2.0.2.tgz'),
+                             ('integrity', 'md5-invalid'), ('hasInstallScript', True), ('peer', True)]:
+            invalid = json.loads(json.dumps(candidate))
+            invalid['packages']['node_modules/argparse'][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(invalid))
+        for field in ('resolved', 'integrity'):
+            incomplete = json.loads(json.dumps(candidate))
+            del incomplete['packages']['node_modules/argparse'][field]
+            with self.subTest(incomplete=field), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(incomplete))
+        for field in ('resolved', 'integrity', 'hasInstallScript', 'workspaces'):
+            changed = json.loads(json.dumps(candidate))
+            changed['packages']['node_modules/argparse'][field] = {
+                'resolved': 'https://registry.npmjs.org/other/-/other-2.0.1.tgz',
+                'integrity': 'sha512-' + 'A' * 88, 'hasInstallScript': True, 'workspaces': ['docs']}[field]
+            with self.subTest(existing=field), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(candidate), json.dumps(changed))
+
+    def test_registry_pair_completion_requires_canonical_scoped_path_and_hash(self):
+        integrity = 'sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=='
+        for path, name in [('node_modules/@scope/pkg', '@scope/pkg'),
+                           ('node_modules/parent/node_modules/pkg', 'pkg'),
+                           ('node_modules/@node_modules/pkg', '@node_modules/pkg')]:
+            original = {'lockfileVersion': 3, 'packages': {'': {}, path: {'version': '1.0.0'}}}
+            candidate = json.loads(json.dumps(original))
+            candidate['packages'][path].update({
+                'resolved': 'https://registry.npmjs.org/' + name + '/-/' + name.rsplit('/', 1)[-1] + '-1.0.0.tgz',
+                'integrity': integrity})
+            with self.subTest(path=path):
+                policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+            for raw in ['sha512-YQ==', integrity[:-3] + 'R==', integrity.rstrip('='), 'sha256-' + 'A' * 44]:
+                invalid = json.loads(json.dumps(candidate))
+                invalid['packages'][path]['integrity'] = raw
+                with self.subTest(path=path, integrity=raw), self.assertRaises(policy.Refused):
+                    policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(invalid))
+            for present in [{'resolved': None}, {'integrity': None}, {'resolved': ''}, {'integrity': ''},
+                            {'resolved': candidate['packages'][path]['resolved']}, {'integrity': integrity}]:
+                incomplete_before = json.loads(json.dumps(original))
+                incomplete_before['packages'][path].update(present)
+                with self.subTest(path=path, partial=present), self.assertRaises(policy.Refused):
+                    policy.validate_change('web/package-lock.json', json.dumps(incomplete_before), json.dumps(candidate))
+            removed = json.loads(json.dumps(candidate))
+            del removed['packages'][path]['integrity']
+            with self.subTest(path=path, removed=True), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(candidate), json.dumps(removed))
+        original = {'lockfileVersion': 3, 'packages': {'': {}, 'node_modules/pkg': {'version': '^1.0.0'}}}
+        candidate = json.loads(json.dumps(original))
+        candidate['packages']['node_modules/pkg'].update({
+            'resolved': 'https://registry.npmjs.org/pkg/-/pkg-^1.0.0.tgz', 'integrity': integrity})
+        with self.assertRaises(policy.Refused):
+            policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+
+    def test_registry_completion_requires_canonical_fixed_semver(self):
+        for version in ['1.0.0-rc.1', '1.0.0+build.01', '1.0.0-1a.0+build',
+                        '1.0.0-01', '1.0.0-a..b', '1.0.0-.', '1.0.0+.', '01.0.0', '~1.0.0']:
+            original = {'lockfileVersion': 3, 'packages': {'': {}, 'node_modules/pkg': {'version': version}}}
+            candidate = json.loads(json.dumps(original))
+            candidate['packages']['node_modules/pkg'].update({
+                'resolved': 'https://registry.npmjs.org/pkg/-/pkg-' + version + '.tgz',
+                'integrity': 'sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=='})
+            with self.subTest(version=version):
+                if version in ['1.0.0-rc.1', '1.0.0+build.01', '1.0.0-1a.0+build']:
+                    policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+                else:
+                    with self.assertRaises(policy.Refused):
+                        policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+
     def test_ambiguous_duplicate_manifest_keys_are_refused(self):
         original = '{"scripts":{},"dependencies":{"dep":"1.0.0"}}'
         candidate = '{"scripts":{"install":"evil"},"scripts":{},"dependencies":{"dep":"1.0.1"}}'

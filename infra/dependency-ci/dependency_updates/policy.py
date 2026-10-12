@@ -1,4 +1,5 @@
 """Fail-closed, data-only candidate and approval validation."""
+import base64
 import hashlib
 import json
 import re
@@ -81,9 +82,55 @@ def lock_shape(text):
             require(re.fullmatch(r'https://registry\.npmjs\.org/[a-zA-Z0-9@%/_.+-]+\.tgz', package['resolved']), 'Only npm registry tarballs are supported')
         if 'integrity' in package:
             require(re.fullmatch(r'sha(?:256|512)-[A-Za-z0-9+/=]+', package['integrity']), 'Unsupported npm integrity')
-        require(set(package) <= {'version', 'resolved', 'integrity', 'dev', 'optional', 'devOptional', 'hasInstallScript', 'license', 'engines', 'funding', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'bin', 'os', 'cpu', 'libc', 'inBundle', 'deprecated'}, 'Unsupported npm lock metadata')
+        if 'peer' in package:
+            require(type(package['peer']) is bool, 'Invalid npm peer metadata')
+        if 'bundleDependencies' in package:
+            bundled = package['bundleDependencies']
+            require(type(bundled) is list and len(bundled) <= 256
+                    and all(isinstance(name, str) and len(name) <= 214
+                            and re.fullmatch(r'(?:@[A-Za-z0-9][A-Za-z0-9_.-]*/)?[A-Za-z0-9][A-Za-z0-9_.-]*', name)
+                            for name in bundled), 'Invalid npm bundled dependency metadata')
+            require(all(type(package.get(key, {})) is dict for key in ('dependencies', 'optionalDependencies')),
+                    'Invalid npm bundled dependency metadata')
+            declared = {**package.get('dependencies', {}), **package.get('optionalDependencies', {})}
+            require(len(set(bundled)) == len(bundled) and set(bundled) <= declared.keys(),
+                    'Invalid npm bundled dependency metadata')
+        if 'workspaces' in package:
+            workspaces = package['workspaces']
+            segment = r'[A-Za-z0-9_][A-Za-z0-9_.-]*'
+            require(type(workspaces) is list and 0 < len(workspaces) <= 128
+                    and all(isinstance(path, str) and len(path) <= 256
+                            and re.fullmatch(segment + r'(?:/' + segment + r')*', path)
+                            for path in workspaces), 'Invalid npm workspace metadata')
+            require(len(set(workspaces)) == len(workspaces), 'Invalid npm workspace metadata')
+        require(set(package) <= {'version', 'resolved', 'integrity', 'dev', 'optional', 'devOptional', 'peer', 'hasInstallScript', 'license', 'engines', 'funding', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'bundleDependencies', 'workspaces', 'bin', 'os', 'cpu', 'libc', 'inBundle', 'deprecated'}, 'Unsupported npm lock metadata')
     value['packages'] = {'': root}
     return value
+
+
+def npm_metadata_unchanged(path, before, after):
+    if before == after:
+        return True
+    # A full install fills previously absent registry data. Existing hashes,
+    # transports and every other field must still remain exactly unchanged.
+    pair = {'resolved', 'integrity'}
+    if pair & before.keys() or not pair <= after.keys():
+        return False
+    if {key: value for key, value in after.items() if key not in pair} != before:
+        return False
+    name = re.search(r'(?:^|/)node_modules/((?:@[^/]+/)?[^/]+)$', path)[1]
+    identifier = r'[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*'
+    version = re.fullmatch(r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(' + identifier + r'))?(?:\+' + identifier + r')?', before['version'])
+    if version is None or (version[1] is not None and any(
+            part.isdigit() and len(part) > 1 and part.startswith('0') for part in version[1].split('.'))):
+        return False
+    expected = 'https://registry.npmjs.org/' + name + '/-/' + name.rsplit('/', 1)[-1] + '-' + before['version'] + '.tgz'
+    integrity = after['integrity']
+    if after['resolved'] != expected or not integrity.startswith('sha512-'):
+        return False
+    encoded = integrity[len('sha512-'):]
+    digest = base64.b64decode(encoded, validate=True)
+    return len(digest) == 64 and base64.b64encode(digest).decode() == encoded
 
 
 def requirement_shape(text):
@@ -250,7 +297,7 @@ def validate_change(path, before, after):
             old_packages, new_packages = load_json(before)['packages'], load_json(after)['packages']
             for package in old_packages.keys() & new_packages.keys() - {''}:
                 if old_packages[package].get('version') == new_packages[package].get('version'):
-                    require(old_packages[package] == new_packages[package], 'npm metadata cannot change independently of dependency versions')
+                    require(npm_metadata_unchanged(package, old_packages[package], new_packages[package]), 'npm metadata cannot change independently of dependency versions')
         elif path in PYTHON_INPUTS:
             equal = requirement_shape(before) == requirement_shape(after)
         elif path in PYTHON_LOCKS:

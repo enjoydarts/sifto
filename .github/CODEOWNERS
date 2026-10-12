@@ -3,6 +3,7 @@
 /infra/** @enjoydarts
 **/Dockerfile* @enjoydarts
 **/requirements*.txt @enjoydarts
+**/requirements*.in @enjoydarts
 **/package*.json @enjoydarts
 **/go.mod @enjoydarts
 **/go.sum @enjoydarts

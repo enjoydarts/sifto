@@ -21,12 +21,14 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertIs(config['automerge'], False)
         self.assertIs(config['platformAutomerge'], False)
         self.assertEqual(config['minimumReleaseAge'], '7 days')
+        self.assertEqual(config['rebaseWhen'], 'behind-base-branch')
         self.assertLessEqual(config['prHourlyLimit'], 2)
         self.assertLessEqual(config['prConcurrentLimit'], 5)
         for rule in config.get('packageRules', []):
             self.assertIsNot(rule.get('automerge'), True)
         self.assertTrue(config['pinDigests'])
-        self.assertTrue({'dockerfile', 'docker-compose', 'gomod', 'pip_requirements', 'npm', 'custom.regex'}.issubset(config['enabledManagers']))
+        self.assertTrue({'dockerfile', 'docker-compose', 'gomod', 'pip-compile', 'npm', 'custom.regex'}.issubset(config['enabledManagers']))
+        self.assertNotIn('pip_requirements', config['enabledManagers'])
         self.assertNotIn('github-actions', config['enabledManagers'])
 
     def test_renovate_pr_text_points_to_native_approval_and_automatic_merge(self):
@@ -38,7 +40,7 @@ class DependencyAutomationContract(unittest.TestCase):
     def test_live_executor_dependencies_have_an_exclusive_activation_group(self):
         rules = json.loads((ROOT / 'renovate.json').read_text())['packageRules']
         rule = rules[-1]
-        self.assertEqual(set(rule.get('matchFileNames', [])), {'infra/maintenance/Dockerfile', 'infra/maintenance/requirements.txt'})
+        self.assertEqual(set(rule.get('matchFileNames', [])), {'infra/maintenance/Dockerfile', 'infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt'})
         self.assertEqual(rule.get('groupName'), 'Maintenance executor activation dependencies')
         self.assertEqual(rule.get('groupSlug'), 'maintenance-executor-activation')
         self.assertIs(rule.get('automerge'), False)
@@ -89,7 +91,7 @@ class DependencyAutomationContract(unittest.TestCase):
             self.assertNotIn('environment', job)
             self.assertNotIn('permissions', job)
         text = (ROOT / path).read_text()
-        for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'dependency-contract', 'dependency-renovate-validate']:
+        for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'dependency-contract', 'dependency-renovate-validate', 'dependency-python-locks-check', 'dependency-audio']:
             self.assertIn(target, text)
 
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
@@ -170,17 +172,41 @@ class DependencyAutomationContract(unittest.TestCase):
     def test_sensitive_changes_require_owner_review(self):
         owners = (ROOT / '.github/CODEOWNERS').read_text().splitlines()
         entries = {line.split()[0]: line.split()[1:] for line in owners if line and not line.startswith('#')}
-        for pattern in ['/.github/**', '/infra/**', '**/Dockerfile*', '**/requirements*.txt', '**/package*.json', '**/go.mod', '**/go.sum', '/Makefile', '/renovate.json']:
+        for pattern in ['/.github/**', '/infra/**', '**/Dockerfile*', '**/requirements*.txt', '**/requirements*.in', '**/package*.json', '**/go.mod', '**/go.sum', '/Makefile', '/renovate.json']:
             self.assertIn('@enjoydarts', entries[pattern])
 
     def test_worker_direct_requirements_are_fixed_and_install_is_bounded(self):
-        requirements = (ROOT / 'worker/requirements.txt').read_text().splitlines()
+        requirements = (ROOT / 'worker/requirements.in').read_text().splitlines()
         for line in requirements:
             if line and not line.startswith('#'):
                 self.assertRegex(line, r'^[a-zA-Z0-9_.-]+(?:\[[a-zA-Z0-9_,.-]+\])?==[a-zA-Z0-9_.-]+$')
         self.assertTrue(any(line.startswith('yt-dlp==') for line in requirements))
         self.assertTrue(any(line.startswith('bgutil-ytdlp-pot-provider==') for line in requirements))
         self.assertNotIn('pip install --no-cache-dir -U', (ROOT / 'worker/Dockerfile').read_text())
+
+    def test_all_python_installations_require_full_hashed_locks(self):
+        from dependency_updates.policy import python_lock, UV_HEADER
+        for directory in ['worker', 'infra/maintenance', 'infra/audio-concat']:
+            pins = python_lock((ROOT / directory / 'requirements.txt').read_text())
+            self.assertGreater(len(pins), 1)
+            self.assertIn('pip install --no-cache-dir --require-hashes -r requirements.txt', (ROOT / directory / 'Dockerfile').read_text())
+            for line in (ROOT / directory / 'requirements.in').read_text().splitlines():
+                if not line or line.startswith('#'): continue
+                name, version = line.split('==')
+                name = re.sub(r'[-_.]+', '-', name.split('[')[0]).lower()
+                self.assertEqual(pins[name]['version'], version)
+        config = json.loads((ROOT / 'renovate.json').read_text())
+        self.assertFalse(config['pip_requirements']['enabled'])
+        self.assertEqual(config['constraints']['uv'], '0.13.0')
+        patterns = config['pip-compile']['managerFilePatterns']
+        for path in ['worker/requirements.txt', 'infra/maintenance/requirements.txt', 'infra/audio-concat/requirements.txt']:
+            self.assertTrue(any(re.search(pattern[1:-1], path) for pattern in patterns))
+        self.assertIn('--python-version=3.12', UV_HEADER)
+        compose = read_yaml('infra/dependency-ci/compose.python-locks.yml')
+        locks = compose['services']['locks']
+        self.assertRegex(locks['image'], r'uv:0\.13\.0-python3\.12-.*@sha256:[0-9a-f]{64}$')
+        self.assertIn('../..:/repository:ro', locks['volumes'])
+        self.assertTrue(locks['read_only'])
 
 
 if __name__ == '__main__':

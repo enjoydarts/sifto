@@ -42,7 +42,9 @@ try {
   const repositoryConfig = JSON.parse(readFileSync('/fixtures/renovate.json', 'utf8'));
   GlobalConfig.set({ localDir: directory });
   // Exercise the real Go parser's disabled indirect dependencies, then apply
-  // repository rules. No Go command, module download or datasource lookup runs.
+  // repository rules. Mirror extract/manager-files normalizeDepNames, which
+  // fills packageName before production applies package-name rules.
+  // No Go command, module download or datasource lookup runs.
   const goMod = `module example.invalid/dependency-fixture
 
 go 1.26.0
@@ -69,7 +71,7 @@ require (
       assert.equal(dep.enabled, false, `parser default for ${dep.depName}`);
       assert.equal(dep.datasource, 'go');
       for (const updateType of ['minor', 'patch']) {
-        const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageFile, manager: 'gomod', updateType });
+        const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageName: dep.packageName ?? dep.depName, packageFile, manager: 'gomod', updateType });
         assert.equal(config.enabled, packageFile === 'api/go.mod' && enabledGoIndirect.has(dep.depName), `${packageFile}: ${dep.depName}`);
         assert.equal(config.minimumReleaseAge, '7 days');
         assert.equal(config.automerge, false);
@@ -81,7 +83,7 @@ require (
     const direct = goFile.deps.find((dep) => dep.depName === 'github.com/inngest/inngestgo');
     assert.ok(direct);
     assert.notEqual(direct.depType, 'indirect');
-    const directConfig = await applyPackageRules({ ...repositoryConfig, ...direct, packageFile, manager: 'gomod', updateType: 'minor' });
+    const directConfig = await applyPackageRules({ ...repositoryConfig, ...direct, packageName: direct.packageName ?? direct.depName, packageFile, manager: 'gomod', updateType: 'minor' });
     assert.equal(directConfig.enabled, direct.enabled);
     assert.notEqual(directConfig.enabled, false);
   }
@@ -91,12 +93,12 @@ require (
     const dep = directGoFile.deps.find((entry) => entry.depName === depName);
     assert.ok(dep);
     assert.notEqual(dep.depType, 'indirect');
-    const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageFile: 'api/go.mod', manager: 'gomod', updateType: 'minor' });
+    const config = await applyPackageRules({ ...repositoryConfig, ...dep, packageName: dep.packageName ?? dep.depName, packageFile: 'api/go.mod', manager: 'gomod', updateType: 'minor' });
     assert.equal(config.enabled, dep.enabled, `direct default for ${depName}`);
   }
   const targetDep = extractGoMod(goMod).deps.find((dep) => dep.depName === 'google.golang.org/grpc');
   for (const manager of ['npm', 'pip-compile']) {
-    const config = await applyPackageRules({ ...repositoryConfig, ...targetDep, packageFile: 'api/go.mod', manager, updateType: 'patch' });
+    const config = await applyPackageRules({ ...repositoryConfig, ...targetDep, packageName: targetDep.packageName ?? targetDep.depName, packageFile: 'api/go.mod', manager, updateType: 'patch' });
     assert.equal(config.enabled, false, `other manager ${manager}`);
   }
   console.log(`Renovate ${installedVersion}: only api/go.mod indirect grpc and x/net are enabled; other paths, managers and indirect dependencies retain defaults and approval controls.`);

@@ -229,7 +229,12 @@ dependency-contract: dependency-python-locks-mounts-test
 dependency-renovate-validate:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-status-test
+	$(MAKE) dependency-renovate-python-test
 	$(MAKE) dependency-renovate-npm-test
+
+.PHONY: dependency-renovate-python-test
+dependency-renovate-python-test:
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-python-command | $(PYTHON_LOCK_COMPOSE) run --rm -T --volume "$(CURDIR)/infra/dependency-ci/uv-renovate.toml:/sifto-python-generation.toml:ro" --entrypoint python locks -B /repository/infra/dependency-ci/test_renovate_python_generation.py
 
 .PHONY: dependency-renovate-npm-test
 dependency-renovate-npm-test:

@@ -117,3 +117,8 @@ services:
       - ../maintenance/requirements.txt:/fixtures/infra/maintenance/requirements.txt:ro
       - ../audio-concat/requirements.in:/fixtures/infra/audio-concat/requirements.in:ro
       - ../audio-concat/requirements.txt:/fixtures/infra/audio-concat/requirements.txt:ro
+  renovate-python-command:
+    extends: renovate-status-test
+    command: [/fixtures/test-renovate-python-generation.mjs]
+    volumes:
+      - ./test-renovate-python-generation.mjs:/fixtures/test-renovate-python-generation.mjs:ro

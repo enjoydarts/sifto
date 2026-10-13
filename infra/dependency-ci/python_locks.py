@@ -30,7 +30,12 @@ def compile_lock(directory, cutoff=None, generate=True):
 
 
 def check_directory(directory):
-    """Keep locked versions as resolver preferences, recompute all artifact hashes."""
+    """Verify the exact resolver graph and every supplied artifact hash.
+
+    An age-filtered lock can intentionally omit later uploads on a pinned
+    release. Verify its nonempty hash set against freshly fetched full hashes
+    rather than requiring every artifact currently published on the index.
+    """
     source = directory / 'requirements.in'
     lock = directory / 'requirements.txt'
     try:
@@ -46,7 +51,12 @@ def check_directory(directory):
         preferences = ''.join(pin['requirement'] + '==' + pin['version'] + (' ; ' + pin['marker'] if pin['marker'] else '') + '\n' for pin in pins.values())
         (target / 'requirements.txt').write_text(preferences)
         compile_lock(target, generate=False)
-        if lock.read_bytes() != (target / 'requirements.txt').read_bytes():
+        resolved = python_lock((target / 'requirements.txt').read_text())
+        graph = lambda values: {name: {key: pin[key] for key in ('requirement', 'version', 'marker')}
+                                for name, pin in values.items()}
+        if (graph(pins) != graph(resolved)
+                or any(not set(pin['hashes']) <= set(resolved[name]['hashes'])
+                       for name, pin in pins.items())):
             raise LockError('Python lock is stale or has invalid artifact hashes: ' + str(directory))
 
 

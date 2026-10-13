@@ -80,7 +80,16 @@ def candidate(api, number, head, base, source, python_cutoff=None):
                 if python_age['cutoff'] is None:
                     python_age['cutoff'] = python_cutoff or release_age.release_cutoff()
                 evidence = release_age.verify_python_release_age(before, after, python_age['cutoff'], fetch_release)
-                python_age['locks'].append({'path': path, 'releases': evidence})
+                # Fixed outputs are bounded. Commit to every verified artifact
+                # and timestamp by digest instead of embedding thousands of
+                # wheel hashes. Revalidation recomputes this same full digest.
+                releases = [{'name': release['name'], 'version': release['version'],
+                             'artifact_count': len(release['artifacts']),
+                             'latest_upload': release_age.utc_text(max(
+                                 release_age.timestamp(artifact['uploaded']) for artifact in release['artifacts'])),
+                             'artifacts_sha256': plan_hash(release['artifacts'])}
+                            for release in evidence]
+                python_age['locks'].append({'path': path, 'releases': releases})
         elif path == 'web/package-lock.json':
             changes = npm_lock_summary(before, after)
         else:
@@ -262,9 +271,9 @@ def prepare(api, number, head, base, source):
             for lock in plan['python_age']['locks']:
                 summary.write('**Python artifact evidence for `%s`:**\n\n' % lock['path'])
                 for release in lock['releases']:
-                    summary.write('- `%s==%s`: %d introduced artifacts; latest publication `%s`\n' % (
-                        release['name'], release['version'], len(release['artifacts']),
-                        max(artifact['uploaded'] for artifact in release['artifacts'])))
+                    summary.write('- `%s==%s`: %d introduced artifacts; latest publication `%s`; complete artifact evidence SHA256 `%s`\n' % (
+                        release['name'], release['version'], release['artifact_count'],
+                        release['latest_upload'], release['artifacts_sha256']))
                 summary.write('\n')
         for entry in plan['files']:
             summary.write('- `%s`: +%s / -%s; candidate blob SHA256 `%s`\n' % (entry['path'], entry['additions'], entry['deletions'], entry['after']))

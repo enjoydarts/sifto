@@ -988,6 +988,37 @@ class PipelineTests(unittest.TestCase):
                     self.execute(plan)
                 self.assertEqual(self.mutations, [])
 
+    def test_large_verified_artifact_inventory_has_bounded_immutable_approval_evidence(self):
+        import base64
+        hashes = ['%064x' % index for index in range(1000)]
+        before = policy.UV_HEADER + 'fixture==1.0.0 \\\n    --hash=sha256:' + 'f' * 64 + '\n    # via -r requirements.in\n'
+        after = policy.UV_HEADER + 'fixture==1.0.1 \\\n' + '\n'.join(
+            '    --hash=sha256:' + digest + (' \\' if index < 999 else '')
+            for index, digest in enumerate(hashes)) + '\n    # via -r requirements.in\n'
+        self.paths = ['worker/requirements.txt']
+        transport = self.transport
+        def contents(method, path, body):
+            if path.startswith('/contents/'):
+                text = before if 'ref=' + BASE in path else after
+                return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
+            return transport(method, path, body)
+        self.api = github.GitHub(self.repo, transport=contents)
+        metadata = {'info': {'name': 'fixture', 'version': '1.0.1'}, 'urls': [
+            {'digests': {'sha256': digest}, 'upload_time_iso_8601': '2026-10-02T12:00:00Z', 'yanked': False}
+            for digest in hashes]}
+        with patch('dependency_updates.release_age.PyPI.release', return_value=metadata):
+            plan = self.plan()
+            self.assertLess(len(base64.b64encode(policy.canonical(plan).encode())), 48_000)
+            release = plan['python_age']['locks'][0]['releases'][0]
+            self.assertEqual(release['artifact_count'], 1000)
+            self.assertRegex(release['artifacts_sha256'], r'^[0-9a-f]{64}$')
+            # A changed oldest timestamp still invalidates the digest even
+            # when the count and latest publication remain the same.
+            metadata['urls'][0]['upload_time_iso_8601'] = '2026-10-01T12:00:00Z'
+            with self.assertRaises(policy.Refused):
+                self.execute(plan)
+        self.assertEqual(self.mutations, [])
+
     def test_security_bypass_is_explicit_and_only_emergency_namespace_can_use_it(self):
         metadata = self.python_candidate('2026-10-09T00:00:00Z')
         self.branch = 'dependency-security/critical'

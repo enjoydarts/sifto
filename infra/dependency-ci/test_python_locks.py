@@ -52,6 +52,19 @@ class PythonLocksTests(unittest.TestCase):
             self.assertEqual(python_lock((target / 'requirements.txt').read_text())['botocore']['version'], '1.43.108')
             check_directory(target)
 
+    def test_verified_artifact_subset_remains_valid_after_index_adds_more_hashes(self):
+        # exclude-newer legitimately omits newly uploaded wheels on an old
+        # version. Existing graph and every supplied hash still need verification.
+        # Actual immutable six 1.17.0 uploads: wheel at 17:35:26.475808Z,
+        # sdist at 17:35:28.174320Z. Resolve between the uploads.
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('six==1.17.0\n')
+            compile_lock(target, cutoff='2024-12-04T17:35:27Z')
+            hashes = python_lock((target / 'requirements.txt').read_text())['six']['hashes']
+            self.assertEqual(hashes, ['4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274'])
+            check_directory(target)
+
     def test_current_proposal_resolves_without_independent_transitive_pins(self):
         # Public PR 34 inputs at d8f8a9afa44a36c7c4c4c8636d3a1b08d5cf9c1d.
         # These reproduce Renovate run 38227994961 without modifying a Bot PR.

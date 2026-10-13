@@ -72,6 +72,10 @@ jobs:
         env:
           EXPECTED_HEAD: ${{ inputs.expected_head }}
         run: test -z "$EXPECTED_HEAD" || test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      # The real bootstrap installer accepts ARM64 Ubuntu 24 only.
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
       - env:
           # Run the offline loader natively on this AMD64 policy runner.
           POSTGRES_MOUNT_TEST_PLATFORM: linux/amd64
@@ -83,6 +87,8 @@ jobs:
           make dependency-audio
           make maintenance-test
           make maintenance-syntax
+          make maintenance-bootstrap-test
+          make maintenance-backup-test
           make maintenance-postgres-data-mount-test
           make image-security-test
       - if: always()

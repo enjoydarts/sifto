@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import re
+import shlex
 import unittest
 
 import yaml
@@ -115,6 +116,87 @@ class DependencyAutomationContract(unittest.TestCase):
         step = next(step for step in job['steps'] if 'make image-security-test' in step.get('run', ''))
         self.assertNotIn('if', step)
         self.assertIsNot(step.get('continue-on-error'), True)
+
+    def test_real_maintenance_fixtures_block_dependency_approval(self):
+        jobs = read_yaml('.github/workflows/dependency-check.yml')['jobs']
+        self.assertEqual({job['name'] for job in jobs.values()}, {
+            'Dependency API', 'Dependency Worker', 'Dependency Web', 'Dependency Policy',
+        })
+        self.assertEqual(len(jobs), 4)
+        policy = jobs['policy']
+        self.assertEqual(policy['runs-on'], 'ubuntu-26.04')
+        self.assertNotIn('if', policy)
+        self.assertNotIn('continue-on-error', policy)
+        qemu_steps = [step for step in policy['steps'] if step.get('uses', '').startswith('docker/setup-qemu-action@')]
+        self.assertEqual(len(qemu_steps), 1, 'ARM-only installer needs QEMU on the AMD64 policy runner')
+        qemu = qemu_steps[0]
+        self.assertEqual(qemu['uses'], 'docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130')
+        self.assertEqual(qemu['with'], {'platforms': 'arm64'})
+        self.assertNotIn('if', qemu)
+        self.assertNotIn('continue-on-error', qemu)
+        for target in ['maintenance-bootstrap-test', 'maintenance-backup-test']:
+            with self.subTest(target=target):
+                steps = [step for step in policy['steps'] if f'make {target}' in step.get('run', '')]
+                self.assertEqual(len(steps), 1, f'{target} must run in Dependency Policy')
+                step = steps[0]
+                self.assertNotIn('if', step)
+                self.assertNotIn('continue-on-error', step)
+                self.assertLess(policy['steps'].index(qemu), policy['steps'].index(step))
+                self.assertNotIn('MAINTENANCE_BOOTSTRAP_TEST_PLATFORM', step['env'])
+                self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/amd64')
+                # Plain make commands keep the shell's failure propagation; reject
+                # conditionals, ignored exits, or a replacement with syntax checks.
+                commands = [line.strip() for line in step['run'].splitlines() if line.strip()]
+                self.assertIn(f'make {target}', commands)
+                for command in commands:
+                    self.assertRegex(command, r'^make [a-z][a-z0-9-]*$')
+
+    def test_bootstrap_make_target_runs_an_isolated_real_installer_fixture(self):
+        makefile = (ROOT / 'Makefile').read_text()
+        target = re.search(r'^maintenance-bootstrap-test:([^\n]*)\n((?:\t[^\n]*\n)+)', makefile, re.M)
+        self.assertIsNotNone(target, 'maintenance-bootstrap-test needs an executable recipe')
+        self.assertEqual(target.group(1).strip(), '')
+        commands = target.group(2).strip().splitlines()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(shlex.split(commands[0]), [
+            'docker', 'compose', '--env-file', '/dev/null', '--project-name',
+            'sifto-maintenance-bootstrap-fixture', '-f', 'infra/maintenance/bootstrap/compose.yml',
+            'run', '--build', '--rm', '-T', '--no-deps', 'test',
+        ])
+        fixture = read_yaml('infra/maintenance/bootstrap/compose.yml')['services']['test']
+        self.assertEqual(fixture['platform'], 'linux/arm64')
+        self.assertEqual(fixture['build'], {'context': '..', 'dockerfile': 'bootstrap/Dockerfile.test'})
+        self.assertEqual(fixture['command'], ['/bin/bash', '/fixture/test-install.sh'])
+        self.assertEqual(fixture['network_mode'], 'none')
+        self.assertTrue({'depends_on', 'profiles', 'ports', 'volumes', 'env_file', 'environment', 'privileged'}.isdisjoint(fixture))
+
+    def test_backup_make_target_runs_only_isolated_synthetic_fixture_services(self):
+        makefile = (ROOT / 'Makefile').read_text()
+        target = re.search(r'^maintenance-backup-test:([^\n]*)\n((?:\t[^\n]*\n)+)', makefile, re.M)
+        self.assertIsNotNone(target)
+        self.assertEqual(target.group(1).strip(), 'maintenance-backup-unit-test')
+        commands = [shlex.split(line.strip()) for line in target.group(2).splitlines()]
+        self.assertEqual(len(commands), 4)
+        services = read_yaml('infra/maintenance/backup/compose.yml')['services']
+        for index, (command, service) in enumerate(zip(commands, ['proof-test', 'proof-test', 'script-test', 'lock-test'])):
+            with self.subTest(service=service, index=index):
+                if index == 1:
+                    self.assertEqual(command.pop(0), 'PROOF_PG_VERSION=15.19')
+                project = 'sifto-maintenance-backup-fixtures-pg15' if index == 1 else 'sifto-maintenance-backup-fixtures'
+                expected = ['docker', 'compose', '--env-file', '/dev/null', '--project-name', project,
+                            '-f', 'infra/maintenance/backup/compose.yml', '--profile', 'test', 'run']
+                if index < 2:
+                    expected.append('--build')
+                self.assertEqual(command, expected + ['--rm', '-T', service])
+                fixture = services[service]
+                self.assertEqual(fixture['profiles'], ['test'])
+                self.assertEqual(fixture['network_mode'], 'none')
+                self.assertTrue({'depends_on', 'ports', 'env_file', 'environment', 'privileged'}.isdisjoint(fixture))
+                for volume in fixture.get('volumes', []):
+                    self.assertTrue(volume.startswith('./') or volume.startswith('.:'))
+                    self.assertTrue(volume.endswith(':ro'))
+                    self.assertNotIn('docker.sock', volume)
+                    self.assertNotIn('.env', volume)
 
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
         for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'deploy', 'deploy-audio-concat']:

@@ -103,7 +103,8 @@ class Fixture:
             identifier = int(endpoint.split('/')[3])
             if '/attempts/1' in endpoint:
                 if endpoint.endswith('/jobs'):
-                    return {'jobs': [], 'total_count': 0}
+                    rows = [] if identifier in self.initial_attempts else copy.deepcopy(self.jobs[identifier])
+                    return {'jobs': rows, 'total_count': len(rows)}
                 return copy.deepcopy(self.initial_attempts[identifier])
             if endpoint.endswith('/jobs'):
                 rows = copy.deepcopy(self.jobs[identifier])
@@ -181,6 +182,50 @@ class PRCITests(unittest.TestCase):
                 self.f.post_hook = change
                 with self.assertRaises(policy.Refused): self.start()
                 self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
+    def test_manually_preapproved_other_run_actual_jobs_gate_every_post(self):
+        for condition in ('active_failure', 'success_failure', 'attempt', 'unknown_state', 'missing_success'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                self.f.finish_at = 100
+                self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+                self.f.success(201)
+                if condition == 'active_failure': self.f.runs[201].update(status='in_progress', conclusion=None)
+                if condition in ('active_failure', 'success_failure'): self.f.jobs[201][0]['conclusion'] = 'failure'
+                if condition == 'attempt': self.f.jobs[201][0]['run_attempt'] = 1
+                if condition == 'unknown_state': self.f.jobs[201][0]['status'] = 'unexpected'
+                if condition == 'missing_success': self.f.jobs[201].pop()
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.posts, [])
+
+    def test_preapproved_job_failure_after_candidate_revalidation_blocks_post(self):
+        self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+        self.f.success(201)
+        original = self.f.revalidate
+        def fail():
+            original()
+            self.f.jobs[201][0]['conclusion'] = 'failure'
+        self.f.revalidate = fail
+        with self.assertRaises(policy.Refused): self.start()
+        self.assertEqual(self.f.posts, [])
+
+    def test_manually_preapproved_normal_completion_refreshes_before_other_post(self):
+        self.f.finish_at = 100
+        self.f.runs[201].update(run_attempt=2, status='in_progress', conclusion=None,
+                                triggering_actor=copy.deepcopy(REPO['owner']))
+        original = self.f.api.transport
+        def complete(method, path, body):
+            if '/actions/runs/201/attempts/2/jobs' in path:
+                self.f.success(201)
+            if path == '/actions/runs/200/approve':
+                self.assertEqual(self.f.clock.elapsed, 10)
+            return original(method, path, body)
+        self.f.api.transport = complete
+        session = self.start()
+        self.assertEqual(self.f.clock.elapsed, 10)
+        self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+        self.wait(session)
+        self.assertEqual(self.f.clock.elapsed, 100)
 
     def test_acknowledged_transition_never_accepts_attempt_three_or_corrupt_initial_hold(self):
         for condition in ('attempt3', 'initial_actor', 'initial_jobs', 'list_actor', 'list_failure'):

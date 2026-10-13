@@ -210,15 +210,26 @@ class Session:
         if run['run_attempt'] == 1:
             self.held(run, historical=True)
             return False
+        return self.actual_jobs(run, name)
+
+    def actual_jobs(self, run, name):
         jobs = self.attempt_jobs(run)
+        self.verify_actual_jobs(run, name, jobs)
+        final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
+        require(final['id'] == run['id'] and final['run_attempt'] == run['run_attempt']
+                and final['triggering_actor'] == run['triggering_actor'],
+                'PR CI changed while verifying actual jobs')
+        return final == run
+
+    def verify_actual_jobs(self, run, name, jobs):
         self.readonly_jobs(run, name, jobs)
         require(all(job.get('status') in ACTIVE and job.get('conclusion') is None
                     or job.get('status') == 'completed' and job.get('conclusion') == 'success'
                     for job in jobs), 'PR CI actual job failed; no owner approval request')
-        final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
-        require(final['id'] == run['id'] and final['run_attempt'] == 2 and bot(final['triggering_actor']),
-                'Acknowledged PR CI changed while verifying jobs')
-        return final == run
+        if run['status'] == 'completed' and run['conclusion'] == 'success':
+            require({job.get('name') for job in jobs} == JOBS[name]
+                    and all(job.get('status') == 'completed' and job.get('conclusion') == 'success' for job in jobs),
+                    'PR CI job inventory did not succeed')
 
     def readonly_jobs(self, run, name, jobs):
         require(len(jobs) <= len(JOBS[name]) and len({job.get('id') for job in jobs}) == len(jobs)
@@ -229,8 +240,8 @@ class Session:
                         for job in jobs), 'PR CI job attempt or read-only inventory mismatch')
 
     def authorities(self, clock, sleep):
-        # Poll only locally acknowledged visibility lag, checking every other
-        # selected authority and the immutable candidate on each iteration.
+        # Poll acknowledged attempt visibility and normal job/run progress,
+        # checking every selected authority and immutable candidate each time.
         require(self.issued <= self.approved, 'PR CI approval outcome unacknowledged; no success proof')
         while True:
             self.remaining(clock)
@@ -247,6 +258,8 @@ class Session:
                     pending = not self.approved_attempt(run, name) or pending
                 else:
                     require(run['run_attempt'] == chosen['run_attempt'], 'PR CI inventory changed before approval')
+                    if run['status'] in ACTIVE or run['conclusion'] == 'success':
+                        pending = not self.actual_jobs(run, name) or pending
             self.approval_eligibility(latest)
             self.remaining(clock)
             if not pending:
@@ -321,12 +334,7 @@ class Session:
                     continue
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
                 jobs = self.jobs(run)
-                self.readonly_jobs(run, name, jobs)
-                require(len(jobs) == len(JOBS[name]) and {job.get('name') for job in jobs} == JOBS[name]
-                        and len({job.get('id') for job in jobs}) == len(jobs)
-                        and all(positive(job.get('id')) and job.get('run_id') == run['id']
-                                and job.get('head_sha') == self.plan['head'] and job.get('status') == 'completed'
-                                and job.get('conclusion') == 'success' for job in jobs), 'PR CI job inventory did not succeed')
+                self.verify_actual_jobs(run, name, jobs)
                 final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
                 require(final == run, 'PR CI changed while verifying successful jobs')
             self.remaining(clock)

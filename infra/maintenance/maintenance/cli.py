@@ -12,6 +12,7 @@ from .host import strict_json
 from .plan import (HASH, SHA, MaintenanceError, build_plan, canonical_json, matches,
                    normalize_closure, plan_sha256, require, sign_plan, validate_approval, validate_plan)
 from .report import DEFAULT_AI_MODEL, ai_advice, observe_coolify, render
+from .coolify_inventory import summarize_runtime
 from .ssh import Client, parse_hosts
 from .store import GitStore, private_write, repo_url, validate_ref
 
@@ -297,6 +298,7 @@ def scan(executor, repo, inputs, store):
         plan = result["plan"]
         coolify = observe_coolify(collected)
         files[prefix + "/coolify-observation.json"] = coolify
+        files[prefix + "/coolify-runtime.json"] = summarize_runtime(collected)
         advice = ai_advice(plan, Path("/secrets/anthropic_key").read_text().strip(),
                            os.environ.get("MAINTENANCE_AI_MODEL") or DEFAULT_AI_MODEL) if plan else {
                            "status": "unavailable", "warning_ja": "承認可能な計画がありません。AI 解析は実施していません。"}

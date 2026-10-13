@@ -231,21 +231,27 @@ def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_di
     raise Refused('Timed out waiting for exact workflow run')
 
 
-def dispatch_once(api, workflow, ref, head, inputs):
+def dispatch_once(api, workflow, ref, head, inputs, timeout_seconds=None):
     require(workflow in RUN_WAIT_SECONDS, 'Unsupported workflow wait budget')
     existing = api.pages('/actions/workflows/' + workflow + '/runs?event=workflow_dispatch&head_sha=' + head, 'workflow_runs')
     latest = max((r['id'] for r in existing), default=0)
     api.request('POST', '/actions/workflows/' + workflow + '/dispatches', {'ref': ref, 'inputs': inputs})
-    return await_run(api, workflow, head, latest, RUN_WAIT_SECONDS[workflow])
+    return await_run(api, workflow, head, latest, min(RUN_WAIT_SECONDS[workflow], timeout_seconds) if timeout_seconds is not None else RUN_WAIT_SECONDS[workflow])
 
 
 def prepare(api, number, head, base, source):
+    from . import pr_ci
     plan = candidate(api, number, head, base, source)
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Reruns require a fresh candidate approval request')
-    run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head})
+    def revalidate():
+        assert_unchanged(plan, candidate(api, number, head, base, source,
+                                       python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
+    pr_checks = pr_ci.start(api, plan, revalidate)
+    run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
+                        timeout_seconds=pr_checks.remaining())
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
-    assert_unchanged(plan, candidate(api, number, head, base, source,
-                                   python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
+    pr_checks.wait()
+    revalidate()
     plan['ci_run'] = run['id']
     digest = plan_hash(plan)
     encoded = base64.b64encode(canonical(plan).encode()).decode()

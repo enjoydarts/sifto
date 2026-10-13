@@ -95,6 +95,39 @@ class DependencyAutomationContract(unittest.TestCase):
         for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'maintenance-postgres-data-mount-test', 'dependency-contract', 'dependency-renovate-validate', 'dependency-python-locks-check', 'dependency-audio']:
             self.assertIn(target, text)
 
+    def test_automatic_bot_ci_approval_has_an_exact_read_only_workflow_allowlist(self):
+        from dependency_updates import pr_ci
+        self.assertEqual(pr_ci.WORKFLOWS, ('dependency-check.yml', 'app-runtime.yml', 'maintenance-test.yml'))
+        for name in pr_ci.WORKFLOWS:
+            with self.subTest(workflow=name):
+                path = '.github/workflows/' + name
+                workflow = read_yaml(path)
+                events = workflow.get('on', workflow.get(True))
+                self.assertIn('pull_request', events)
+                self.assertTrue({'pull_request_target', 'workflow_run'}.isdisjoint(events))
+                self.assertEqual(workflow['permissions'], {'contents': 'read'})
+                text = (ROOT / path).read_text()
+                self.assertNotIn('secrets', text.lower())
+                self.assertNotIn('production-maintenance', text)
+                for job in workflow['jobs'].values():
+                    self.assertNotIn('environment', job)
+                    self.assertNotIn('permissions', job)
+                    for step in job['steps']:
+                        if step.get('uses', '').startswith('actions/checkout@'):
+                            self.assertIs(step['with']['persist-credentials'], False)
+                if name == 'maintenance-test.yml':
+                    self.assertNotIn('maintenance apply', text)
+                    self.assertNotIn('maintenance-apply', text)
+        prepare = read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']
+        self.assertEqual(prepare['permissions'], {'contents': 'read', 'pull-requests': 'read', 'statuses': 'read', 'actions': 'write'})
+        self.assertNotIn('environment', prepare)
+        self.assertGreaterEqual(prepare['timeout-minutes'] * 60, pr_ci.WAIT_SECONDS + 10 * 60)
+        self.assertLessEqual(prepare['timeout-minutes'], 65)
+        helper = (ROOT / 'infra/dependency-ci/dependency_updates/pr_ci.py').read_text()
+        self.assertNotIn('pending_deployments', helper)
+        makefile = (ROOT / 'Makefile').read_text()
+        self.assertIn('/repository/infra/dependency-ci/test_pr_ci.py', makefile)
+
     def test_mount_regression_blocks_automatic_dependency_approval(self):
         job = read_yaml('.github/workflows/dependency-check.yml')['jobs']['policy']
         self.assertEqual(job['name'], 'Dependency Policy')

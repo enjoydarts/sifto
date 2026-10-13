@@ -633,6 +633,28 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(policy.Refused):
             api.pages('/pulls', max_pages=2)
 
+    def test_repository_root_get_has_no_trailing_slash_and_keeps_path_guard(self):
+        captured = []
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, limit): return b'{"id":123,"full_name":"owner/repo"}'
+        class Opener:
+            def open(self, request, timeout):
+                captured.append(request)
+                return Response()
+        api = github.GitHub('owner/repo')
+        with patch.dict(os.environ, {'GH_TOKEN': 'secret-token'}), patch('urllib.request.build_opener', return_value=Opener()):
+            try:
+                repository = api.get('')
+            except policy.Refused:
+                self.fail('Exact repository root GET must support the canonical URL without a trailing slash')
+            self.assertEqual(repository['id'], 123)
+            self.assertEqual(captured[0].full_url, 'https://api.github.com/repos/owner/repo')
+            for invalid in ('//foreign', 'https://foreign', 'relative', '/bad\\path'):
+                with self.subTest(path=invalid), self.assertRaises(policy.Refused): api.http('GET', invalid, None)
+            self.assertEqual(len(captured), 1)
+
     def test_mutating_requests_are_never_retried_on_ambiguity(self):
         calls = []
         def transport(*args):

@@ -3,6 +3,7 @@ import json
 import re
 import time
 import urllib.request
+from datetime import datetime, timezone
 
 from .plan import canonical_json, plan_sha256, require, validate_plan
 
@@ -14,12 +15,15 @@ DEFAULT_AI_MODEL = "claude-haiku-5-5"
 COOLIFY_LATEST_API = "https://api.github.com/repos/coollabsio/coolify/releases/latest"
 MAX_RELEASE = 256 * 1024
 STABLE_VERSION = r"(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})"
+COOLIFY_PATCH_WAIT_SECONDS = 7 * 86400
 
 
 def observe_coolify(inventory, *, now=None):
     """Official release observation only, never an executable maintenance plan."""
     result = {"status": "unknown", "reason": "collection_unavailable", "current_version": None,
-              "latest_version": None, "release_url": None, "fetched_at": None}
+              "latest_version": None, "release_url": None, "fetched_at": None,
+              "release_published_at": None, "review_after": None,
+              "update_scope": None, "candidate_review": "unavailable"}
     try:
         require(type(inventory) is dict and type(inventory["runtime"]["containers"]) is list,
                 "invalid inventory")
@@ -30,6 +34,7 @@ def observe_coolify(inventory, *, now=None):
             result.update(status="not_present", reason="no_running_coolify_container")
             return result
         result["reason"] = "current_version_unavailable"
+        require(len(images) == 1, "ambiguous running instance")
         versions = set()
         for image in images:
             match = re.fullmatch(r"(?:ghcr\.io/|docker\.io/)?coollabsio/coolify:v?(" + STABLE_VERSION +
@@ -54,12 +59,27 @@ def observe_coolify(inventory, *, now=None):
         require(isinstance(tag, str) and re.fullmatch(r"v?" + STABLE_VERSION, tag), "invalid stable release tag")
         url = "https://github.com/coollabsio/coolify/releases/tag/" + tag
         require(release.get("html_url") == url, "unexpected official release URL")
+        observed_at = int(time.time()) if now is None else now
+        require(type(observed_at) is int and observed_at >= 0, "invalid observation time")
+        publication = release.get("published_at")
+        require(type(publication) is str and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
+                                                         publication), "release publication unavailable")
+        published_at = int(datetime.strptime(publication, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+        require(0 <= published_at <= observed_at, "release publication is in the future")
         latest = tag.removeprefix("v")
         current_tuple = tuple(map(int, result["current_version"].split(".")))
         latest_tuple = tuple(map(int, latest.split(".")))
         status = "update_available" if current_tuple < latest_tuple else "current" if current_tuple == latest_tuple else "ahead"
+        scope = ("none" if status == "current" else "downgrade" if status == "ahead" else
+                 "major" if current_tuple[0] != latest_tuple[0] else
+                 "minor" if current_tuple[1] != latest_tuple[1] else "patch")
+        review_after = published_at + COOLIFY_PATCH_WAIT_SECONDS
+        review = ("no_update" if status != "update_available" else
+                  "manual_review" if scope != "patch" else
+                  "waiting" if observed_at < review_after else "eligible_patch_review")
         result.update(status=status, reason="report_only_manual_review", latest_version=latest,
-                      release_url=url, fetched_at=int(time.time()) if now is None else now)
+                      release_url=url, fetched_at=observed_at, release_published_at=published_at,
+                      review_after=review_after, update_scope=scope, candidate_review=review)
         return result
     except Exception:
         return result
@@ -151,6 +171,10 @@ def render(result, advice, coolify=None):
                   "実行中コンテナ image の固定バージョン: " + (coolify["current_version"] or "不明"),
                   "公式最新安定版: " + (coolify["latest_version"] or "取得できませんでした"),
                   "公式リリース取得時刻 (Unix UTC): " + str(coolify["fetched_at"]),
+                  "更新範囲: " + (coolify.get("update_scope") or "不明"),
+                  "公開時刻 (Unix UTC): " + str(coolify.get("release_published_at")),
+                  "patch 候補の確認開始時刻・公開後7日 (Unix UTC): " + str(coolify.get("review_after")),
+                  "候補確認判定: " + coolify.get("candidate_review", "unavailable"),
                   "この情報はレポート専用です。Coolify の更新は別途手動で確認・承認する必要があります。APT 計画には含まれません。"]
         if coolify["release_url"]:
             lines += ["公式リリース: " + coolify["release_url"]]

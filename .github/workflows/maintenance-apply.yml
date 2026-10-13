@@ -151,3 +151,35 @@ jobs:
           MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
           MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
         run: sh infra/maintenance/run-controller.sh audit
+  post-verification:
+    if: always() && github.ref == 'refs/heads/main' && needs.approve.result == 'success' && needs.execute.result == 'success' && !inputs.dry_run
+    needs: [approve, execute, audit]
+    environment: maintenance-scan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe selected host and append private root evidence
+        env:
+          INPUT_PRIVATE_COMMIT: ${{ inputs.private_commit }}
+          INPUT_PLAN_ID: ${{ inputs.plan_id }}
+          INPUT_PLAN_SHA256: ${{ inputs.plan_sha256 }}
+          INPUT_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_APPROVAL_COMMIT: ${{ needs.approve.outputs.approval_commit }}
+          INPUT_APPROVAL_SHA256: ${{ needs.approve.outputs.approval_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_SCAN_SSH_KEY: ${{ secrets.MAINTENANCE_SCAN_SSH_KEY }}
+          MAINTENANCE_OPS_WRITE_KEY: ${{ secrets.MAINTENANCE_OPS_WRITE_KEY }}
+          MAINTENANCE_HOSTS_JSON: ${{ secrets.MAINTENANCE_HOSTS_JSON }}
+          MAINTENANCE_KNOWN_HOSTS: ${{ secrets.MAINTENANCE_KNOWN_HOSTS }}
+        run: sh infra/maintenance/run-post-verification.sh

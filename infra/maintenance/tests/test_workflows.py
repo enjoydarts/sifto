@@ -46,9 +46,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(events['workflow_dispatch']['inputs']['force_request']['default'])
         self.assertFalse(scan['concurrency']['cancel-in-progress'])
         for workflow in (scan, apply):
-            for job in workflow['jobs'].values():
+            for name, job in workflow['jobs'].items():
                 checkout = next(step for step in job['steps'] if 'uses' in step)
-                self.assertEqual(checkout['with']['ref'], '${{ vars.MAINTENANCE_EXECUTOR_SHA }}')
+                self.assertEqual(checkout['with']['ref'], '${{ github.sha }}' if name == 'post-verification' else '${{ vars.MAINTENANCE_EXECUTOR_SHA }}')
 
     def test_ansible_only_runs_local_fixed_cli(self):
         for name, operation in [('scan', 'scan'), ('apply', 'execute')]:

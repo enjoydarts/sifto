@@ -10,6 +10,8 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/coder/websocket v1.8.12 h1:5bUXkEPPIbewrnkU8LTCLVaxi4N4J8ahufH2vlo4NAo=
 github.com/coder/websocket v1.8.12/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
+github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
+github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -19,6 +21,8 @@ github.com/fatih/structs v1.1.0 h1:Q7juDM0QtcnhCpeyLGQKyg4TOIghuNXrkL32pHAUMxo=
 github.com/fatih/structs v1.1.0/go.mod h1:9NiDSp5zOcgEDl+j00MP/WkGVPOlPRLejGD8Ga6PJ7M=
 github.com/getsentry/sentry-go v0.36.2 h1:uhuxRPTrUy0dnSzTd0LrYXlBYygLkKY0hhlG5LXarzM=
 github.com/getsentry/sentry-go v0.36.2/go.mod h1:p5Im24mJBeruET8Q4bbcMfCQ+F+Iadc4L48tB1apo2c=
+github.com/getsentry/sentry-go v0.49.0 h1:Ehejknu1l023Ub7QoRBVLAI7g3Jnhqku4oWx4B4Sh5s=
+github.com/getsentry/sentry-go v0.49.0/go.mod h1:nuMJAoCfe1u0Bts2ocyNI+TW8HT84vRMqwA5Qq/SKUI=
 github.com/go-chi/chi/v5 v5.2.5 h1:Eg4myHZBjyvJmAFjFvWgrqDTXFyOzjj7YIm3L3mu6Ug=
 github.com/go-chi/chi/v5 v5.2.5/go.mod h1:X7Gx4mteadT3eDOMTsXzmI4/rwUpOwBHLpAfupzFJP0=
 github.com/go-chi/chi/v5 v5.3.2 h1:5YQkICvTCSZ25hoRsyJazN0scjzKGiu4VAUc7H1o1nY=
@@ -51,6 +55,8 @@ github.com/inngest/inngest v1.13.5 h1:2kcz62tYL5bsYss4L612I5AY65E+095Yrm4rvvlPVo
 github.com/inngest/inngest v1.13.5/go.mod h1:EcufIFCh08d/ififXs6gWfNb5R9gSapd6Pi7yRgSh08=
 github.com/inngest/inngest v1.19.3 h1:cLsOkwVhNldcsW3qdczEz89EQfVXtxn1A1R2xss7sVQ=
 github.com/inngest/inngest v1.19.3/go.mod h1:QaKa4/z+QXLtFRIuRomRJUbjatZh0y1rUkow4h2cURQ=
+github.com/inngest/inngest v1.45.1 h1:TbauYYnyqLgEEZLmJWiwAl3kQgKa88Qv5ROLgU+A8mw=
+github.com/inngest/inngest v1.45.1/go.mod h1:QgrR6Qb0nrAtZ1DsTNPoY3db83N+aC5zcIL3gr59c/E=
 github.com/inngest/inngestgo v0.15.0 h1:WiIhGUL8D8MnnySBdjDyRcxjsOXLQQWF+1hV4oslWc8=
 github.com/inngest/inngestgo v0.15.0/go.mod h1:2Qm4ULk506Zwt8MJXHfTZ4lthY1WTpYksXK1z6lEM/U=
 github.com/inngest/inngestgo v0.15.1 h1:JccdXQj5x1SZ7TOVgeUEeAzSugzPzUFzuYUQ9hB0jY0=

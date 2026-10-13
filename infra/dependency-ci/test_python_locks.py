@@ -7,14 +7,31 @@ import tempfile
 import unittest
 import subprocess
 import sys
+from unittest.mock import patch
 
-from python_locks import COMMAND, check_directory, LockError
+from python_locks import COMMAND, compile_lock, check_directory, LockError
 from dependency_updates.policy import python_lock
 
 ROOT = Path('/repository')
 
 
 class PythonLocksTests(unittest.TestCase):
+    def test_generator_replaces_immature_transitive_preference_with_compatible_mature_pin(self):
+        # Actual PR 34 at 305807ace06f3cad97a7ca7ca051e12b6a114d45:
+        # boto3 1.43.108 was old enough; botocore 1.43.111 (Oct 9) was not.
+        # Preserve that existing resolver preference to exercise regeneration.
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('boto3==1.43.108\n')
+            (target / 'requirements.txt').write_text('botocore==1.43.111\n')
+            with patch('python_locks.release_cutoff', return_value='2026-10-05T00:00:00Z', create=True):
+                compile_lock(target)
+            pins = python_lock((target / 'requirements.txt').read_text())
+            self.assertEqual(pins['boto3']['version'], '1.43.108')
+            self.assertEqual(pins['botocore']['version'], '1.43.108',
+                             'Generator must enforce seven days for solver-selected transitives')
+            self.assertTrue(all(pin['hashes'] for pin in pins.values()))
+
     def test_indirect_updates_do_not_force_incompatible_solver_versions(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
         rules = [rule for rule in config['packageRules']
@@ -24,6 +41,29 @@ class PythonLocksTests(unittest.TestCase):
         self.assertIs(rules[0]['enabled'], False)
         self.assertEqual(config['minimumReleaseAge'], '7 days')
         self.assertIs(config['pip-compile']['lockFileMaintenance']['enabled'], False)
+
+    def test_generation_refreshes_compatible_transitives_and_check_keeps_preferences(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('boto3==1.43.108\n')
+            (target / 'requirements.txt').write_text('botocore==1.43.107\n')
+            with patch('python_locks.release_cutoff', return_value='2026-10-05T00:00:00Z', create=True):
+                compile_lock(target)
+            self.assertEqual(python_lock((target / 'requirements.txt').read_text())['botocore']['version'], '1.43.108')
+            check_directory(target)
+
+    def test_verified_artifact_subset_remains_valid_after_index_adds_more_hashes(self):
+        # exclude-newer legitimately omits newly uploaded wheels on an old
+        # version. Existing graph and every supplied hash still need verification.
+        # Actual immutable six 1.17.0 uploads: wheel at 17:35:26.475808Z,
+        # sdist at 17:35:28.174320Z. Resolve between the uploads.
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('six==1.17.0\n')
+            compile_lock(target, cutoff='2024-12-04T17:35:27Z')
+            hashes = python_lock((target / 'requirements.txt').read_text())['six']['hashes']
+            self.assertEqual(hashes, ['4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274'])
+            check_directory(target)
 
     def test_current_proposal_resolves_without_independent_transitive_pins(self):
         # Public PR 34 inputs at d8f8a9afa44a36c7c4c4c8636d3a1b08d5cf9c1d.

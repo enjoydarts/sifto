@@ -422,7 +422,7 @@ class PRCITests(unittest.TestCase):
             self.wait(self.start())
             self.assertEqual(self.f.posts, [])
 
-    def test_http_rejection_preserves_only_safe_status_for_live_diagnostic(self):
+    def test_http_rejection_reports_safe_status_without_transport_secrets(self):
         for code in (403, 404):
             self.f = Fixture()
             self.f.post_error = HTTPError('https://secret-url', code, 'secret-token', {}, None)

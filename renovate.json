@@ -40,6 +40,10 @@
       "groupName": "Docker image digests"
     },
     {
+      "matchUpdateTypes": ["pin", "pinDigest"],
+      "recreateWhen": "never"
+    },
+    {
       "matchManagers": ["pip-compile"],
       "matchDepTypes": ["indirect"],
       "rangeStrategy": "update-lockfile",

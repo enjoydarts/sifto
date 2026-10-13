@@ -25,6 +25,11 @@ import { generateUpdate } from '/usr/local/renovate/dist/workers/repository/proc
 import { get as getVersioning } from '/usr/local/renovate/dist/modules/versioning/index.js';
 import { getRangeStrategy } from '/usr/local/renovate/dist/modules/manager/index.js';
 import { extractPackageFile as extractGoMod } from '/usr/local/renovate/dist/modules/manager/gomod/extract.js';
+import { getConfig } from '/usr/local/renovate/dist/config/defaults.js';
+import { mergeChildConfig } from '/usr/local/renovate/dist/config/utils.js';
+import { resolveConfigPresets } from '/usr/local/renovate/dist/config/presets/index.js';
+import { branchifyUpgrades } from '/usr/local/renovate/dist/workers/repository/updates/branchify.js';
+import { prAlreadyExisted } from '/usr/local/renovate/dist/workers/repository/update/branch/check-existing.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -39,6 +44,7 @@ assert.equal(context, 'renovate/stability-days');
 const calls = [];
 let currentStatuses = [];
 let canWriteStatuses = false;
+const closedPrs = [];
 
 try {
   await initLogger();
@@ -200,6 +206,7 @@ require (
     autoMergeAllowed: false,
   } } });
   githubApi.getJsonUnchecked = async (url) => {
+    if (url === `repos/${repository}/pulls?per_page=100&state=all&sort=updated&direction=desc&page=1`) return { body: closedPrs, headers: {} };
     if (url === `repos/${repository}/commits/${commit}/statuses`) return { body: currentStatuses };
     if (url === `repos/${repository}/commits/${branchName}/status`) return { body: { state: currentStatuses[0]?.state ?? 'pending', statuses: currentStatuses } };
     throw new Error(`Unexpected GitHub read: ${url}`);
@@ -212,6 +219,95 @@ require (
     return { body };
   };
   await initRepo({ repository, gitUrl: 'ssh', renovateUsername: 'github-actions[bot]' });
+
+  // Resolve the shipped recommended presets and update-type/group defaults,
+  // then run actual branch generation and closed-PR lookup. This catches a
+  // rule that matches JSON but loses precedence during pin/group normalization.
+  const resolved = mergeChildConfig(getConfig(), (await resolveConfigPresets(repositoryConfig)).config);
+  const legacy = { ...resolved, packageRules: resolved.packageRules.filter((rule) =>
+    !(rule.recreateWhen === 'never' && rule.matchUpdateTypes?.includes('pin'))) };
+  const fixtures = [];
+  for (const updateType of ['pinDigest', 'pin', 'digest', 'minor', 'patch', 'major']) {
+    for (const maintenance of updateType === 'pin' ? [false] : [false, true]) {
+      const docker = ['pinDigest', 'digest'].includes(updateType);
+      const manager = docker ? 'dockerfile' : maintenance ? 'pip-compile' : 'npm';
+      const packageFile = docker ? maintenance ? 'infra/maintenance/Dockerfile' : 'api/Dockerfile'
+        : maintenance ? 'infra/maintenance/requirements.in' : 'web/package.json';
+      const deps = ['fixture-a', 'fixture-b'].map((depName, index) => ({
+        depName, packageName: depName, datasource: docker ? 'docker' : maintenance ? 'pypi' : 'npm',
+        currentValue: `${updateType === 'pin' ? '^' : ''}${index + 1}.0.0`, currentVersion: `${index + 1}.0.0`,
+        ...(updateType === 'digest' ? { currentDigest: `sha256:${'a'.repeat(64)}` } : {}),
+        updates: [{ updateType,
+          newMajor: index + (updateType === 'major' ? 2 : 1),
+          newVersion: `${index + (updateType === 'major' ? 2 : 1)}.${updateType === 'minor' ? 1 : 0}.${updateType === 'patch' ? 1 : 0}`,
+          newValue: `${index + (updateType === 'major' ? 2 : 1)}.${updateType === 'minor' ? 1 : 0}.${updateType === 'patch' ? 1 : 0}`,
+          ...(updateType.endsWith('Digest') || updateType === 'digest' ? { newDigest: `sha256:${String(index + 1).repeat(64)}` } : {}),
+        }],
+      }));
+      const generate = async (config, dependencyFixture = deps) => (await branchifyUpgrades({
+        ...config, semanticCommits: 'disabled', baseBranch: 'main', repoIsOnboarded: true, errors: [], warnings: [],
+      }, { [manager]: [{ packageFile, deps: structuredClone(dependencyFixture) }] })).branches;
+      const before = await generate(legacy);
+      const after = await generate(resolved);
+      assert.ok(after.length > 0, `${updateType}: updates must remain enabled`);
+      assert.equal(after.length, before.length);
+      for (const branch of after) {
+        const previous = before.find((entry) => entry.branchName === branch.branchName);
+        assert.ok(previous, `${updateType}: branch identity must remain unchanged`);
+        assert.equal(branch.prTitle, previous.prTitle);
+        assert.equal(branch.minimumReleaseAge, '7 days');
+        assert.equal(branch.automerge, false);
+        assert.equal(branch.platformAutomerge, false);
+        assert.equal(branch.pinDigests, true);
+        assert.equal(branch.upgrades.length, previous.upgrades.length);
+        if (maintenance) assert.equal(branch.groupName, activationGroup);
+        if (['pin', 'pinDigest'].includes(updateType)) {
+          assert.equal(previous.recreateClosed, true, `${updateType}: default immortal pin group reproduces the bug`);
+          assert.equal(branch.recreateClosed, false, `${updateType}: closed pin proposal must be respected`);
+          assert.ok(branch.upgrades.every((upgrade) => upgrade.recreateWhen === 'never'));
+        } else {
+          assert.equal(branch.recreateWhen, previous.recreateWhen, `${updateType}: retain version/digest policy`);
+          assert.equal(branch.recreateClosed, previous.recreateClosed);
+        }
+        fixtures.push({ branch, previous, updateType });
+      }
+      if (!['pin', 'pinDigest'].includes(updateType)) {
+        const future = deps.map((dep, index) => ({ ...dep, updates: dep.updates.map((update) => ({
+          ...update,
+          ...(!docker ? { newMajor: index + 10, newVersion: `${index + 10}.1.1`, newValue: `${index + 10}.1.1` } : {}),
+          ...(docker ? { newDigest: `sha256:${String(index + 3).repeat(64)}` } : {}),
+        })) }));
+        const futureBranches = await generate(resolved, future);
+        assert.ok(futureBranches.length > 0, `${updateType}: future updates must remain enabled`);
+        for (const branch of futureBranches) fixtures.push({ branch, updateType, future: true });
+      }
+    }
+  }
+  for (const [index, { branch, future }] of fixtures.entries()) {
+    if (future) continue;
+    closedPrs.push({ number: index + 1, title: branch.prTitle, state: 'closed',
+      user: { login: 'github-actions[bot]' }, updated_at: '2026-10-01T00:00:00Z',
+      head: { ref: branch.branchName, repo: { full_name: repository } },
+      base: { ref: 'main' },
+    });
+  }
+  for (const { branch, previous, updateType, future } of fixtures) {
+    const existing = await prAlreadyExisted(branch);
+    if (future) {
+      assert.equal(existing, null, `${updateType}: future version/digest proposals must remain eligible`);
+      continue;
+    }
+    if (['pin', 'pinDigest'].includes(updateType)) {
+      assert.equal(await prAlreadyExisted(previous), null, `${updateType}: legacy behavior ignores closed PR`);
+      assert.equal(existing?.state, 'closed');
+      assert.equal(existing?.title, branch.prTitle);
+      assert.equal(existing?.sourceBranch, branch.branchName);
+    } else {
+      assert.deepEqual(existing, await prAlreadyExisted(previous));
+    }
+  }
+  assert.equal(calls.length, 0, 'Closed-PR policy must only read GitHub');
+  console.log(`Renovate ${installedVersion}: closed pin/pinDigest groups are not recreated; future version/digest updates, seven-day age and maintenance isolation retain their behavior.`);
   const config = { branchName, statusCheckNames: { minimumReleaseAge: context } };
 
   // Missing status write access aborts both waiting and satisfied age checks.

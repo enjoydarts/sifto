@@ -982,6 +982,24 @@ class PipelineTests(unittest.TestCase):
         with patch.dict(os.environ, {'GITHUB_SHA': BASE}): pipeline.discover(self.api)
         self.assertEqual(self.mutations, [])
 
+    def test_reserved_namespace_has_no_candidate_opt_in(self):
+        from inspect import signature
+        self.assertNotIn('_approval_probe', signature(pipeline.candidate).parameters)
+        self.branch = 'renovate-ci/approval-probe-10'
+        with self.assertRaises(TypeError):
+            pipeline.candidate(self.api, 1, SHA, BASE, BASE, _approval_probe={
+                'pr': 1, 'head': SHA, 'source': BASE, 'branch': self.branch})
+        self.assertEqual(self.mutations, [])
+
+    def test_prepare_and_execute_refuse_reserved_namespace_before_mutations(self):
+        plan = self.plan()
+        self.branch = plan['branch'] = 'renovate-ci/approval-probe-10'
+        with self.assertRaisesRegex(policy.Refused, 'Diagnostic'):
+            pipeline.prepare(self.api, 1, SHA, BASE, BASE)
+        with self.assertRaisesRegex(policy.Refused, 'Diagnostic'):
+            self.execute(plan)
+        self.assertEqual(self.mutations, [])
+
     def execute(self, plan):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}):

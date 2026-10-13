@@ -1,0 +1,31 @@
+# TEMPORARY: retire after the completion delivery experiment.
+name: Dependency Completion Probe Static Receiver
+run-name: Completion delivery probe static receiver ${{ github.event.workflow_run.id }}
+on:
+  workflow_run:
+    workflows: [Dependency Completion Delivery Probe]
+    types: [completed]
+    branches: [main]
+permissions: {}
+concurrency:
+  group: dependency-completion-probe-static-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe terminal temporary parent with static filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+          COMPLETION_PROBE_KIND: static
+        run: python3 -B -m dependency_updates.completion_probe

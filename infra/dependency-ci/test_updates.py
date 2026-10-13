@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 import tempfile
 import os
+from datetime import datetime, timezone
 
 SPEC = importlib.util.find_spec('dependency_updates')
 if SPEC:
@@ -13,6 +14,133 @@ if SPEC:
 
 SHA = 'a' * 40
 BASE = 'b' * 40
+
+
+class PythonReleaseAgeTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.find_spec('dependency_updates.release_age')
+        self.assertIsNotNone(spec, 'Python transitive artifact-age policy is missing')
+        from dependency_updates import release_age
+        self.age = release_age
+        self.cutoff = '2026-10-05T00:00:00Z'
+
+    def lock(self, version, hashes=('a' * 64,)):
+        lines = '\n'.join('    --hash=sha256:' + value + (' \\' if i + 1 < len(hashes) else '')
+                          for i, value in enumerate(hashes))
+        return policy.UV_HEADER + 'botocore==' + version + ' \\\n' + lines + '\n    # via boto3\n'
+
+    def release(self, version='1.43.108', timestamp='2026-10-02T12:00:00Z', digest='a' * 64):
+        return {'info': {'name': 'botocore', 'version': version},
+                'urls': [{'digests': {'sha256': digest}, 'upload_time_iso_8601': timestamp,
+                          'yanked': False}]}
+
+    def verify(self, metadata, after=None):
+        reads = []
+        def fetch(name, version):
+            reads.append((name, version))
+            return metadata
+        evidence = self.age.verify_python_release_age(self.lock('1.43.107'),
+                                                     after or self.lock('1.43.108'),
+                                                     self.cutoff, fetch)
+        self.assertEqual(reads, [('botocore', '1.43.108')])
+        return evidence
+
+    def test_cutoff_is_exact_168_hours_and_timezone_independent(self):
+        self.assertEqual(self.age.release_cutoff(datetime(2026, 10, 12, tzinfo=timezone.utc)), self.cutoff)
+
+    def test_mature_hashes_produce_deterministic_evidence(self):
+        evidence = self.verify(self.release())
+        self.assertEqual(evidence, self.verify(self.release()))
+        self.assertEqual(evidence, [{'name': 'botocore', 'version': '1.43.108',
+                                    'artifacts': [{'sha256': 'a' * 64, 'uploaded': '2026-10-02T12:00:00Z'}]}])
+
+    def test_immature_transitive_is_refused_despite_old_enough_direct(self):
+        with self.assertRaisesRegex(policy.Refused, 'seven-day'):
+            self.age.verify_python_release_age(self.lock('1.43.108'), self.lock('1.43.111'), self.cutoff,
+                                              lambda *_: self.release('1.43.111', '2026-10-09T12:00:00Z'))
+
+    def test_recent_extra_wheel_on_an_old_release_is_refused_by_hash(self):
+        metadata = self.release()
+        metadata['urls'].append(self.release(timestamp='2026-10-09T12:00:00Z', digest='b' * 64)['urls'][0])
+        with self.assertRaisesRegex(policy.Refused, 'seven-day'):
+            self.verify(metadata, self.lock('1.43.108', ('a' * 64, 'b' * 64)))
+
+    def test_unknown_yanked_missing_or_ambiguous_metadata_is_refused(self):
+        invalid = []
+        for key, value in [('yanked', True), ('upload_time_iso_8601', None),
+                           ('upload_time_iso_8601', '2026-10-02'),
+                           ('digests', {'sha256': 'b' * 64})]:
+            metadata = self.release()
+            metadata['urls'][0][key] = value
+            invalid.append(metadata)
+        for info in [{'name': 'another', 'version': '1.43.108'},
+                     {'name': 'botocore', 'version': '1.43.111'}]:
+            invalid.append({**self.release(), 'info': info})
+        invalid.extend([{}, {'info': self.release()['info'], 'urls': []}])
+        for metadata in invalid:
+            with self.subTest(metadata=metadata), self.assertRaises(policy.Refused):
+                self.verify(metadata)
+
+    def test_unchanged_and_removed_packages_need_no_new_release_requests(self):
+        fetch = Mock(side_effect=AssertionError('Unexpected release metadata read'))
+        original = self.lock('1.43.108')
+        self.assertEqual(self.age.verify_python_release_age(original, original, self.cutoff, fetch), [])
+        fetch.assert_not_called()
+
+    def test_hash_only_change_is_still_age_checked(self):
+        with self.assertRaises(policy.Refused):
+            self.age.verify_python_release_age(self.lock('1.43.108'), self.lock('1.43.108', ('b' * 64,)),
+                                              self.cutoff, lambda *_: self.release())
+
+    def test_public_metadata_transport_is_bounded_and_never_follows_redirects(self):
+        from urllib.error import HTTPError
+        for failure in (TimeoutError(), HTTPError('https://pypi.org', 302, 'redirect', {}, None),
+                        ValueError('Invalid JSON')):
+            with self.subTest(failure=type(failure).__name__):
+                transport = Mock(side_effect=failure)
+                with self.assertRaises(policy.Refused):
+                    self.age.PyPI(transport=transport).release('botocore', '1.43.108')
+                transport.assert_called_once()
+        for name, version in (('../private', '1.0'), ('botocore', '1/../../private'),
+                              ('https://internal', '1.0'), ('botocore', '')):
+            transport = Mock(side_effect=AssertionError('Unvalidated metadata target'))
+            with self.subTest(name=name, version=version), self.assertRaises(policy.Refused):
+                self.age.PyPI(transport=transport).release(name, version)
+            transport.assert_not_called()
+
+    def test_changed_package_and_artifact_inventory_limits_fail_closed(self):
+        metadata = self.release()
+        metadata['urls'] *= 5001
+        with self.assertRaises(policy.Refused):
+            self.verify(metadata)
+
+    def test_strict_timezone_timestamps_and_duplicate_artifacts_fail_closed(self):
+        for timestamp in ['2026-10-02T12:00:00', '2026-10-02T12:00:00+00:00junk',
+                          '2026-02-30T12:00:00Z', '2026-10-02T12:00:00+00:60',
+                          123, '2026-10-05T00:00:00.000001Z']:
+            with self.subTest(timestamp=timestamp), self.assertRaises(policy.Refused):
+                self.verify(self.release(timestamp=timestamp))
+        metadata = self.release()
+        metadata['urls'] *= 2
+        with self.assertRaises(policy.Refused):
+            self.verify(metadata)
+
+    def test_cutoff_accepts_timezone_but_refuses_naive_inputs(self):
+        from datetime import timedelta
+        tokyo = timezone(timedelta(hours=9))
+        self.assertEqual(self.age.release_cutoff(datetime(2026, 10, 12, 9, tzinfo=tokyo)), self.cutoff)
+        with self.assertRaises(policy.Refused):
+            self.age.release_cutoff(datetime(2026, 10, 12))
+
+    def test_removed_package_and_removed_hash_do_not_introduce_artifacts(self):
+        before = self.lock('1.43.108', ('a' * 64, 'b' * 64))
+        fetch = Mock(side_effect=AssertionError('No introduced artifacts'))
+        self.assertEqual(self.age.verify_python_release_age(before, self.lock('1.43.108'), self.cutoff, fetch), [])
+
+    def test_boundary_and_offset_timestamp_are_compared_in_utc(self):
+        evidence = self.verify(self.release(timestamp='2026-10-05T09:00:00+09:00'))
+        self.assertEqual(evidence[0]['artifacts'][0]['uploaded'], self.cutoff)
+
 
 # Public data captured from the actual Go Bot PR #24; no candidate code runs.
 GO_BOT24_BEFORE = """module github.com/enjoydarts/sifto/api
@@ -806,7 +934,7 @@ class PipelineTests(unittest.TestCase):
         raise AssertionError('Unexpected controlled API request: ' + endpoint)
 
     def plan(self):
-        value = pipeline.candidate(self.api, 1, SHA, BASE, BASE)
+        value = pipeline.candidate(self.api, 1, SHA, BASE, BASE, python_cutoff='2026-10-05T00:00:00Z')
         value['ci_run'] = 15
         return value
 
@@ -815,6 +943,94 @@ class PipelineTests(unittest.TestCase):
             with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}):
                 pipeline.execute(self.api, plan, policy.plan_hash(plan))
                 self.summary = Path(directory + '/summary').read_text()
+
+    def python_candidate(self, uploaded='2026-10-02T12:00:00Z'):
+        import base64
+        before = policy.UV_HEADER + 'botocore==1.43.107 \\\n    --hash=sha256:' + 'a' * 64 + '\n    # via boto3\n'
+        after = before.replace('1.43.107', '1.43.108')
+        self.paths = ['worker/requirements.txt']
+        transport = self.transport
+        def content(method, path, body):
+            if path.startswith('/contents/'):
+                value = before if 'ref=' + BASE in path else after
+                return {'type': 'file', 'encoding': 'base64', 'size': len(value), 'content': base64.b64encode(value.encode()).decode()}
+            return transport(method, path, body)
+        self.api = github.GitHub(self.repo, transport=content)
+        metadata = {'info': {'name': 'botocore', 'version': '1.43.108'}, 'urls': [
+            {'digests': {'sha256': 'a' * 64}, 'upload_time_iso_8601': uploaded, 'yanked': False}]}
+        return metadata
+
+    def test_normal_candidate_requires_independent_python_artifact_age(self):
+        metadata = self.python_candidate('2026-10-09T00:00:00Z')
+        with patch('dependency_updates.release_age.PyPI.release', return_value=metadata), self.assertRaisesRegex(policy.Refused, 'seven-day'):
+            self.plan()
+        self.assertEqual(self.mutations, [])
+
+    def test_execution_keeps_prepared_cutoff_despite_clock_advance(self):
+        metadata = self.python_candidate()
+        with patch('dependency_updates.release_age.PyPI.release', return_value=metadata):
+            plan = self.plan()
+            self.assertEqual(plan['python_age']['cutoff'], '2026-10-05T00:00:00Z')
+            with patch('dependency_updates.release_age.release_cutoff', side_effect=AssertionError('Prepared cutoff must be reused')):
+                self.execute(plan)
+
+    def test_metadata_change_or_outage_invalidates_approval_before_merge(self):
+        for outage in (False, True):
+            with self.subTest(outage=outage):
+                self.setUp()
+                metadata = self.python_candidate()
+                with patch('dependency_updates.release_age.PyPI.release', return_value=metadata):
+                    plan = self.plan()
+                metadata['urls'][0]['upload_time_iso_8601'] = '2026-10-03T12:00:00Z'
+                with patch('dependency_updates.release_age.PyPI.release',
+                           side_effect=policy.Refused('Unavailable') if outage else None,
+                           return_value=metadata), self.assertRaises(policy.Refused):
+                    self.execute(plan)
+                self.assertEqual(self.mutations, [])
+
+    def test_large_verified_artifact_inventory_has_bounded_immutable_approval_evidence(self):
+        import base64
+        hashes = ['%064x' % index for index in range(1000)]
+        before = policy.UV_HEADER + 'fixture==1.0.0 \\\n    --hash=sha256:' + 'f' * 64 + '\n    # via -r requirements.in\n'
+        after = policy.UV_HEADER + 'fixture==1.0.1 \\\n' + '\n'.join(
+            '    --hash=sha256:' + digest + (' \\' if index < 999 else '')
+            for index, digest in enumerate(hashes)) + '\n    # via -r requirements.in\n'
+        self.paths = ['worker/requirements.txt']
+        transport = self.transport
+        def contents(method, path, body):
+            if path.startswith('/contents/'):
+                text = before if 'ref=' + BASE in path else after
+                return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
+            return transport(method, path, body)
+        self.api = github.GitHub(self.repo, transport=contents)
+        metadata = {'info': {'name': 'fixture', 'version': '1.0.1'}, 'urls': [
+            {'digests': {'sha256': digest}, 'upload_time_iso_8601': '2026-10-02T12:00:00Z', 'yanked': False}
+            for digest in hashes]}
+        with patch('dependency_updates.release_age.PyPI.release', return_value=metadata):
+            plan = self.plan()
+            self.assertLess(len(base64.b64encode(policy.canonical(plan).encode())), 48_000)
+            release = plan['python_age']['locks'][0]['releases'][0]
+            self.assertEqual(release['artifact_count'], 1000)
+            self.assertRegex(release['artifacts_sha256'], r'^[0-9a-f]{64}$')
+            # A changed oldest timestamp still invalidates the digest even
+            # when the count and latest publication remain the same.
+            metadata['urls'][0]['upload_time_iso_8601'] = '2026-10-01T12:00:00Z'
+            with self.assertRaises(policy.Refused):
+                self.execute(plan)
+        self.assertEqual(self.mutations, [])
+
+    def test_security_bypass_is_explicit_and_only_emergency_namespace_can_use_it(self):
+        metadata = self.python_candidate('2026-10-09T00:00:00Z')
+        self.branch = 'dependency-security/critical'
+        self.author = 'enjoydarts'
+        self.labels = [{'name': 'dependency-security'}]
+        self.body = 'Security fix: critical advisory'
+        with patch('dependency_updates.release_age.PyPI.release', side_effect=AssertionError('Explicit emergency exemption')):
+            self.assertEqual(self.plan()['python_age'], {'policy': 'emergency-security-bypass', 'cutoff': None, 'locks': []})
+        self.branch = 'renovate-ci/python'
+        self.author = 'github-actions[bot]'
+        with patch('dependency_updates.release_age.PyPI.release', return_value=metadata), self.assertRaises(policy.Refused):
+            self.plan()
 
     def test_approved_candidate_merges_once_then_explicitly_deploys_exact_merge(self):
         self.execute(self.plan())
@@ -1000,7 +1216,7 @@ class PipelineTests(unittest.TestCase):
                     self.execute(self.plan())
                 self.assertEqual(self.mutations, [])
 
-    def test_large_python_hash_diff_has_bounded_summary_and_immutable_full_blob(self):
+    def test_unverified_python_hash_diff_is_refused_and_emergency_summary_keeps_full_blob(self):
         import base64
         import hashlib
         import re
@@ -1014,6 +1230,16 @@ class PipelineTests(unittest.TestCase):
                 return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
             return transport(method, path, body)
         self.api = github.GitHub(self.repo, transport=content_transport)
+        # Arbitrary hash changes are never normal candidates without official
+        # artifact evidence. The explicit legacy emergency exemption retains
+        # the existing bounded summary/full-blob approval contract.
+        with patch('dependency_updates.release_age.PyPI.release', side_effect=policy.Refused('Unverified artifact')):
+            with self.assertRaises(policy.Refused):
+                self.plan()
+        self.branch = 'dependency-security/hash-fixture'
+        self.author = 'enjoydarts'
+        self.labels = [{'name': 'dependency-security'}]
+        self.body = 'Security fix: controlled summary fixture'
         plan = self.plan()
         self.assertLess(len(policy.canonical(plan)), 48_000)
         entry = plan['files'][0]

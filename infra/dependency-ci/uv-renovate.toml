@@ -1,0 +1,4 @@
+# Generation only: pinned requirements.in remains the authority for direct
+# dependencies; uv refreshes compatible transitives with the fixed age cutoff.
+[pip]
+upgrade = true

@@ -108,6 +108,7 @@ services:
     tmpfs: [/tmp]
     volumes:
       - ./test-renovate-status.mjs:/fixtures/test-renovate-status.mjs:ro
+      - ./uv-renovate.toml:/fixtures/uv-renovate.toml:ro
       - ../../.github/workflows/renovate.yml:/fixtures/renovate.yml:ro
       - ../../renovate.json:/fixtures/renovate.json:ro
       - ../../worker/requirements.in:/fixtures/worker/requirements.in:ro

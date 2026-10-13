@@ -26,11 +26,17 @@ jobs:
           persist-credentials: false
       # Enable "Allow GitHub Actions to create and approve pull requests".
       # Actions updates remain manual: GITHUB_TOKEN cannot edit workflow files.
+      - name: Fix Python artifact publication cutoff for this generation
+        id: python-age
+        env:
+          PYTHONPATH: infra/dependency-ci
+        run: python3 -B -m dependency_updates.release_age
       - name: Propose dependency updates for native owner approval
         uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
         with:
           token: ${{ github.token }}
           renovate-version: '44.149.3'
+          docker-volumes: '${{ github.workspace }}/infra/dependency-ci/uv-renovate.toml:/sifto-python-generation.toml:ro'
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_REPOSITORIES: ${{ github.repository }}
@@ -39,6 +45,7 @@ jobs:
           RENOVATE_REQUIRE_CONFIG: required
           RENOVATE_GIT_AUTHOR: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
           RENOVATE_USERNAME: 'github-actions[bot]'
+          RENOVATE_CUSTOM_ENV_VARIABLES: ${{ steps.python-age.outputs.custom_env }}
       - name: Request approval pipelines for validated immutable candidates
         env:
           GH_TOKEN: ${{ github.token }}

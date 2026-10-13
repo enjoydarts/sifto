@@ -42,6 +42,16 @@ class PythonLocksTests(unittest.TestCase):
         self.assertEqual(config['minimumReleaseAge'], '7 days')
         self.assertIs(config['pip-compile']['lockFileMaintenance']['enabled'], False)
 
+    def test_generation_refreshes_compatible_transitives_and_check_keeps_preferences(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('boto3==1.43.108\n')
+            (target / 'requirements.txt').write_text('botocore==1.43.107\n')
+            with patch('python_locks.release_cutoff', return_value='2026-10-05T00:00:00Z', create=True):
+                compile_lock(target)
+            self.assertEqual(python_lock((target / 'requirements.txt').read_text())['botocore']['version'], '1.43.108')
+            check_directory(target)
+
     def test_current_proposal_resolves_without_independent_transitive_pins(self):
         # Public PR 34 inputs at d8f8a9afa44a36c7c4c4c8636d3a1b08d5cf9c1d.
         # These reproduce Renovate run 38227994961 without modifying a Bot PR.

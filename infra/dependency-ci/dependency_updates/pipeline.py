@@ -7,6 +7,7 @@ import re
 import time
 from urllib.parse import quote
 from .github import Ambiguous
+from . import release_age
 from .policy import (Refused, SHA, assert_unchanged, canonical, plan_hash, require,
                      validate_change, verify_approval, verify_checks, surfaces)
 
@@ -36,7 +37,7 @@ def blob(api, path, sha):
         raise Refused('Candidate file is not text') from None
 
 
-def candidate(api, number, head, base, source):
+def candidate(api, number, head, base, source, python_cutoff=None):
     require(isinstance(number, int) and 0 < number < 10_000_000 and all(SHA.fullmatch(s) for s in (head, base, source)), 'Invalid immutable candidate inputs')
     require(main_sha(api) == base == source, 'Candidate base and trusted workflow source must equal current main')
     pr = api.get('/pulls/' + str(number))
@@ -55,6 +56,16 @@ def candidate(api, number, head, base, source):
     files = api.pages('/pulls/' + str(number) + '/files')
     require(0 < len(files) <= MAX_FILES and len(files) == pr.get('changed_files'), 'Missing, excessive or truncated dependency diff')
     entries = []
+    python_age = {'policy': 'emergency-security-bypass' if emergency else 'seven-day',
+                  'cutoff': None, 'locks': []}
+    metadata = {}
+    def fetch_release(name, version):
+        key = (name, version)
+        if key not in metadata:
+            require(len(metadata) < release_age.MAX_PACKAGES,
+                    'Changed Python release inventory exceeds policy limit; split the PR')
+            metadata[key] = release_age.PyPI().release(name, version)
+        return metadata[key]
     for entry in files:
         path = entry.get('filename', '')
         require(entry.get('status') == 'modified' and 'previous_filename' not in entry, 'Dependency deletion/addition/rename refused')
@@ -65,6 +76,11 @@ def candidate(api, number, head, base, source):
         validate_change(path, before, after)
         if path in PYTHON_LOCKS:
             changes = python_lock_summary(before, after)
+            if not emergency:
+                if python_age['cutoff'] is None:
+                    python_age['cutoff'] = python_cutoff or release_age.release_cutoff()
+                evidence = release_age.verify_python_release_age(before, after, python_age['cutoff'], fetch_release)
+                python_age['locks'].append({'path': path, 'releases': evidence})
         elif path == 'web/package-lock.json':
             changes = npm_lock_summary(before, after)
         else:
@@ -76,7 +92,10 @@ def candidate(api, number, head, base, source):
         age = next((s for s in statuses if s.get('context') == 'renovate/stability-days'), None)
         require(age is not None and age.get('state') == 'success' and age.get('creator', {}).get('login') == 'github-actions[bot]', 'Renovate seven-day stability status has not succeeded')
     targets = surfaces([entry['path'] for entry in entries])
-    return {'version': 1, 'repo': api.repo, 'pr': number, 'head': head, 'base': base, 'source': source, 'branch': branch, 'emergency': emergency, 'files': entries, 'diff_hash': plan_hash(entries), 'surfaces': targets}
+    plan = {'version': 2, 'repo': api.repo, 'pr': number, 'head': head, 'base': base, 'source': source, 'branch': branch, 'emergency': emergency, 'files': entries, 'diff_hash': plan_hash(entries), 'surfaces': targets, 'python_age': python_age}
+    require(len(base64.b64encode(canonical(plan).encode())) < 47_900,
+            'Python artifact evidence or dependency plan exceeds immutable output limit; split the PR')
+    return plan
 
 
 def run_name(plan):
@@ -216,7 +235,8 @@ def prepare(api, number, head, base, source):
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Reruns require a fresh candidate approval request')
     run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head})
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
-    assert_unchanged(plan, candidate(api, number, head, base, source), plan_hash(plan))
+    assert_unchanged(plan, candidate(api, number, head, base, source,
+                                   python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
     plan['ci_run'] = run['id']
     digest = plan_hash(plan)
     encoded = base64.b64encode(canonical(plan).encode()).decode()
@@ -236,7 +256,16 @@ def prepare(api, number, head, base, source):
             summary.write('Development environment image references only; live PostgreSQL/Redis/Inngest are not activated by this change.\n\n')
         if 'ci' in plan['surfaces']:
             summary.write('CI/bootstrap test image references apply to subsequent tests; no live executor activation.\n\n')
-        summary.write('**Release-age policy:** %s\n\n' % ('Emergency security fix: seven-day wait bypassed; CI and owner gate remain required.' if plan['emergency'] else 'Renovate seven-day stability check succeeded.'))
+        summary.write('**Release-age policy:** %s\n\n' % ('Emergency security fix: explicit seven-day bypass; CI and owner gate remain required.' if plan['emergency'] else 'Renovate stability check succeeded; changed Python artifacts independently verified against official PyPI hashes and publication times.'))
+        if plan['python_age']['cutoff']:
+            summary.write('**Fixed Python publication cutoff (UTC):** `%s`\n\n' % plan['python_age']['cutoff'])
+            for lock in plan['python_age']['locks']:
+                summary.write('**Python artifact evidence for `%s`:**\n\n' % lock['path'])
+                for release in lock['releases']:
+                    summary.write('- `%s==%s`: %d introduced artifacts; latest publication `%s`\n' % (
+                        release['name'], release['version'], len(release['artifacts']),
+                        max(artifact['uploaded'] for artifact in release['artifacts'])))
+                summary.write('\n')
         for entry in plan['files']:
             summary.write('- `%s`: +%s / -%s; candidate blob SHA256 `%s`\n' % (entry['path'], entry['additions'], entry['deletions'], entry['after']))
             summary.write('\n```diff\n' + '\n'.join(entry['changes']) + '\n```\n\n')
@@ -269,7 +298,10 @@ def execute(api, plan, digest):
     run = api.get('/actions/runs/' + str(run_id))
     require(run.get('event') == 'workflow_dispatch' and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source'] and run.get('path') == '.github/workflows/' + WORKFLOW and run.get('run_attempt') == 1, 'Approval run source mismatch')
     verify_approval(api.get('/actions/runs/%d/approvals' % run_id), run.get('actor', {}).get('login'))
-    current = candidate(api, plan['pr'], plan['head'], plan['base'], plan['source'])
+    require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
+            'Prepared plan has no fixed Python artifact-age evidence; prepare again')
+    current = candidate(api, plan['pr'], plan['head'], plan['base'], plan['source'],
+                        python_cutoff=plan['python_age']['cutoff'])
     current['ci_run'] = plan['ci_run']
     assert_unchanged(plan, current, digest)
     ci = api.get('/actions/runs/%d' % plan['ci_run'])

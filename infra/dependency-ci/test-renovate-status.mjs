@@ -48,13 +48,17 @@ try {
   assert.equal(action.env.RENOVATE_CUSTOM_ENV_VARIABLES, '${{ steps.python-age.outputs.custom_env }}');
   const cutoffStep = workflow.jobs.renovate.steps.find((step) => step.id === 'python-age');
   assert.ok(cutoffStep && cutoffStep.run.includes('dependency_updates.release_age'));
+  assert.equal(action.with['docker-volumes'], '${{ github.workspace }}/infra/dependency-ci/uv-renovate.toml:/sifto-python-generation.toml:ro');
   const cutoff = '2026-10-05T00:00:00Z';
   const option = getOptions().find((entry) => entry.name === 'customEnvVariables');
   assert.ok(option && option.globalOnly);
-  setCustomEnv({ UV_EXCLUDE_NEWER: cutoff });
+  const uvConfig = '/sifto-python-generation.toml';
+  setCustomEnv({ UV_EXCLUDE_NEWER: cutoff, UV_CONFIG_FILE: uvConfig });
   GlobalConfig.set({ localDir: directory, cacheDir: directory, exposeAllEnv: false });
   const execOptions = await getExecOptions(repositoryConfig, 'uv', directory, {}, '3.12');
   assert.equal(getChildEnv(execOptions).UV_EXCLUDE_NEWER, cutoff);
+  assert.equal(getChildEnv(execOptions).UV_CONFIG_FILE, uvConfig);
+  assert.match(readFileSync('/fixtures/uv-renovate.toml', 'utf8'), /\[pip\]\s+upgrade = true/);
   setCustomEnv({});
   GlobalConfig.set({ localDir: directory });
   // Exercise the real Go parser's disabled indirect dependencies, then apply

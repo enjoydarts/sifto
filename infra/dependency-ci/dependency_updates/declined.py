@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from . import pipeline
 from .followup import (bot, context_id, current_main, positive, registered,
-                       repository, run_identity)
+                       repository)
 from .github import Ambiguous, GitHub
 from .policy import (COMPOSE, DOCKERFILES, PYTHON_INPUTS, PYTHON_LOCKS,
                      Refused, SHA, require)
@@ -138,14 +138,28 @@ def native_history(api, repo_id):
     workflow_id = registered(api, pipeline.WORKFLOW, 'Dependency Approve Merge and Deploy')
     rows = api.pages('/actions/workflows/' + pipeline.WORKFLOW + '/runs?event=workflow_dispatch',
                      'workflow_runs', require_total=True)
+    identifiers = set()
     for row in rows:
+        require(type(row) is dict and positive(row.get('id')) and row['id'] not in identifiers,
+                'Malformed or duplicate consumed native request inventory')
+        identifiers.add(row['id'])
         title = row.get('display_title')
         require(type(title) is str and re.fullmatch(r'Dependency PR [1-9][0-9]{0,6} [0-9a-f]{40} [0-9a-f]{40}', title),
                 'Malformed native request title')
-        run_identity(row, {'id': row['id'], 'workflow_id': workflow_id, 'display_title': title,
-                          'path': '.github/workflows/' + pipeline.WORKFLOW, 'event': 'workflow_dispatch',
-                          'head_branch': 'main', 'head_sha': title.split()[-1],
-                          'status': 'completed', 'conclusion': row.get('conclusion')}, api.repo, repo_id)
+        # This inventory protects every previously requested PR. It grants no
+        # execution authority: an owner dispatch or later manual rerun still
+        # consumes that PR's request without blocking unrelated proposals.
+        require(type(row.get('workflow_id')) is int and row['workflow_id'] == workflow_id
+                and row.get('path') in {'.github/workflows/' + pipeline.WORKFLOW,
+                                        '.github/workflows/' + pipeline.WORKFLOW + '@main'}
+                and row.get('event') == 'workflow_dispatch' and row.get('head_branch') == 'main'
+                and row.get('head_sha') == title.split()[-1] and positive(row.get('run_attempt'))
+                and row.get('status') == 'completed'
+                and row.get('conclusion') in {'success', 'failure', 'cancelled', 'timed_out',
+                                             'neutral', 'skipped', 'action_required', 'stale', 'startup_failure'},
+                'Consumed native request workflow/source/status mismatch')
+        repository(row.get('repository'), api.repo, repo_id)
+        repository(row.get('head_repository'), api.repo, repo_id)
     return rows
 
 

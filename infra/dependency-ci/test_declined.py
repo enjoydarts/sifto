@@ -260,6 +260,34 @@ class DeclinedTests(unittest.TestCase):
         for status in ('waiting', 'completed'):
             self.setUp(); self.runs = [self.native_run(status)]; self.refused()
 
+    def test_completed_owner_rerun_for_unrelated_pr_does_not_block_cleanup(self):
+        run = self.native_run()
+        run.update(run_attempt=2, triggering_actor=OWNER,
+                   display_title='Dependency PR 9 ' + HEAD + ' ' + BASE)
+        self.runs = [run]
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Consumed unrelated historical rerun blocked cleanup: ' + str(exc))
+        self.assertEqual(len(self.requests), 1)
+        self.deleted.assert_called_once()
+
+    def test_completed_owner_rerun_or_dispatch_for_same_pr_protects_it(self):
+        for attempt in (1, 2):
+            with self.subTest(attempt=attempt):
+                self.setUp()
+                self.runs = [{**self.native_run(), 'run_attempt': attempt,
+                              'actor': OWNER, 'triggering_actor': OWNER}]
+                self.refused()
+
+    def test_completed_owner_dispatch_for_unrelated_pr_does_not_block_cleanup(self):
+        run = self.native_run()
+        run.update(actor=OWNER, triggering_actor=OWNER,
+                   display_title='Dependency PR 9 ' + HEAD + ' ' + BASE)
+        self.runs = [run]
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Consumed unrelated owner dispatch blocked cleanup: ' + str(exc))
+        self.assertEqual(len(self.requests), 1)
+        self.deleted.assert_called_once()
+
     def test_owner_decision_or_head_race_is_rechecked_before_mutation(self):
         for endpoint, change in [('/pulls/34', lambda: self.old.update(state='open')),
                                  ('/pulls/58', lambda: self.current['head'].update(sha=OLD)),

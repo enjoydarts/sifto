@@ -267,8 +267,32 @@ def cleanup(api, context, now=None):
                 and result.get('merged') is False, 'Declined close acknowledgement rejected')
         closed = api.get('/pulls/%d' % number)
         proposal(closed, api.repo, repo_id, 'closed')
-        require(closed['number'] == number and closed['head'] == current['head']
-                and closed['base'] == current['base'], 'Closed proposal changed; branch deletion refused')
+        immutable = ('number', 'title', 'user', 'head', 'base', 'changed_files', 'created_at')
+        require(all(closed.get(key) == current.get(key) for key in immutable),
+                'Closed proposal changed; branch deletion refused')
+        # The acknowledged close consumes the mutation; these are fresh read
+        # authorities for the separate Git mutation. A native request or owner
+        # decision can change while PATCH and its readback are in flight.
+        now = fixed_now or datetime.now(timezone.utc)
+        require(authority(api, context, now) == trusted,
+                'Trusted writer changed after close; branch retained')
+        require(api.get('/pulls/%d' % old['number']) == old
+                and decision(api, old, owner, now) == vote and inventory(api, old) == files,
+                'Owner declined proposal changed after close; branch retained')
+        closed = api.get('/pulls/%d' % number)
+        proposal(closed, api.repo, repo_id, 'closed')
+        require(all(closed.get(key) == current.get(key) for key in immutable),
+                'Closed proposal changed during deletion validation; branch retained')
+        require(inventory(api, closed) == files,
+                'Closed proposal file inventory changed; branch retained')
+        require(api.get('/git/ref/heads/' + quote(branch, safe='/')).get('object', {}).get('sha') == current['head']['sha'],
+                'Proposal branch head changed after close; branch retained')
+        deletion_history = native_history(api, repo_id)
+        require(deletion_history is not None and not requested(deletion_history, number),
+                'Native approval started after close; branch retained')
+        current_main(api, source)
+        require((fixed_now or datetime.now(timezone.utc)) <= started + timedelta(minutes=45),
+                'Cleanup writer expired before branch deletion; branch retained')
         outcome = delete_branch(api, branch, current['head']['sha'])
         print('Exact owner-declined PR %d closed; branch deletion %s' % (number, outcome))
         if outcome != 'deleted':

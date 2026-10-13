@@ -48,6 +48,7 @@ class DeclinedTests(unittest.TestCase):
         self.runs, self.requests, self.reads = [], [], []
         self.mutate_read = None
         self.close_error = None
+        self.after_close = None
         self.deleted = Mock(return_value='deleted')
         self.api = github.GitHub(self.repo['full_name'], self.transport)
 
@@ -63,6 +64,7 @@ class DeclinedTests(unittest.TestCase):
             self.requests.append((method, path, body))
             if self.close_error: raise self.close_error
             self.current['state'] = 'closed'
+            if self.after_close: self.after_close()
             return copy.deepcopy(self.current)
         self.reads.append(path)
         if self.mutate_read: self.mutate_read(endpoint)
@@ -295,6 +297,66 @@ class DeclinedTests(unittest.TestCase):
             with self.assertRaises(policy.Refused): self.clean()
             self.assertEqual(len(self.requests), 1); self.deleted.assert_not_called()
 
+    def test_native_active_or_historical_request_starting_at_close_ack_preserves_branch(self):
+        for status in ('waiting', 'completed'):
+            with self.subTest(status=status):
+                self.setUp()
+                self.after_close = lambda: self.runs.append(self.native_run(status))
+                with self.assertRaises(policy.Refused): self.clean()
+                self.assertEqual(len(self.requests), 1)
+                self.deleted.assert_not_called()
+
+    def test_native_request_starting_during_closed_pr_readback_preserves_branch(self):
+        for status in ('waiting', 'completed'):
+            with self.subTest(status=status):
+                self.setUp()
+                def race(endpoint):
+                    if endpoint == '/pulls/58' and self.current['state'] == 'closed':
+                        self.runs = [self.native_run(status)]
+                self.mutate_read = race
+                with self.assertRaises(policy.Refused): self.clean()
+                self.assertEqual(len(self.requests), 1)
+                self.deleted.assert_not_called()
+
+    def test_owner_or_file_changes_at_close_ack_preserve_branch(self):
+        changes = [lambda: self.old.update(state='open'),
+                   lambda: self.events.append({'id': 2, 'event': 'reopened', 'actor': OWNER,
+                                               'created_at': '2026-10-13T00:05:00Z'}),
+                   lambda: self.old_files[0].update(sha='9' * 40),
+                   lambda: self.files[0].update(sha='9' * 40),
+                   lambda: self.current.update(title='Changed proposal')]
+        for change in changes:
+            with self.subTest(change=change):
+                self.setUp(); self.after_close = change
+                with self.assertRaises(policy.Refused): self.clean()
+                self.assertEqual(len(self.requests), 1)
+                self.deleted.assert_not_called()
+
+    def test_main_or_writer_changes_after_close_ack_preserve_branch(self):
+        for endpoint in ('/branches/main', '/actions/runs/99', '/git/ref/heads/renovate-ci/python'):
+            with self.subTest(endpoint=endpoint):
+                self.setUp(); original = self.api.transport
+                def transport(method, path, body):
+                    value = original(method, path, body)
+                    if self.current['state'] == 'closed' and path == endpoint:
+                        if endpoint == '/branches/main': value['commit']['sha'] = OLD
+                        elif endpoint == '/actions/runs/99': value['run_attempt'] = 2
+                        else: value['object']['sha'] = OLD
+                    return value
+                self.api.transport = transport
+                with self.assertRaises(policy.Refused): self.clean()
+                self.assertEqual(len(self.requests), 1)
+                self.deleted.assert_not_called()
+
+    def test_current_reopened_during_post_ack_authority_reads_preserves_branch(self):
+        def race(endpoint):
+            if endpoint == '/actions/runs/99' and self.current['state'] == 'closed':
+                self.current['state'] = 'open'
+        self.mutate_read = race
+        with self.assertRaises(policy.Refused): self.clean()
+        self.assertEqual(len(self.requests), 1)
+        self.deleted.assert_not_called()
+
     def test_unconfirmed_git_deletion_is_audited_without_replay(self):
         self.deleted.return_value = 'unconfirmed'
         with self.assertRaisesRegex(policy.Refused, 'audit required'): self.clean()
@@ -332,6 +394,15 @@ class DeclinedTests(unittest.TestCase):
         with patch.object(self.module, 'datetime', clock), patch.object(self.module, 'timestamp', side_effect=lambda value: datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)), patch.object(self.module, 'validate_ref'), patch.object(self.module, 'delete_branch', self.deleted):
             self.module.cleanup(self.api, self.context)
         self.assertEqual(self.requests, [])
+        self.deleted.assert_not_called()
+
+    def test_writer_expiry_after_close_ack_preserves_branch(self):
+        clock = Mock()
+        clock.now.side_effect = [NOW, NOW, NOW, NOW, NOW.replace(hour=2)]
+        with patch.object(self.module, 'datetime', clock), patch.object(self.module, 'timestamp', side_effect=lambda value: datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)), patch.object(self.module, 'validate_ref'), patch.object(self.module, 'delete_branch', self.deleted):
+            with self.assertRaisesRegex(policy.Refused, 'expired before branch deletion'):
+                self.module.cleanup(self.api, self.context)
+        self.assertEqual(len(self.requests), 1)
         self.deleted.assert_not_called()
 
 

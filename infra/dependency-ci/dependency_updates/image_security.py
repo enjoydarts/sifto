@@ -24,6 +24,13 @@ NAME = 'Dependency Security Advisory'
 PARENT = 'dependency-update.yml'
 PARENT_NAME = 'Dependency Approve Merge and Deploy'
 WAIT_SECONDS = 80 * 60
+# github.token shares 1,000 REST requests/hour with the whole repository.
+# Cheap pinned-run reads use at most 60/hour. Full authority/history polling
+# targets at most 180/hour, leaving ample quota for final collection and other
+# repository workflows, even at the full 20-page history limit.
+POLL_SECONDS = 60
+AUTHORITY_SECONDS = 5 * 60
+AUTHORITY_READS_PER_HOUR = 180
 MAX_ZIP = 8 * 1024 * 1024
 MAX_EXPANDED = 40 * 1024 * 1024
 MAX_MEMBER = 12 * 1024 * 1024
@@ -284,14 +291,14 @@ def history(api, marker):
         if run['display_title'] == marker:
             matches.append(run)
     require(len(matches) <= 1, 'Ambiguous image workflow marker; no replay')
-    return matches, max(identifiers, default=0)
+    return matches, max(identifiers, default=0), len(runs) // 100 + 1
 
 
 def start(api, plan, phase, head, ref):
     parent_id, repo_id, parent_workflow = caller(api, plan, phase, head, ref)
     workflow_id = registered(api, WORKFLOW, NAME)
     marker = 'Dependency image scan %d %s %s' % (parent_id, phase, head)
-    matches, after_id = history(api, marker)
+    matches, after_id, _ = history(api, marker)
     require(not matches, 'Image marker already consumed; no replay')
     # Recheck source and native identity before the sole mutation. Unknown POST
     # results fail the parent and are audited, never redispatched or adopted.
@@ -414,7 +421,7 @@ def collect(api, plan, ticket, run_id):
             require(time.monotonic() < ticket['deadline'], 'Image scan evidence deadline exhausted')
     budget()
     validate_ticket(api, plan, ticket)
-    matches, _ = history(api, ticket['marker'])
+    matches, _, _ = history(api, ticket['marker'])
     require(len(matches) == 1 and matches[0]['id'] == run_id, 'Image scan marker missing or ambiguous')
     child(api, ticket, matches[0])
     run = api.get('/actions/runs/%d' % run_id)
@@ -454,7 +461,7 @@ def collect(api, plan, ticket, run_id):
             and api.pages('/actions/runs/%d/jobs?filter=all' % run_id, 'jobs', require_total=True) == jobs,
             'Image evidence changed during validation')
     validate_ticket(api, plan, ticket)
-    final_matches, _ = history(api, ticket['marker'])
+    final_matches, _, _ = history(api, ticket['marker'])
     require(len(final_matches) == 1 and final_matches[0]['id'] == run_id, 'Image scan history changed during validation')
     child(api, ticket, final_matches[0])
     require(final_matches[0].get('status') == 'completed'
@@ -467,17 +474,32 @@ def collect(api, plan, ticket, run_id):
 
 def wait(api, plan, ticket):
     require(type(ticket.get('deadline')) in (int, float), 'Bounded image scan deadline missing')
+    run_id, next_authority = None, 0
     while time.monotonic() < ticket['deadline']:
-        validate_ticket(api, plan, ticket)
-        matches, _ = history(api, ticket['marker'])
+        if time.monotonic() >= next_authority:
+            validate_ticket(api, plan, ticket)
+            matches, _, pages = history(api, ticket['marker'])
+            if matches:
+                child(api, ticket, matches[0])
+                require(run_id is None or matches[0]['id'] == run_id, 'Pinned image run changed during wait')
+                run_id = matches[0]['id']
+            else:
+                require(run_id is None, 'Pinned image workflow history disappeared')
+            # Six authority GETs plus every full history page are paced as one
+            # batch. Missing marker visibility cannot cause a fast full scan.
+            next_authority = time.monotonic() + max(AUTHORITY_SECONDS,
+                (6 + pages) * 3600 / AUTHORITY_READS_PER_HOUR)
         require(time.monotonic() < ticket['deadline'], 'Image scan evidence deadline exhausted')
-        if matches:
-            child(api, ticket, matches[0])
-            if matches[0].get('status') == 'completed':
-                evidence = collect(api, plan, ticket, matches[0]['id'])
+        if run_id is not None:
+            run = api.get('/actions/runs/%d' % run_id)
+            require(type(run) is dict and run.get('id') == run_id, 'Pinned actual image run ID changed')
+            child(api, ticket, run)
+            if run.get('status') == 'completed':
+                # No cached parent/history authority can authorize success.
+                evidence = collect(api, plan, ticket, run_id)
                 require(time.monotonic() < ticket['deadline'], 'Image scan evidence deadline exhausted')
                 return evidence
-        time.sleep(min(10, max(0, ticket['deadline'] - time.monotonic())))
+        time.sleep(min(POLL_SECONDS, max(0, ticket['deadline'] - time.monotonic())))
     raise Refused('Timed out waiting for complete image evidence; audit required, no replay')
 
 

@@ -157,6 +157,87 @@ class PRCITests(unittest.TestCase):
     def wait(self, session):
         return session.wait(clock=self.f.clock.monotonic, sleep=self.f.clock.sleep)
 
+    def assert_poll_observed(self, after):
+        # Observation cadence is quota-sensitive; the visibility, freshness and
+        # deadline guarantees do not depend on an exact ten-second wake-up.
+        self.assertGreaterEqual(self.f.clock.elapsed, after)
+        self.assertLess(self.f.clock.elapsed, self.ci.WAIT_SECONDS)
+
+    def quota_transport(self, underlying, reserved=400):
+        hourly = {}
+        def transport(method, path, body):
+            hour = int(self.f.clock.elapsed // 3600)
+            hourly[hour] = hourly.get(hour, 0) + 1
+            if hourly[hour] + reserved > 1000:
+                raise HTTPError('https://api.github.com', 403, 'fixture quota exhausted', {}, None)
+            return underlying(method, path, body)
+        self.f.api.transport = transport
+        return hourly
+
+    def test_three_approved_long_running_checks_with_pages_leave_shared_quota(self):
+        # The semantic candidate boundary is covered separately; this fixture
+        # selects all three authorities without activating maintenance.
+        self.f.plan['files'].append({'path': 'infra/maintenance/bootstrap/Dockerfile.test'})
+        self.f.revalidate = lambda: None
+        self.f.runs, self.f.jobs = {}, {}
+        for index, name in enumerate(WORKFLOWS):
+            current = self.f.run(name, 5000 + index)
+            self.f.runs[current['id']], self.f.jobs[current['id']] = current, []
+            for number in range(1, 101):
+                old = self.f.run(name, 1000 + 100 * index + number)
+                old.update(status='completed', conclusion='cancelled')
+                self.f.runs[old['id']] = old
+        self.f.finish_at = 40 * 60
+        hourly = self.quota_transport(self.f.api.transport)
+        session = self.start()
+        self.wait(session)
+        self.assertEqual(len(self.f.posts), 3)
+        self.assertGreaterEqual(self.f.clock.elapsed, 40 * 60)
+        self.assertLess(self.f.clock.elapsed, 50 * 60)
+        self.assertLessEqual(max(hourly.values()), 600)
+
+    def test_missing_required_run_visibility_waits_forty_minutes_with_shared_quota(self):
+        for identifier in self.f.runs: self.f.success(identifier)
+        original = self.f.api.transport
+        def visible(method, path, body):
+            if path.startswith('/actions/workflows/') and '/runs?' in path and self.f.clock.elapsed < 40 * 60:
+                return {'workflow_runs': [], 'total_count': 0}
+            return original(method, path, body)
+        hourly = self.quota_transport(visible, reserved=600)
+        self.wait(self.start())
+        self.assertGreaterEqual(self.f.clock.elapsed, 40 * 60)
+        self.assertLess(self.f.clock.elapsed, 50 * 60)
+        self.assertEqual(self.f.posts, [])
+        self.assertLessEqual(max(hourly.values()), 400)
+
+    def test_acknowledged_attempt_visibility_waits_forty_minutes_without_replay(self):
+        self.f.finish_at = 40 * 60
+        original = self.f.api.transport
+        def visible(method, path, body):
+            if path == '/actions/runs/200/attempts/1' and self.f.clock.elapsed < 40 * 60:
+                raise HTTPError('https://api.github.com', 404, 'fixture not yet visible', {}, None)
+            return original(method, path, body)
+        hourly = self.quota_transport(visible)
+        self.wait(self.start())
+        self.assertGreaterEqual(self.f.clock.elapsed, 40 * 60)
+        self.assertLess(self.f.clock.elapsed, 50 * 60)
+        self.assertEqual(len(self.f.posts), 2)
+        self.assertLessEqual(max(hourly.values()), 600)
+
+    def test_outer_wait_uses_current_pass_cost_after_long_authority_visibility(self):
+        self.f.finish_at = 45 * 60
+        session = self.start()
+        original = self.f.api.transport
+        def visible(method, path, body):
+            if '/attempts/2/jobs' in path and self.f.clock.elapsed < 40 * 60:
+                raise HTTPError('https://api.github.com', 404, 'fixture not yet visible', {}, None)
+            return original(method, path, body)
+        self.quota_transport(visible)
+        self.wait(session)
+        self.assertGreaterEqual(self.f.clock.elapsed, 45 * 60)
+        self.assertLess(self.f.clock.elapsed, 50 * 60)
+        self.assertEqual(len(self.f.posts), 2)
+
     def test_valid_bot_empty_pr_array_approves_each_held_run_once(self):
         session = self.start()
         self.assertEqual(self.f.calls[0][:2], ('GET', ''))
@@ -218,14 +299,14 @@ class PRCITests(unittest.TestCase):
             if '/actions/runs/201/attempts/2/jobs' in path:
                 self.f.success(201)
             if path == '/actions/runs/200/approve':
-                self.assertEqual(self.f.clock.elapsed, 10)
+                self.assert_poll_observed(10)
             return original(method, path, body)
         self.f.api.transport = complete
         session = self.start()
-        self.assertEqual(self.f.clock.elapsed, 10)
+        self.assert_poll_observed(10)
         self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
         self.wait(session)
-        self.assertEqual(self.f.clock.elapsed, 100)
+        self.assert_poll_observed(100)
 
     def test_acknowledged_transition_never_accepts_attempt_three_or_corrupt_initial_hold(self):
         for condition in ('attempt3', 'initial_actor', 'initial_jobs', 'list_actor', 'list_failure'):
@@ -267,7 +348,7 @@ class PRCITests(unittest.TestCase):
                     self.f.api.transport = transport
                     if delay < 50 * 60:
                         self.wait(self.start())
-                        self.assertEqual(self.f.clock.elapsed, delay)
+                        self.assert_poll_observed(delay)
                         self.assertEqual(len(self.f.posts), 2)
                     else:
                         with self.assertRaisesRegex(policy.Refused, 'Timed out'): self.start()
@@ -291,7 +372,7 @@ class PRCITests(unittest.TestCase):
                 self.f.api.transport = transport
                 with self.assertRaises(policy.Refused): self.start()
                 self.assertEqual(len(self.f.posts), 1)
-                self.assertEqual(self.f.clock.elapsed, 10)
+                self.assert_poll_observed(10)
 
     def test_original_attempt_visibility_and_current_status_progression_are_bounded(self):
         self.f.finish_at = 100
@@ -307,7 +388,7 @@ class PRCITests(unittest.TestCase):
             return original(method, path, body)
         self.f.api.transport = transport
         self.wait(self.start())
-        self.assertEqual(self.f.clock.elapsed, 100)
+        self.assert_poll_observed(100)
         self.assertEqual(len(self.f.posts), 2)
 
     def test_attempt_jobs_404_visibility_uses_shared_deadline_without_reapproval(self):
@@ -330,7 +411,7 @@ class PRCITests(unittest.TestCase):
                     if delay < 50 * 60:
                         session = self.start()
                         self.wait(session)
-                        self.assertEqual(self.f.clock.elapsed, delay)
+                        self.assert_poll_observed(delay)
                         self.assertEqual([p[1] for p in self.f.posts],
                                          ([] if preapproved else ['/actions/runs/200/approve']) + ['/actions/runs/201/approve'])
                         self.assertEqual(session.approved, {201} if preapproved else {200, 201})
@@ -360,7 +441,7 @@ class PRCITests(unittest.TestCase):
                     return original(method, path, body)
                 self.f.api.transport = transport
                 with self.assertRaises(policy.Refused): self.start()
-                self.assertEqual(self.f.clock.elapsed, 10)
+                self.assert_poll_observed(10)
                 self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
 
     def test_attempt_jobs_other_errors_after_ack_fail_closed_without_visibility_poll(self):
@@ -645,7 +726,7 @@ class PRCITests(unittest.TestCase):
         self.f.read_hook = propagate
         self.f.finish_at = 40 * 60
         self.wait(self.start())
-        self.assertEqual(self.f.clock.elapsed, 40 * 60)
+        self.assert_poll_observed(40 * 60)
         self.f = Fixture()
         self.f.runs.pop(201)
         with self.assertRaisesRegex(policy.Refused, 'Timed out'): self.start()
@@ -749,6 +830,44 @@ class PrepareTests(unittest.TestCase):
             mocked = patch.object(image_security, method, return_value=value)
             mocked.start()
             self.addCleanup(mocked.stop)
+
+    def test_long_ci_startup_and_image_scan_overlap_within_prepare_job_budget(self):
+        from dependency_updates import image_security, pr_ci
+        from unittest.mock import Mock
+        f, clock, events = Fixture(), FakeClock(), []
+        session = Mock()
+        session.remaining.side_effect = lambda: 50 * 60 - clock.elapsed
+        def image_start(api, plan, phase, head, ref):
+            events.append('image-start')
+            return {'phase': phase, 'started': clock.elapsed, 'deadline': clock.elapsed + 80 * 60}
+        def ci_start(*args):
+            events.append('ci-start')
+            clock.sleep(40 * 60)  # Required run/ACK visibility is valid but slow.
+            return session
+        def image_wait(api, plan, ticket):
+            clock.sleep(max(0, ticket['started'] + 70 * 60 - clock.elapsed))
+            self.assertLess(clock.elapsed, ticket['deadline'])
+            return test_updates.PipelineTests().image_evidence()
+        original = f.api.transport
+        def transport(method, path, body):
+            if path.startswith('/actions/runs/15/jobs'):
+                return {'total_count': 4, 'jobs': [{'name': name, 'head_sha': SHA,
+                    'conclusion': 'success'} for name in policy.CHECKS]}
+            return original(method, path, body)
+        f.api.transport = transport
+        run = {'id': 15, 'event': 'workflow_dispatch', 'head_sha': SHA,
+               'path': '.github/workflows/dependency-check.yml', 'status': 'completed', 'conclusion': 'success'}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+            'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_OUTPUT': directory + '/output',
+            'GITHUB_STEP_SUMMARY': directory + '/summary'}), \
+            patch.object(image_security, 'start', side_effect=image_start), \
+            patch.object(image_security, 'wait', side_effect=image_wait), \
+            patch.object(pr_ci, 'start', side_effect=ci_start), patch.object(pipeline, 'dispatch_once', return_value=run):
+            pipeline.prepare(f.api, 1, SHA, BASE, BASE)
+            self.assertTrue(Path(directory + '/output').exists())
+        self.assertEqual(events, ['image-start', 'ci-start'])
+        self.assertEqual(clock.elapsed, 70 * 60)
+        self.assertLess(clock.elapsed, 90 * 60)
 
     def test_missing_candidate_image_proof_never_outputs_an_owner_plan(self):
         from unittest.mock import Mock

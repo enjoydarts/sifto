@@ -355,6 +355,92 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(elapsed[0], 2)
         self.assertEqual(len(self.mutations), 1)
 
+    def test_long_wait_reserves_shared_quota_and_final_evidence_with_twenty_history_pages(self):
+        from urllib.error import HTTPError
+        from urllib.parse import parse_qs, urlsplit
+        elapsed, hourly = [0], {}
+        original = self.api.transport
+        older = [{'id': identifier, 'display_title': 'Ordinary image advisory %d' % identifier}
+                 for identifier in range(1, 1901)]
+        def charge():
+            hour = int(elapsed[0] // 3600)
+            hourly[hour] = hourly.get(hour, 0) + 1
+            # 600 requests/hour are reserved for other workflows. A wait must
+            # also leave room for its own full evidence and artifact readback.
+            if hourly[hour] + 600 > 1000:
+                raise HTTPError('https://api.github.com', 403, 'fixture quota exhausted', {}, None)
+        def transport(method, path, body):
+            charge()
+            if self.scans:
+                self.scans[0].update(status='completed' if elapsed[0] >= 70 * 60 else 'in_progress',
+                                     conclusion='failure' if elapsed[0] >= 70 * 60 else None)
+            if path.startswith('/actions/workflows/dependency-security.yml/runs'):
+                rows = older + self.scans
+                page = int(parse_qs(urlsplit(path).query)['page'][0])
+                return {'workflow_runs': rows[(page - 1) * 100:page * 100], 'total_count': len(rows)}
+            if path == '/actions/runs/5000': return self.scans[0]
+            return original(method, path, body)
+        self.api.transport = transport
+        def download(repo, identifier):
+            charge()  # Official gh artifact ZIP GET consumes the same quota.
+            return self.downloads[identifier]
+        with patch.object(image.time, 'monotonic', side_effect=lambda: elapsed[0]), \
+            patch.object(image, 'download_zip', side_effect=download), \
+            patch.object(image.time, 'sleep', side_effect=lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)):
+            ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+            self.complete(ticket)
+            self.scans[0]['id'] = 5000
+            for job in self.jobs: job['run_id'] = 5000
+            for artifact in self.artifacts: artifact['workflow_run']['id'] = 5000
+            evidence = image.wait(self.api, self.plan, ticket)
+        self.assertEqual(evidence['run_id'], 5000)
+        self.assertGreaterEqual(elapsed[0], 70 * 60)
+        self.assertLess(elapsed[0], 80 * 60)
+        self.assertLessEqual(max(hourly.values()), 400)
+        self.assertEqual(len(self.mutations), 1)
+
+    def test_cached_wait_authority_cannot_accept_completed_child_after_parent_change(self):
+        elapsed = [0]
+        original = self.api.transport
+        def transport(method, path, body):
+            if path == '/actions/runs/20':
+                self.scans[0].update(status='completed' if elapsed[0] >= 60 else 'in_progress',
+                                     conclusion='failure' if elapsed[0] >= 60 else None)
+                if elapsed[0] >= 60:
+                    self.parent['triggering_actor'] = {'id': 9, 'login': 'owner', 'type': 'User'}
+            return original(method, path, body)
+        self.api.transport = transport
+        with patch.object(image.time, 'monotonic', side_effect=lambda: elapsed[0]), \
+            patch.object(image.time, 'sleep', side_effect=lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)):
+            ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+            self.complete(ticket)
+            self.scans[0].update(status='in_progress', conclusion=None)
+            with self.assertRaises(Refused): image.wait(self.api, self.plan, ticket)
+        self.assertEqual(elapsed[0], 60)
+        self.assertEqual(len(self.mutations), 1)
+
+    def test_missing_scan_marker_twenty_page_history_times_out_without_quota_exhaustion(self):
+        from urllib.parse import parse_qs, urlsplit
+        elapsed, requests = [0], [0]
+        original = self.api.transport
+        rows = [{'id': identifier, 'display_title': 'Ordinary advisory %d' % identifier}
+                for identifier in range(1, 1901)]
+        def transport(method, path, body):
+            requests[0] += 1
+            if path.startswith('/actions/workflows/dependency-security.yml/runs'):
+                page = int(parse_qs(urlsplit(path).query)['page'][0])
+                return {'workflow_runs': rows[(page - 1) * 100:page * 100], 'total_count': len(rows)}
+            return original(method, path, body)
+        self.api.transport = transport
+        with patch.object(image.time, 'monotonic', side_effect=lambda: elapsed[0]), \
+            patch.object(image.time, 'sleep', side_effect=lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)):
+            ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+            with self.assertRaisesRegex(Refused, 'Timed out'):
+                image.wait(self.api, self.plan, ticket)
+        self.assertEqual(elapsed[0], 80 * 60)
+        self.assertLess(requests[0], 500)
+        self.assertEqual(len(self.mutations), 1)
+
     def test_missing_duplicate_unknown_failed_build_upload_or_job_attempt_refused(self):
         ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
         self.complete(ticket)

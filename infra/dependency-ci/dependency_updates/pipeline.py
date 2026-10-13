@@ -272,8 +272,8 @@ def prepare(api, number, head, base, source):
     def revalidate():
         assert_unchanged(plan, candidate(api, number, head, base, source,
                                        python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
-    pr_checks = pr_ci.start(api, plan, revalidate)
     image_scan = image_security.start(api, plan, 'candidate', head, plan['branch'])
+    pr_checks = pr_ci.start(api, plan, revalidate)
     run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
                         remaining_budget=pr_checks.remaining)
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)

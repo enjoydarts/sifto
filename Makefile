@@ -176,6 +176,10 @@ maintenance-syntax:
 	sh -n infra/maintenance/run-controller.sh
 	sh infra/maintenance/test-controller-local.sh
 
+.PHONY: maintenance-bootstrap-test
+maintenance-bootstrap-test:
+	docker compose --env-file /dev/null --project-name sifto-maintenance-bootstrap-fixture -f infra/maintenance/bootstrap/compose.yml run --build --rm -T --no-deps test
+
 .PHONY: maintenance-backup-test
 maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test

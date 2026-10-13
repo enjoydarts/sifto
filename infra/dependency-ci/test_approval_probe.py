@@ -156,7 +156,7 @@ class ProbeTests(unittest.TestCase):
         def transport(method, path, body):
             if path.endswith('/approve'):
                 output = Path(os.environ['GITHUB_OUTPUT']).read_text()
-                self.assertIn('readonly_ids={"app-runtime.yml":201,"dependency-check.yml":200}', output)
+                self.assertIn('readonly_ids={"app-runtime.yml":{"acknowledged":false,"id":201},"dependency-check.yml":{"acknowledged":false,"id":200}}', output)
                 self.assertIn('pr=1', output)
             return original(method, path, body)
         self.f.api.transport = transport
@@ -168,6 +168,65 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(posts.count('/actions/runs/200/approve'), 1)
         self.assertEqual(posts.count('/actions/runs/201/approve'), 1)
         self.assertFalse(any('deploy' in path or 'dependency-update' in path for path in posts))
+
+    def test_ack_is_output_before_transition_reads_and_survives_second_failure(self):
+        original = self.f.api.transport
+        def transport(method, path, body):
+            if method == 'GET' and self.f.initial_attempts:
+                output = Path(os.environ['GITHUB_OUTPUT']).read_text()
+                self.assertIn('"dependency-check.yml":{"acknowledged":true,"id":200}', output)
+            if path == '/actions/runs/201/approve': raise TimeoutError()
+            return original(method, path, body)
+        self.f.api.transport = transport
+        with self.assertRaisesRegex(policy.Refused, 'unknown'): self.run_probe()
+        output = Path(os.environ['GITHUB_OUTPUT']).read_text()
+        self.assertNotIn('"app-runtime.yml":{"acknowledged":true', output)
+        self.assertNotIn('proof=success', output)
+
+    def test_cleanup_acknowledged_second_attempt_cancels_only_owned_current_jobs(self):
+        self.f.created_ref = self.f.created_pr = True
+        self.f.initial_attempts[200] = self.f.run(WORKFLOWS[0], 200)
+        self.f.initial_attempts[200]['head_branch'] = self.f.candidate.branch
+        self.f.runs[200].update(run_attempt=2, status='queued', conclusion=None)
+        self.f.finish_at = 100
+        self.f.jobs[200] = [{'id': 900, 'run_id': 200, 'run_attempt': 2, 'head_sha': SHA,
+                             'name': 'Dependency API', 'status': 'queued', 'conclusion': None}]
+        original = self.f.api.transport
+        def cancel(method, path, body):
+            if path == '/actions/runs/200/cancel' and method == 'POST':
+                self.f.calls.append((method, path, body))
+                return None
+            return original(method, path, body)
+        self.f.api.transport = cancel
+        self.probe.cleanup(self.f.api, self.record(), {'dependency-check.yml': {'id': 200, 'acknowledged': True}}, git=self.f.git)
+        self.assertEqual([p for m, p, _ in self.f.calls if m == 'POST'], ['/actions/runs/200/cancel'])
+
+    def test_cleanup_never_accepts_unacknowledged_rerun_or_foreign_second_attempt(self):
+        for condition in ('unacknowledged', 'third', 'trigger', 'initial_actor', 'job_attempt', 'history_missing', 'initial_jobs'):
+            with self.subTest(condition=condition):
+                self.f = ProbeFixture()
+                self.f.created_ref = self.f.created_pr = True
+                self.f.initial_attempts[200] = self.f.run(WORKFLOWS[0], 200)
+                self.f.initial_attempts[200]['head_branch'] = self.f.candidate.branch
+                self.f.runs[200].update(run_attempt=2, status='queued', conclusion=None)
+                self.f.finish_at = 100
+                if condition == 'third': self.f.runs[200]['run_attempt'] = 3
+                if condition == 'trigger': self.f.runs[200]['triggering_actor'] = REPO['owner']
+                if condition == 'initial_actor': self.f.initial_attempts[200]['actor'] = REPO['owner']
+                if condition == 'job_attempt':
+                    self.f.jobs[200] = [{'id': 1, 'run_id': 200, 'run_attempt': 1, 'name': 'Dependency API', 'head_sha': SHA}]
+                original = self.f.api.transport
+                def missing_history(method, path, body):
+                    if condition == 'history_missing' and path == '/actions/runs/200/attempts/1':
+                        raise HTTPError('public', 404, 'missing', {}, None)
+                    if condition == 'initial_jobs' and '/attempts/1/jobs' in path:
+                        return {'jobs': [{'id': 9}], 'total_count': 1}
+                    return original(method, path, body)
+                self.f.api.transport = missing_history
+                with self.assertRaises(policy.Refused):
+                    self.probe.cleanup(self.f.api, self.record(), {'dependency-check.yml': {'id': 200, 'acknowledged': condition != 'unacknowledged'}}, git=self.f.git)
+                self.assertEqual(self.f.posts, [])
+                self.f.git.assert_not_called()
 
     def test_source_and_first_attempt_invariants_refuse_before_mutation(self):
         for key, value in [('GITHUB_REF', 'refs/heads/other'), ('GITHUB_RUN_ATTEMPT', '2'),

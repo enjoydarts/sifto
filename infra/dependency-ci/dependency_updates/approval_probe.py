@@ -185,8 +185,13 @@ def prove(api, record, clock=time.monotonic, sleep=time.sleep):
         require(len(rows) == 1 and rows[0] == initial, 'Inconclusive: CI did not have exactly one initial run')
         require(initial.get('conclusion') == 'action_required', 'Inconclusive: initial CI was not security-held')
         session.held(initial)
-    emit(readonly_ids=canonical({name: run['id'] for name, run in session.selected.items()}))
-    session.approve(clock)
+    def ownership(acknowledged):
+        # Persist successful HTTP acknowledgements before any visibility read.
+        # Issued intent and unknown outcomes never become cleanup authority.
+        emit(readonly_ids=canonical({name: {'id': run['id'], 'acknowledged': run['id'] in acknowledged.approved}
+                                     for name, run in acknowledged.selected.items()}))
+    ownership(session)
+    session.approve(clock, sleep, acknowledge=ownership)
     fixed = pipeline.dispatch_once(api, 'dependency-check.yml', record['branch'], record['head'],
         {'expected_head': record['head']}, remaining_budget=session.remaining)
     emit(fixed_ci=fixed['id'])
@@ -203,8 +208,12 @@ def cleanup(api, record, readonly_ids, *, git=subprocess.run):
     context(api, current=False)
     validate_record(record)
     require(type(readonly_ids) is dict and set(readonly_ids) <= set(pr_ci.WORKFLOWS[:2])
-            and all(pr_ci.positive(value) for value in readonly_ids.values())
-            and len(set(readonly_ids.values())) == len(readonly_ids), 'Malformed diagnostic cleanup run IDs')
+            and all(pr_ci.positive(value) or type(value) is dict and set(value) == {'id', 'acknowledged'}
+                    and pr_ci.positive(value['id']) and type(value['acknowledged']) is bool
+                    for value in readonly_ids.values()), 'Malformed diagnostic cleanup run IDs')
+    owned = {name: {'id': value, 'acknowledged': False} if type(value) is int else value
+             for name, value in readonly_ids.items()}
+    require(len({value['id'] for value in owned.values()}) == len(owned), 'Duplicate diagnostic cleanup run IDs')
     ref = ref_or_absent(api, record['branch'])
     if ref is not None:
         require(ref.get('ref') == 'refs/heads/' + record['branch']
@@ -222,16 +231,20 @@ def cleanup(api, record, readonly_ids, *, git=subprocess.run):
                 'branch': record['branch'], 'emergency': False, 'files': [{'path': 'api/go.mod'}]}
         session = pr_ci.Session(api, plan, lambda: None, time.monotonic)
         session.register()
-        for name, identifier in readonly_ids.items():
+        for name, ownership in owned.items():
+            identifier = ownership['id']
             current = session.validate(api.get('/actions/runs/%d' % identifier), name)
-            require(current['id'] == identifier and current['run_attempt'] == 1
+            require(current['id'] == identifier and current['run_attempt'] in ({1, 2} if ownership['acknowledged'] else {1})
                     and pr_ci.bot(current['actor']) and pr_ci.bot(current['triggering_actor']), 'Cleanup run identity mismatch')
+            if ownership['acknowledged']:
+                # Recorded ACK + immutable owned fixture + original Bot hold
+                # proves cancellation ownership, never successful CI proof.
+                session.original_hold(current, name)
+                if current['run_attempt'] == 1:
+                    session.held(current, historical=True)
             if current['status'] in pr_ci.ACTIVE:
-                jobs = session.jobs(current, all_attempts=True)
-                require(len(jobs) <= len(pr_ci.JOBS[name]) and len({job.get('name') for job in jobs}) == len(jobs)
-                        and all(pr_ci.positive(job.get('id')) and job.get('run_id') == identifier
-                                and job.get('head_sha') == record['head'] and job.get('name') in pr_ci.JOBS[name] for job in jobs),
-                        'Cleanup job inventory mismatch')
+                jobs = session.attempt_jobs(current)
+                session.readonly_jobs(current, name, jobs)
                 verify_fixture(api, record, cleanup=True)
                 require(session.validate(api.get('/actions/runs/%d' % identifier), name) == current, 'Cleanup run changed')
                 api.request('POST', '/actions/runs/%d/cancel' % identifier)

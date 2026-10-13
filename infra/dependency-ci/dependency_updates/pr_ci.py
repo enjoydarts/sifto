@@ -45,7 +45,8 @@ class Session:
             owner = self.repository.get('owner')
             require(type(owner) is dict and positive(owner.get('id')) and owner.get('login') == 'enjoydarts'
                     and owner.get('type') == 'User', 'Emergency PR CI repository owner identity mismatch')
-        self.workflows, self.selected, self.approved = {}, {}, set()
+        self.workflows, self.selected, self.approved, self.issued = {}, {}, set(), set()
+        self.propagating = False
 
     def remaining(self, clock=None):
         clock = clock or self.clock
@@ -135,11 +136,18 @@ class Session:
 
     def inventory(self):
         selected, identifiers = {}, set()
+        self.propagating = False
         for name, workflow in self.workflows.items():
             rows = self.api.pages('/actions/workflows/%d/runs?event=pull_request&head_sha=%s' %
                                   (workflow['id'], self.plan['head']), 'workflow_runs', require_total=True)
             for row in rows:
                 self.validate(row, name)
+                if row['id'] in self.approved:
+                    require(row['run_attempt'] in {1, 2} and bot(row['triggering_actor']),
+                            'Acknowledged PR CI listed attempt identity mismatch')
+                    require(row['run_attempt'] == 1 and row['conclusion'] == 'action_required'
+                            or row['run_attempt'] == 2 and (row['status'] in ACTIVE or row['conclusion'] == 'success'),
+                            'Acknowledged PR CI listed attempt failed or changed')
                 require(row['id'] not in identifiers, 'Duplicate PR CI run inventory')
                 identifiers.add(row['id'])
             if rows:
@@ -148,8 +156,13 @@ class Session:
                     require(row['id'] == newest['id'] or row['status'] == 'completed'
                             and row['conclusion'] != 'action_required', 'Older PR CI run is still pending or held')
                 current = self.validate(self.api.get('/actions/runs/%d' % newest['id']), name)
-                require(current['id'] == newest['id'] and current['run_attempt'] == newest['run_attempt'],
-                        'PR CI run changed during inventory')
+                require(current['id'] == newest['id'], 'PR CI run changed during inventory')
+                if current['run_attempt'] != newest['run_attempt']:
+                    require(current['id'] in self.approved
+                            and {current['run_attempt'], newest['run_attempt']} == {1, 2}
+                            and bot(current['triggering_actor']) and bot(newest['triggering_actor']),
+                            'PR CI run changed during inventory')
+                    self.propagating = True
                 selected[name] = current
         return selected
 
@@ -165,29 +178,118 @@ class Session:
         return self.api.pages('/actions/runs/%d/jobs?filter=%s' % (run['id'], 'all' if all_attempts else 'latest'),
                               'jobs', require_total=True)
 
-    def held(self, run):
+    def attempt_jobs(self, run):
+        return self.api.pages('/actions/runs/%d/attempts/%d/jobs' % (run['id'], run['run_attempt']),
+                              'jobs', require_total=True)
+
+    def held(self, run, *, historical=False):
         require(run['status'] == 'completed' and run['conclusion'] == 'action_required'
                 and run['run_attempt'] == 1 and bot(run['actor']) and bot(run['triggering_actor'])
                 and not self.plan['emergency']
                 and re.fullmatch(r'renovate-ci/[a-zA-Z0-9_.-]{1,120}', self.plan['branch']),
                 'PR CI security hold is not a first-attempt ordinary Bot approval')
-        require(self.jobs(run, all_attempts=True) == [], 'PR CI held run has already executed jobs')
+        require((self.attempt_jobs(run) if historical else self.jobs(run, all_attempts=True)) == [],
+                'PR CI held run has already executed jobs')
+
+    def original_hold(self, run, name):
+        initial = self.validate(self.api.get('/actions/runs/%d/attempts/1' % run['id']), name)
+        require(initial['id'] == run['id'], 'Original PR CI attempt identity mismatch')
+        self.held(initial, historical=True)
+
+    def approved_attempt(self, run, name):
+        # An ACK authorizes exactly the observed Bot 1 -> 2 transition. Jobs
+        # or an issued request alone can never supply that authorization.
+        require(run['run_attempt'] in {1, 2} and bot(run['triggering_actor']),
+                'Acknowledged PR CI attempt identity mismatch')
+        try:
+            self.original_hold(run, name)
+        except Refused as exc:
+            if str(exc) == 'GitHub API request rejected (HTTP 404)':
+                return False
+            raise
+        if run['run_attempt'] == 1:
+            self.held(run, historical=True)
+            return False
+        return self.actual_jobs(run, name)
+
+    def actual_jobs(self, run, name):
+        try:
+            jobs = self.attempt_jobs(run)
+        except Refused as exc:
+            # The validated run can precede its attempt job inventory. Missing
+            # jobs remain pending, never empty/successful evidence or POST authority.
+            if str(exc) == 'GitHub API request rejected (HTTP 404)':
+                return False
+            raise
+        self.verify_actual_jobs(run, name, jobs)
+        final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
+        require(final['id'] == run['id'] and final['run_attempt'] == run['run_attempt']
+                and final['triggering_actor'] == run['triggering_actor'],
+                'PR CI changed while verifying actual jobs')
+        return final == run
+
+    def verify_actual_jobs(self, run, name, jobs):
+        self.readonly_jobs(run, name, jobs)
+        require(all(job.get('status') in ACTIVE and job.get('conclusion') is None
+                    or job.get('status') == 'completed' and job.get('conclusion') == 'success'
+                    for job in jobs), 'PR CI actual job failed; no owner approval request')
+        if run['status'] == 'completed' and run['conclusion'] == 'success':
+            require({job.get('name') for job in jobs} == JOBS[name]
+                    and all(job.get('status') == 'completed' and job.get('conclusion') == 'success' for job in jobs),
+                    'PR CI job inventory did not succeed')
+
+    def readonly_jobs(self, run, name, jobs):
+        require(len(jobs) <= len(JOBS[name]) and len({job.get('id') for job in jobs}) == len(jobs)
+                and len({job.get('name') for job in jobs}) == len(jobs)
+                and all(positive(job.get('id')) and job.get('run_id') == run['id']
+                        and job.get('run_attempt') == run['run_attempt']
+                        and job.get('head_sha') == self.plan['head'] and job.get('name') in JOBS[name]
+                        for job in jobs), 'PR CI job attempt or read-only inventory mismatch')
+
+    def authorities(self, clock, sleep):
+        # Poll acknowledged attempt visibility and normal job/run progress,
+        # checking every selected authority and immutable candidate each time.
+        require(self.issued <= self.approved, 'PR CI approval outcome unacknowledged; no success proof')
+        while True:
+            self.remaining(clock)
+            self.candidate_identity()
+            latest = self.inventory()
+            require(set(latest) == set(self.selected), 'PR CI inventory changed before approval')
+            pending = self.propagating
+            for name, chosen in self.selected.items():
+                run = latest[name]
+                require(run['id'] == chosen['id'], 'PR CI inventory changed before approval')
+                if run['id'] in self.approved:
+                    require(chosen['run_attempt'] == 1 or run['run_attempt'] == 2,
+                            'Acknowledged PR CI attempt regressed')
+                    pending = not self.approved_attempt(run, name) or pending
+                else:
+                    require(run['run_attempt'] == chosen['run_attempt'], 'PR CI inventory changed before approval')
+                    if run['status'] in ACTIVE or run['conclusion'] == 'success':
+                        pending = not self.actual_jobs(run, name) or pending
+            self.approval_eligibility(latest)
+            self.remaining(clock)
+            if not pending:
+                self.selected = latest
+                return latest
+            sleep(min(10, self.remaining(clock)))
 
     def approval_eligibility(self, runs):
         for run in runs.values():
             if run['conclusion'] == 'action_required':
-                self.held(run)
+                self.held(run, historical=run['id'] in self.approved)
             elif run['status'] == 'completed':
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
 
-    def approve(self, clock):
+    def approve(self, clock, sleep=time.sleep, acknowledge=None):
         # Every selected workflow remains an authority for every mutation,
         # including workflows other than the run being approved next.
+        require(self.issued <= self.approved, 'PR CI approval outcome unacknowledged; no retry')
         self.approval_eligibility(self.selected)
         require(self.allow_approval or not any(run['conclusion'] == 'action_required'
                                              for run in self.selected.values()),
                 'Automatic PR CI approval is disabled; no owner approval request')
-        for name, listed in self.selected.items():
+        for name, listed in list(self.selected.items()):
             if listed['conclusion'] != 'action_required':
                 continue
             self.remaining(clock)
@@ -198,11 +300,7 @@ class Session:
             self.held(run)
             self.revalidate()
             self.candidate_identity()
-            latest = self.inventory()
-            require(set(latest) == set(self.selected)
-                    and all(latest[key]['id'] == chosen['id'] and latest[key]['run_attempt'] == chosen['run_attempt']
-                            for key, chosen in self.selected.items()), 'PR CI inventory changed before approval')
-            self.approval_eligibility(latest)
+            latest = self.authorities(clock, sleep)
             run = latest[name]
             if run['status'] in ACTIVE or run['conclusion'] == 'success':
                 continue
@@ -210,9 +308,11 @@ class Session:
             self.candidate_identity()
             final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
             require(final == run, 'PR CI run changed immediately before approval')
+            require(self.authorities(clock, sleep)[name] == run,
+                    'PR CI run changed immediately before approval')
             self.remaining(clock)
-            require(run['id'] not in self.approved, 'PR CI approval replay refused')
-            self.approved.add(run['id'])
+            require(run['id'] not in self.issued, 'PR CI approval replay refused')
+            self.issued.add(run['id'])
             try:
                 self.api.request('POST', '/actions/runs/%d/approve' % run['id'])
             except Ambiguous:
@@ -221,12 +321,15 @@ class Session:
                 status = re.fullmatch(r'GitHub API request rejected \(HTTP ([0-9]{3})\)', str(exc))
                 detail = ' (HTTP %s)' % status[1] if status else ''
                 raise Refused('PR CI approval rejected%s: GITHUB_TOKEN permission may not support run approval; no retry or token fallback' % detail) from None
+            self.approved.add(run['id'])
+            if acknowledge is not None:
+                acknowledge(self)
+            self.authorities(clock, sleep)
 
     def wait(self, clock=time.monotonic, sleep=time.sleep):
         while True:
             self.remaining(clock)
-            self.candidate_identity()
-            current = self.inventory()
+            current = self.authorities(clock, sleep)
             require(set(current) == set(self.selected), 'PR CI inventory changed during wait')
             success = True
             for name, run in current.items():
@@ -238,11 +341,7 @@ class Session:
                     continue
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
                 jobs = self.jobs(run)
-                require(len(jobs) == len(JOBS[name]) and {job.get('name') for job in jobs} == JOBS[name]
-                        and len({job.get('id') for job in jobs}) == len(jobs)
-                        and all(positive(job.get('id')) and job.get('run_id') == run['id']
-                                and job.get('head_sha') == self.plan['head'] and job.get('status') == 'completed'
-                                and job.get('conclusion') == 'success' for job in jobs), 'PR CI job inventory did not succeed')
+                self.verify_actual_jobs(run, name, jobs)
                 final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
                 require(final == run, 'PR CI changed while verifying successful jobs')
             self.remaining(clock)
@@ -267,5 +366,5 @@ def start(api, plan, revalidate, clock=time.monotonic, sleep=time.sleep):
         if session.required() <= set(session.selected):
             break
         sleep(min(10, session.remaining(clock)))
-    session.approve(clock)
+    session.approve(clock, sleep)
     return session

@@ -37,6 +37,8 @@ class Fixture:
         self.jobs = {}
         self.read_hook = None
         self.post_error = None
+        self.initial_attempts = {}
+        self.post_hook = None
         self.finish_at = 0
         self.clock = FakeClock()
         self.job_total = None
@@ -63,6 +65,7 @@ class Fixture:
         run.update(status='completed', conclusion='success')
         name = run['path'].split('/')[-1]
         self.jobs[identifier] = [{'id': identifier * 10 + index, 'run_id': identifier,
+                                 'run_attempt': run['run_attempt'],
                                  'head_sha': SHA, 'name': job, 'status': 'completed',
                                  'conclusion': 'success'}
                                 for index, job in enumerate(sorted(NAMES[name]))]
@@ -78,7 +81,9 @@ class Fixture:
             if self.post_error:
                 raise self.post_error
             identifier = int(endpoint.split('/')[3])
-            self.runs[identifier].update(status='queued', conclusion=None)
+            self.initial_attempts[identifier] = copy.deepcopy(self.runs[identifier])
+            self.runs[identifier].update(run_attempt=2, status='queued', conclusion=None)
+            if self.post_hook: self.post_hook(identifier)
             return None
         if endpoint == '':
             return copy.deepcopy(REPO)
@@ -96,6 +101,11 @@ class Fixture:
                     'total_count': self.run_total if self.run_total is not None else len(rows)}
         if endpoint.startswith('/actions/runs/'):
             identifier = int(endpoint.split('/')[3])
+            if '/attempts/1' in endpoint:
+                if endpoint.endswith('/jobs'):
+                    rows = [] if identifier in self.initial_attempts else copy.deepcopy(self.jobs[identifier])
+                    return {'jobs': rows, 'total_count': len(rows)}
+                return copy.deepcopy(self.initial_attempts[identifier])
             if endpoint.endswith('/jobs'):
                 rows = copy.deepcopy(self.jobs[identifier])
                 if self.hidden_jobs and 'filter=all' in path:
@@ -153,6 +163,246 @@ class PRCITests(unittest.TestCase):
         self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve', '/actions/runs/201/approve'])
         self.wait(session)
         self.assertEqual(len(self.f.posts), 2)
+        self.assertEqual({run['run_attempt'] for run in session.selected.values()}, {2})
+        self.assertEqual(session.approved, {200, 201})
+
+    def test_cross_workflow_change_after_first_ack_blocks_second_post(self):
+        for condition in ('failure', 'attempt', 'actor', 'job_failure'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                def change(identifier):
+                    if condition == 'failure': self.f.runs[201]['conclusion'] = 'failure'
+                    if condition == 'attempt': self.f.runs[201]['run_attempt'] = 2
+                    if condition == 'actor': self.f.runs[200]['triggering_actor'] = REPO['owner']
+                    if condition == 'job_failure':
+                        self.f.finish_at = 100
+                        self.f.runs[200].update(status='in_progress', conclusion=None)
+                        self.f.jobs[200] = [{'id': 99, 'run_id': 200, 'run_attempt': 2, 'head_sha': SHA,
+                                            'name': 'Dependency API', 'status': 'completed', 'conclusion': 'failure'}]
+                self.f.post_hook = change
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
+    def test_manually_preapproved_other_run_actual_jobs_gate_every_post(self):
+        for condition in ('active_failure', 'success_failure', 'attempt', 'unknown_state', 'missing_success'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                self.f.finish_at = 100
+                self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+                self.f.success(201)
+                if condition == 'active_failure': self.f.runs[201].update(status='in_progress', conclusion=None)
+                if condition in ('active_failure', 'success_failure'): self.f.jobs[201][0]['conclusion'] = 'failure'
+                if condition == 'attempt': self.f.jobs[201][0]['run_attempt'] = 1
+                if condition == 'unknown_state': self.f.jobs[201][0]['status'] = 'unexpected'
+                if condition == 'missing_success': self.f.jobs[201].pop()
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.posts, [])
+
+    def test_preapproved_job_failure_after_candidate_revalidation_blocks_post(self):
+        self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+        self.f.success(201)
+        original = self.f.revalidate
+        def fail():
+            original()
+            self.f.jobs[201][0]['conclusion'] = 'failure'
+        self.f.revalidate = fail
+        with self.assertRaises(policy.Refused): self.start()
+        self.assertEqual(self.f.posts, [])
+
+    def test_manually_preapproved_normal_completion_refreshes_before_other_post(self):
+        self.f.finish_at = 100
+        self.f.runs[201].update(run_attempt=2, status='in_progress', conclusion=None,
+                                triggering_actor=copy.deepcopy(REPO['owner']))
+        original = self.f.api.transport
+        def complete(method, path, body):
+            if '/actions/runs/201/attempts/2/jobs' in path:
+                self.f.success(201)
+            if path == '/actions/runs/200/approve':
+                self.assertEqual(self.f.clock.elapsed, 10)
+            return original(method, path, body)
+        self.f.api.transport = complete
+        session = self.start()
+        self.assertEqual(self.f.clock.elapsed, 10)
+        self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+        self.wait(session)
+        self.assertEqual(self.f.clock.elapsed, 100)
+
+    def test_acknowledged_transition_never_accepts_attempt_three_or_corrupt_initial_hold(self):
+        for condition in ('attempt3', 'initial_actor', 'initial_jobs', 'list_actor', 'list_failure'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                def change(identifier):
+                    if condition == 'attempt3': self.f.runs[identifier]['run_attempt'] = 3
+                    if condition == 'initial_actor': self.f.initial_attempts[identifier]['actor'] = REPO['owner']
+                self.f.post_hook = change
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    result = original(method, path, body)
+                    if condition == 'initial_jobs' and '/attempts/1/jobs' in path:
+                        return {'jobs': [{'id': 9}], 'total_count': 1}
+                    if 200 in self.f.initial_attempts and '/actions/workflows/100/runs?' in path:
+                        if condition == 'list_actor': result['workflow_runs'][0]['triggering_actor'] = REPO['owner']
+                        if condition == 'list_failure': result['workflow_runs'][0].update(status='completed', conclusion='failure')
+                    return result
+                self.f.api.transport = transport
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(len(self.f.posts), 1)
+
+    def test_acknowledged_list_and_detail_lag_share_deadline_and_never_replay(self):
+        for endpoint in ('list', 'detail'):
+            for delay in (30, 51 * 60):
+                with self.subTest(endpoint=endpoint, delay=delay):
+                    self.f = Fixture()
+                    original = self.f.api.transport
+                    def transport(method, path, body):
+                        result = original(method, path, body)
+                        if 200 in self.f.initial_attempts and self.f.clock.elapsed < delay:
+                            if endpoint == 'list' and '/actions/workflows/100/runs?' in path:
+                                result['workflow_runs'] = [copy.deepcopy(self.f.initial_attempts[200])]
+                            if endpoint == 'detail' and path == '/actions/runs/200':
+                                result = copy.deepcopy(self.f.initial_attempts[200])
+                        if path == '/actions/runs/201/approve':
+                            self.assertGreaterEqual(self.f.clock.elapsed, delay)
+                        return result
+                    self.f.api.transport = transport
+                    if delay < 50 * 60:
+                        self.wait(self.start())
+                        self.assertEqual(self.f.clock.elapsed, delay)
+                        self.assertEqual(len(self.f.posts), 2)
+                    else:
+                        with self.assertRaisesRegex(policy.Refused, 'Timed out'): self.start()
+                        self.assertEqual(self.f.clock.elapsed, 50 * 60)
+                        self.assertEqual(len(self.f.posts), 1)
+
+    def test_visibility_poll_rechecks_other_failure_head_and_source_before_second_post(self):
+        for condition in ('failure', 'head', 'source'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    if self.f.clock.elapsed >= 10:
+                        if condition == 'failure': self.f.runs[201]['conclusion'] = 'failure'
+                        if condition == 'head': self.f.candidate.head = 'c' * 40
+                        if condition == 'source': self.f.candidate.base = 'c' * 40
+                    result = original(method, path, body)
+                    if 200 in self.f.initial_attempts and '/actions/workflows/100/runs?' in path:
+                        result['workflow_runs'] = [copy.deepcopy(self.f.initial_attempts[200])]
+                    return result
+                self.f.api.transport = transport
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(len(self.f.posts), 1)
+                self.assertEqual(self.f.clock.elapsed, 10)
+
+    def test_original_attempt_visibility_and_current_status_progression_are_bounded(self):
+        self.f.finish_at = 100
+        original = self.f.api.transport
+        progressed = False
+        def transport(method, path, body):
+            nonlocal progressed
+            if '/attempts/1' in path and self.f.clock.elapsed < 20:
+                raise HTTPError('public', 404, 'not visible', {}, None)
+            if '/attempts/2/jobs' in path and not progressed:
+                progressed = True
+                self.f.runs[200].update(status='in_progress', conclusion=None)
+            return original(method, path, body)
+        self.f.api.transport = transport
+        self.wait(self.start())
+        self.assertEqual(self.f.clock.elapsed, 100)
+        self.assertEqual(len(self.f.posts), 2)
+
+    def test_attempt_jobs_404_visibility_uses_shared_deadline_without_reapproval(self):
+        for preapproved in (False, True):
+            for delay in (30, 51 * 60):
+                with self.subTest(preapproved=preapproved, delay=delay):
+                    self.f = Fixture()
+                    if preapproved:
+                        self.f.runs[200].update(run_attempt=2, status='in_progress', conclusion=None,
+                                                triggering_actor=copy.deepcopy(REPO['owner']))
+                        self.f.finish_at = delay
+                    original = self.f.api.transport
+                    def transport(method, path, body):
+                        if '/actions/runs/200/attempts/2/jobs' in path and self.f.clock.elapsed < delay:
+                            raise HTTPError('public', 404, 'not visible', {}, None)
+                        if path == '/actions/runs/201/approve':
+                            self.assertGreaterEqual(self.f.clock.elapsed, delay)
+                        return original(method, path, body)
+                    self.f.api.transport = transport
+                    if delay < 50 * 60:
+                        session = self.start()
+                        self.wait(session)
+                        self.assertEqual(self.f.clock.elapsed, delay)
+                        self.assertEqual([p[1] for p in self.f.posts],
+                                         ([] if preapproved else ['/actions/runs/200/approve']) + ['/actions/runs/201/approve'])
+                        self.assertEqual(session.approved, {201} if preapproved else {200, 201})
+                    else:
+                        with self.assertRaisesRegex(policy.Refused, 'Timed out'): self.start()
+                        self.assertEqual(self.f.clock.elapsed, 50 * 60)
+                        self.assertEqual(len(self.f.posts), 0 if preapproved else 1)
+
+    def test_attempt_jobs_404_still_checks_other_authorities_before_next_post(self):
+        for condition in ('failure', 'job_failure', 'head', 'source', 'attempt', 'actor'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                if condition == 'job_failure':
+                    self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+                    self.f.success(201)
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    if self.f.clock.elapsed >= 10:
+                        if condition == 'failure': self.f.runs[201]['conclusion'] = 'failure'
+                        if condition == 'job_failure': self.f.jobs[201][0]['conclusion'] = 'failure'
+                        if condition == 'head': self.f.candidate.head = 'c' * 40
+                        if condition == 'source': self.f.candidate.base = 'c' * 40
+                        if condition == 'attempt': self.f.runs[200]['run_attempt'] = 3
+                        if condition == 'actor': self.f.runs[200]['triggering_actor'] = REPO['owner']
+                    if '/actions/runs/200/attempts/2/jobs' in path:
+                        raise HTTPError('public', 404, 'not visible', {}, None)
+                    return original(method, path, body)
+                self.f.api.transport = transport
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.clock.elapsed, 10)
+                self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
+    def test_attempt_jobs_other_errors_after_ack_fail_closed_without_visibility_poll(self):
+        for condition in ('forbidden', 'unknown_http', 'timeout', 'malformed', 'unknown_job'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    if '/actions/runs/200/attempts/2/jobs' in path:
+                        if condition == 'forbidden': raise HTTPError('public', 403, 'forbidden', {}, None)
+                        if condition == 'unknown_http': raise HTTPError('public', 418, 'unknown', {}, None)
+                        if condition == 'timeout': raise TimeoutError()
+                        if condition == 'malformed': return {'jobs': []}
+                        if condition == 'unknown_job':
+                            return {'jobs': [{'id': 1, 'run_id': 200, 'run_attempt': 2, 'head_sha': SHA,
+                                              'name': 'Dependency API', 'status': 'unknown', 'conclusion': None}], 'total_count': 1}
+                    return original(method, path, body)
+                self.f.api.transport = transport
+                with patch.object(github.time, 'sleep'), self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.clock.elapsed, 0)
+                self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
+    def test_unknown_http_outcome_cannot_be_promoted_by_real_successful_jobs(self):
+        session = self.ci.Session(self.f.api, self.f.plan, self.f.revalidate,
+                                  self.f.clock.monotonic, allow_approval=True)
+        session.register()
+        session.selected = session.inventory()
+        original = self.f.api.transport
+        def lose(method, path, body):
+            result = original(method, path, body)
+            if method == 'POST':
+                self.f.success(200)
+                raise TimeoutError()
+            return result
+        self.f.api.transport = lose
+        with self.assertRaisesRegex(policy.Refused, 'unknown'):
+            session.approve(self.f.clock.monotonic, self.f.clock.sleep)
+        self.assertEqual(session.issued, {200})
+        self.assertEqual(session.approved, set())
+        with self.assertRaisesRegex(policy.Refused, 'unacknowledged'): self.wait(session)
+        with self.assertRaises(policy.Refused): session.approve(self.f.clock.monotonic, self.f.clock.sleep)
+        self.assertEqual(len(self.f.posts), 1)
 
     def test_default_off_and_nonexact_flag_refuse_holds_without_post(self):
         for flag in (None, '', 'false', 'TRUE', '1'):
@@ -437,7 +687,7 @@ class PRCITests(unittest.TestCase):
         self.assertEqual(self.f.posts, [])
 
     def test_successful_jobs_must_match_exact_expected_inventory(self):
-        for condition in ('missing', 'extra', 'duplicate', 'head', 'run_id', 'status', 'id'):
+        for condition in ('missing', 'extra', 'duplicate', 'head', 'run_id', 'run_attempt', 'status', 'id'):
             with self.subTest(condition=condition):
                 self.f = Fixture()
                 self.f.success(200)
@@ -447,6 +697,7 @@ class PRCITests(unittest.TestCase):
                 if condition == 'duplicate': jobs[1]['id'] = jobs[0]['id']
                 if condition == 'head': jobs[0]['head_sha'] = BASE
                 if condition == 'run_id': jobs[0]['run_id'] = 999
+                if condition == 'run_attempt': jobs[0]['run_attempt'] = 1 if self.f.runs[200]['run_attempt'] == 2 else 2
                 if condition == 'status': jobs[0]['status'] = 'in_progress'
                 if condition == 'id': jobs[0]['id'] = True
                 with self.assertRaises(policy.Refused): self.wait(self.start())

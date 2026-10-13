@@ -44,7 +44,11 @@ def registered(api, filename, name):
 
 
 def run_identity(run, expected, repo, repo_id):
-    require(type(run) is dict and all(run.get(key) == value for key, value in expected.items())
+    # REST run paths may include the documented @main suffix. Registered
+    # workflow paths stay exact; branch, source and workflow ID still bind main.
+    require(type(run) is dict and all(
+            run.get(key) in (value, value + '@main') if key == 'path' else run.get(key) == value
+            for key, value in expected.items())
             and positive(run.get('id')) and positive(run.get('workflow_id'))
             and type(run.get('run_attempt')) is int and run['run_attempt'] == 1,
             'Dependency run identity or first-attempt state mismatch')

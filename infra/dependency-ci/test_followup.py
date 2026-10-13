@@ -1,6 +1,7 @@
 """Completed native dependency approval is the only follow-up authority."""
 import copy
 import importlib.util
+from itertools import product
 import json
 import os
 from pathlib import Path
@@ -96,6 +97,69 @@ class CompletedFollowupTests(unittest.TestCase):
         self.assertEqual(self.reads.count('/actions/runs/10'), 2)
         self.assertEqual(self.reads.count('/actions/runs/10/approvals'), 2)
         self.assertEqual(sum(path.startswith('/actions/runs/10/jobs?filter=all') for path in self.reads), 2)
+
+    def test_parent_event_and_self_accept_only_plain_or_documented_main_qualified_run_paths(self):
+        for parent_suffix, event_suffix, self_suffix in product(['', '@main'], repeat=3):
+            with self.subTest(parent=parent_suffix, event=event_suffix, child=self_suffix):
+                self.setUp()
+                self.parent['path'] += parent_suffix
+                self.event['workflow_run']['path'] += event_suffix
+                self.current['path'] += self_suffix
+                try:
+                    outcome = self.notify()
+                except Refused as exc:
+                    self.fail('Expected trusted main path representation to be accepted: ' + str(exc))
+                self.assertEqual(outcome, 'requested')
+                self.assertEqual(self.mutations, [('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'})])
+
+    def test_final_parent_reread_accepts_same_registered_path_with_documented_main_suffix(self):
+        def hook(path):
+            if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                self.parent['path'] += '@main'
+        self.hook = hook
+        try:
+            outcome = self.notify()
+        except Refused as exc:
+            self.fail('Expected immutable main path representation to be accepted on final reread: ' + str(exc))
+        self.assertEqual(outcome, 'requested')
+        self.assertEqual(len(self.mutations), 1)
+
+    def test_unexpected_run_path_files_refs_and_suffixes_are_refused(self):
+        for target in ['parent', 'event', 'current']:
+            for value in ['@other', '@refs/heads/main', '@refs/tags/main', '@' + MERGED,
+                          '@main@main', '@main/extra', '@main\n', '.backup', '', None]:
+                with self.subTest(target=target, suffix=value):
+                    self.setUp()
+                    run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                    run['path'] = run['path'] + value if value else value
+                    self.refused()
+            with self.subTest(target=target, path='wrong filename'):
+                self.setUp()
+                run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                run['path'] = '.github/workflows/other.yml@main'
+                self.refused()
+
+    def test_registered_workflow_paths_remain_plain_even_when_runs_are_main_qualified(self):
+        for target in ['parent_workflow', 'self_workflow']:
+            with self.subTest(target=target):
+                self.setUp()
+                self.parent['path'] += '@main'
+                self.event['workflow_run']['path'] += '@main'
+                self.current['path'] += '@main'
+                getattr(self, target)['path'] += '@main'
+                self.refused()
+
+    def test_main_qualified_paths_cannot_bypass_branch_source_or_workflow_id_identity(self):
+        for target in ['parent', 'event', 'current']:
+            for field, value in [('head_branch', 'other'), ('head_sha', 'd' * 40), ('workflow_id', 999)]:
+                with self.subTest(target=target, field=field):
+                    self.setUp()
+                    self.parent['path'] += '@main'
+                    self.event['workflow_run']['path'] += '@main'
+                    self.current['path'] += '@main'
+                    run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                    run[field] = value
+                    self.refused()
 
     def test_valid_owner_security_pr_uses_same_completed_bot_parent_and_native_approval(self):
         self.pr.update(user={'id': 456, 'login': 'enjoydarts', 'type': 'User'},

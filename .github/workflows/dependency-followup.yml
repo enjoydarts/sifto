@@ -1,0 +1,30 @@
+name: Dependency Completed Follow-up
+run-name: Dependency follow-up ${{ github.event.workflow_run.id }}
+on:
+  workflow_run:
+    workflows: [Dependency Approve Merge and Deploy]
+    types: [completed]
+    branches: [main]
+permissions: {}
+concurrency:
+  group: dependency-followup-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  notify:
+    if: github.ref == 'refs/heads/main' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify completed native parent and request fresh proposals once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+        run: python3 -B -m dependency_updates.followup

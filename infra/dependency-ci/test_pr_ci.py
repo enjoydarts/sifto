@@ -743,12 +743,46 @@ class PrepareTests(unittest.TestCase):
         self.flag.start()
         self.addCleanup(self.flag.stop)
         self.assertIsNotNone(importlib.util.find_spec('dependency_updates.pr_ci'))
+        from dependency_updates import image_security
+        for method, value in [('start', {'phase': 'candidate'}),
+                              ('wait', test_updates.PipelineTests().image_evidence())]:
+            mocked = patch.object(image_security, method, return_value=value)
+            mocked.start()
+            self.addCleanup(mocked.stop)
 
-    def test_pr_approval_starts_before_fixed_dispatch_and_both_checks_gate_output(self):
+    def test_missing_candidate_image_proof_never_outputs_an_owner_plan(self):
+        from unittest.mock import Mock
+        from dependency_updates import image_security, pr_ci
+        f = Fixture()
+        session = Mock()
+        session.remaining.return_value = 50 * 60
+        transport = f.api.transport
+        def fixed_jobs(method, path, body):
+            if path.startswith('/actions/runs/15/jobs'):
+                return {'total_count': 4, 'jobs': [{'name': name, 'head_sha': SHA,
+                    'conclusion': 'success'} for name in policy.CHECKS]}
+            return transport(method, path, body)
+        f.api.transport = fixed_jobs
+        run = {'id': 15, 'event': 'workflow_dispatch', 'head_sha': SHA,
+               'path': '.github/workflows/dependency-check.yml', 'status': 'completed', 'conclusion': 'success'}
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+            'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_OUTPUT': directory + '/output',
+            'GITHUB_STEP_SUMMARY': directory + '/summary'}), patch.object(pr_ci, 'start', return_value=session), \
+            patch.object(pipeline, 'dispatch_once', return_value=run), \
+            patch.object(image_security, 'wait', side_effect=policy.Refused('Image artifact missing')):
+            with self.assertRaisesRegex(policy.Refused, 'Image artifact missing'):
+                pipeline.prepare(f.api, 1, SHA, BASE, BASE)
+            self.assertFalse(Path(directory + '/output').exists())
+            self.assertFalse(Path(directory + '/summary').exists())
+
+    def test_blocked_candidate_pr_approval_starts_before_fixed_dispatch_and_both_checks_gate_output(self):
         from dependency_updates import pr_ci
         for fixed_fails, pr_fails in ((False, False), (True, False), (False, True)):
             with self.subTest(fixed_fails=fixed_fails, pr_fails=pr_fails):
                 f = Fixture()
+                # Required PR CI is still action_required. GitHub reports a
+                # mergeable PR as blocked until those checks complete.
+                f.candidate.mergeable_state = 'blocked'
                 events = []
                 real_start = pr_ci.start
                 def start(*args, **kwargs):

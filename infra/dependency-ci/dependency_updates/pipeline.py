@@ -266,19 +266,23 @@ def dispatch_once(api, workflow, ref, head, inputs, remaining_budget=None):
 
 
 def prepare(api, number, head, base, source):
-    from . import pr_ci
+    from . import pr_ci, image_security
     plan = candidate(api, number, head, base, source)
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Reruns require a fresh candidate approval request')
     def revalidate():
         assert_unchanged(plan, candidate(api, number, head, base, source,
                                        python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
     pr_checks = pr_ci.start(api, plan, revalidate)
+    image_scan = image_security.start(api, plan, 'candidate', head, plan['branch'])
     run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
                         remaining_budget=pr_checks.remaining)
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
     pr_checks.wait()
     revalidate()
+    image_evidence = image_security.wait(api, plan, image_scan)
+    revalidate()
     plan['ci_run'] = run['id']
+    plan['image_security'] = image_evidence
     digest = plan_hash(plan)
     encoded = base64.b64encode(canonical(plan).encode()).decode()
     require(len(encoded) < 48_000, 'Dependency plan exceeds immutable output limit; split the PR')
@@ -291,6 +295,7 @@ def prepare(api, number, head, base, source):
         for key in ('head', 'base', 'source', 'diff_hash', 'ci_run'):
             summary.write('**%s:** `%s`\n\n' % (key, plan[key]))
         summary.write('**Plan SHA256:** `%s`\n\n' % digest)
+        image_security.summary(summary, image_evidence)
         summary.write('**Affected resources:** %s\n\n' % ', '.join(plan['surfaces']))
         summary.write('Operating system package updates require the separate maintenance approval workflow. This dependency plan does not activate OS updates or the pinned live maintenance executor.\n\n')
         if 'development' in plan['surfaces']:
@@ -333,6 +338,7 @@ def merge_once(api, plan):
 
 
 def execute(api, plan, digest):
+    from . import image_security
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Consumed approval cannot be rerun')
     require(plan_hash(plan) == digest and plan['source'] == os.environ['GITHUB_SHA'], 'Untrusted or altered prepared plan')
     run_id = int(os.environ['GITHUB_RUN_ID'])
@@ -341,9 +347,12 @@ def execute(api, plan, digest):
     verify_approval(api.get('/actions/runs/%d/approvals' % run_id), run.get('actor', {}).get('login'))
     require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
             'Prepared plan has no fixed Python artifact-age evidence; prepare again')
+    require(type(plan.get('image_security')) is dict,
+            'Prepared plan has no mandatory candidate image evidence; prepare again')
     current = candidate(api, plan['pr'], plan['head'], plan['base'], plan['source'],
                         python_cutoff=plan['python_age']['cutoff'])
     current['ci_run'] = plan['ci_run']
+    current['image_security'] = image_security.revalidate(api, current, plan['image_security'])
     assert_unchanged(plan, current, digest)
     ci = api.get('/actions/runs/%d' % plan['ci_run'])
     verify_checks(ci, api.pages('/actions/runs/%d/jobs?filter=latest' % plan['ci_run'], 'jobs'), plan['head'])
@@ -363,7 +372,11 @@ def execute(api, plan, digest):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
             summary.write('\nAudio Concat deployment run %d succeeded for `%s`.\n' % (audio['id'], merged))
     require(main_sha(api) == merged, 'Main advanced after deployment; completion stopped')
+    merged_scan = image_security.start(api, plan, 'merged', merged, 'main')
+    merged_evidence = image_security.wait(api, plan, merged_scan)
+    require(main_sha(api) == merged, 'Main advanced after merged image scan; completion stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        image_security.summary(summary, merged_evidence)
         summary.write('\nAll affected deployments succeeded for `%s`. Merge approval remains consumed.\n' % merged)
         summary.write('\nThe next proposal is handled after this native approval workflow fully completes, '
                       'by a separate follow-up with fresh CI and owner approval. '

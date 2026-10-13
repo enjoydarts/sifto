@@ -1,14 +1,28 @@
 name: Dependency Security Advisory
+run-name: ${{ inputs.parent_run && format('Dependency image scan {0} {1} {2}', inputs.parent_run, inputs.phase, inputs.expected_head) || format('Dependency Security Advisory {0}', github.sha) }}
 on:
   schedule:
     - cron: '40 0 * * *'
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Optional exact source SHA; required for native pipeline scans
+        required: false
+        type: string
+      parent_run:
+        description: Native dependency approval run ID; paired with phase
+        required: false
+        type: string
+      phase:
+        description: Native candidate or merged phase; paired with parent_run
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: dependency-security
+  group: ${{ inputs.parent_run && format('dependency-security-{0}-{1}-{2}', inputs.parent_run, inputs.phase, inputs.expected_head) || 'dependency-security' }}
   cancel-in-progress: false
 jobs:
   images:
@@ -24,6 +38,24 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Verify requested scan source and dispatch identity
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          PARENT_RUN: ${{ inputs.parent_run }}
+          SCAN_PHASE: ${{ inputs.phase }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ -n "$EXPECTED_HEAD" ]; then
+            printf '%s' "$EXPECTED_HEAD" | LC_ALL=C grep -Eq '^[0-9a-f]{40}$'
+            test "$EXPECTED_HEAD" = "$GITHUB_SHA"
+          fi
+          if [ -n "$PARENT_RUN" ] || [ -n "$SCAN_PHASE" ]; then
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch
+            test -n "$EXPECTED_HEAD"
+            printf '%s' "$PARENT_RUN" | LC_ALL=C grep -Eq '^[1-9][0-9]{0,19}$'
+            case "$SCAN_PHASE" in candidate|merged) ;; *) exit 1 ;; esac
+          fi
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: arm64
@@ -96,3 +128,5 @@ jobs:
             printf '%s\n' 'The scanner did not produce a report. Inspect the failed scan step.' >> "$GITHUB_STEP_SUMMARY"
           fi
           printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
+          # Missing/empty output is scanner incompleteness, not a CVE advisory.
+          test -s .dependency-vulnerabilities.txt

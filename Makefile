@@ -233,6 +233,7 @@ dependency-contract: dependency-python-locks-mounts-test
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_updates.py
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_pr_ci.py
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_image_security.py
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_followup.py
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_completion_probe.py
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_declined.py

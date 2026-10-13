@@ -27,8 +27,9 @@ jobs:
   prepare:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
-    # PR CI visibility/approval/runtime share a 50m deadline; 15m for API/setup.
-    timeout-minutes: 65
+    # PR CI keeps its shared 50m deadline while all-image evidence runs in
+    # parallel with an independent 80m bound; 10m for API/setup.
+    timeout-minutes: 90
     permissions:
       contents: read
       pull-requests: read
@@ -58,8 +59,8 @@ jobs:
     needs: prepare
     environment: production-maintenance
     runs-on: ubuntu-26.04
-    # Deploy 145m + Audio 50m + 10m approval/merge/setup allowance.
-    timeout-minutes: 205
+    # Deploy 145m + Audio 50m + image evidence 80m + 10m setup allowance.
+    timeout-minutes: 285
     permissions:
       contents: write
       pull-requests: write

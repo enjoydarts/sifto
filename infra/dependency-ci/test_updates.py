@@ -919,6 +919,8 @@ class PipelineTests(unittest.TestCase):
         self.mergeable_state = 'clean'
         self.preview_failure = False
         self.api = github.GitHub(self.repo, transport=self.transport)
+        self.image_validation_error = self.image_scan_error = None
+        self.image_events = []
 
     def transport(self, method, path, body):
         if method != 'GET':
@@ -965,7 +967,50 @@ class PipelineTests(unittest.TestCase):
     def plan(self):
         value = pipeline.candidate(self.api, 1, SHA, BASE, BASE, python_cutoff='2026-10-05T00:00:00Z')
         value['ci_run'] = 15
+        value['image_security'] = self.image_evidence()
         return value
+
+    def image_evidence(self, phase='candidate', head=SHA):
+        from dependency_updates import image_security
+        return {'version': 1, 'run_id': 20, 'conclusion': 'failure',
+                'ticket': {'phase': phase, 'head': head, 'parent_run': 10}, 'inventory': None,
+                'images': [{'component': component, 'platform': values[0],
+                            'vulnerability_counts': dict.fromkeys(image_security.SEVERITIES, 1)}
+                           for component, values in image_security.EXPECTED.items()]}
+
+    def test_old_plan_without_image_evidence_cannot_consume_owner_approval(self):
+        plan = self.plan()
+        del plan['image_security']
+        with self.assertRaisesRegex(policy.Refused, 'image evidence'):
+            self.execute(plan)
+        self.assertEqual(self.mutations, [])
+
+    def test_semantically_unready_candidate_is_rejected_before_any_image_scan(self):
+        self.paths = ['worker/requirements.in']
+        with self.assertRaisesRegex(policy.Refused, 'corresponding.*lock'):
+            pipeline.prepare(self.api, 1, SHA, BASE, BASE)
+        self.assertEqual(self.image_events, [])
+        self.assertEqual(self.mutations, [])
+
+    def test_prepared_image_evidence_revalidation_failure_prevents_merge(self):
+        self.image_validation_error = policy.Refused('Prepared image evidence changed')
+        with self.assertRaisesRegex(policy.Refused, 'image evidence changed'):
+            self.execute(self.plan())
+        self.assertEqual(self.mutations, [])
+
+    def test_merged_image_scan_happens_once_after_actual_deployment_success(self):
+        self.execute(self.plan())
+        self.assertEqual(self.image_events, [('revalidate', SHA), ('merged', self.merged)])
+        self.assertIn('Verified merged image advisory', self.summary)
+        self.assertIn('CRITICAL', self.summary)
+        self.assertIn('**failure**', self.summary)
+
+    def test_incomplete_postmerge_scan_keeps_merge_consumed_and_parent_failed(self):
+        self.image_scan_error = policy.Refused('Incomplete image scan')
+        with self.assertRaisesRegex(policy.Refused, 'Incomplete image scan'):
+            self.execute(self.plan())
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual(self.image_events, [('revalidate', SHA), ('merged', self.merged)])
 
     def test_diagnostic_namespace_is_never_a_native_candidate(self):
         for suffix in ('123', 'broken', '0', '123-extra'):
@@ -1037,8 +1082,27 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.mutations, [])
 
     def execute(self, plan):
+        from dependency_updates import image_security
+        def revalidate(api, current, evidence):
+            self.image_events.append(('revalidate', current['head']))
+            if self.image_validation_error: raise self.image_validation_error
+            return evidence
+        def start(api, current, phase, head, ref):
+            self.image_events.append((phase, head))
+            self.assertEqual(phase, 'merged')
+            self.assertEqual(self.base, self.merged)
+            if set(current['surfaces']) & {'api', 'worker', 'web'}:
+                self.assertTrue(any('/deploy.yml/dispatches' in m[1] for m in self.mutations))
+            if 'audio' in current['surfaces']:
+                self.assertTrue(any('/deploy-audio-concat.yml/dispatches' in m[1] for m in self.mutations))
+            return {'phase': phase, 'head': head}
+        def wait(api, current, ticket):
+            if self.image_scan_error: raise self.image_scan_error
+            return self.image_evidence(ticket['phase'], ticket['head'])
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}):
+            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}), \
+                patch.object(image_security, 'revalidate', side_effect=revalidate), \
+                patch.object(image_security, 'start', side_effect=start), patch.object(image_security, 'wait', side_effect=wait):
                 pipeline.execute(self.api, plan, policy.plan_hash(plan))
                 self.summary = Path(directory + '/summary').read_text()
 
@@ -1149,6 +1213,7 @@ class PipelineTests(unittest.TestCase):
         self.api = github.GitHub(self.repo, transport=controlled)
         with self.assertRaisesRegex(policy.Refused, 'Dispatched workflow failed'):
             self.execute(self.plan())
+        self.assertEqual(self.image_events, [('revalidate', SHA)])
         self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
 
     def test_main_drift_after_successful_deploy_prevents_next_proposal_request(self):

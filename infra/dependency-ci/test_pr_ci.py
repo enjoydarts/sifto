@@ -336,6 +336,27 @@ class PRCITests(unittest.TestCase):
                 with self.assertRaises(policy.Refused): self.start()
                 self.assertEqual(self.f.posts, [])
 
+    def test_other_selected_workflow_race_prevents_first_approval(self):
+        for identifier in (201, 202):
+            for condition in ('failure', 'cancelled', 'held_owner', 'executed_jobs'):
+                with self.subTest(run=identifier, condition=condition):
+                    self.f = Fixture()
+                    if identifier == 202:
+                        self.f.runs[202] = self.f.run(WORKFLOWS[2], 202)
+                        self.f.jobs[202] = []
+                    original = self.f.revalidate
+                    def revalidate():
+                        original()
+                        if condition in ('failure', 'cancelled'):
+                            self.f.runs[identifier]['conclusion'] = condition
+                        if condition == 'held_owner':
+                            self.f.runs[identifier]['triggering_actor'] = copy.deepcopy(REPO['owner'])
+                        if condition == 'executed_jobs':
+                            self.f.jobs[identifier] = [{'id': 99}]
+                    self.f.revalidate = revalidate
+                    with self.assertRaises(policy.Refused): self.start()
+                    self.assertEqual(self.f.posts, [])
+
     def test_required_run_visibility_uses_same_finite_deadline(self):
         missing = self.f.runs.pop(201)
         def propagate(path):
@@ -488,7 +509,7 @@ class PrepareTests(unittest.TestCase):
             session.wait = lambda: pr_ci.Session.wait(session, clock=f.clock.monotonic, sleep=f.clock.sleep)
             return session
         def dispatch(*args, **kwargs):
-            self.assertEqual(kwargs['timeout_seconds'], 30 * 60)
+            self.assertEqual(kwargs['remaining_budget'](), 30 * 60)
             f.clock.elapsed = 51 * 60
             return {'id': 15, 'event': 'workflow_dispatch', 'head_sha': SHA,
                     'path': '.github/workflows/dependency-check.yml', 'status': 'completed', 'conclusion': 'success'}

@@ -171,13 +171,17 @@ class Session:
                 'PR CI security hold is not a first-attempt ordinary Bot approval')
         require(self.jobs(run, all_attempts=True) == [], 'PR CI held run has already executed jobs')
 
-    def approve(self, clock):
-        # Validate every selected hold before issuing the first mutation.
-        for run in self.selected.values():
+    def approval_eligibility(self, runs):
+        for run in runs.values():
             if run['conclusion'] == 'action_required':
                 self.held(run)
             elif run['status'] == 'completed':
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
+
+    def approve(self, clock):
+        # Every selected workflow remains an authority for every mutation,
+        # including workflows other than the run being approved next.
+        self.approval_eligibility(self.selected)
         for name, listed in self.selected.items():
             if listed['conclusion'] != 'action_required':
                 continue
@@ -193,6 +197,7 @@ class Session:
             require(set(latest) == set(self.selected)
                     and all(latest[key]['id'] == chosen['id'] and latest[key]['run_attempt'] == chosen['run_attempt']
                             for key, chosen in self.selected.items()), 'PR CI inventory changed before approval')
+            self.approval_eligibility(latest)
             run = latest[name]
             if run['status'] in ACTIVE or run['conclusion'] == 'success':
                 continue

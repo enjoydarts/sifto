@@ -215,10 +215,14 @@ def discover(api):
             return
 
 
-def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch'):
+def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch', remaining_budget=None):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if remaining_budget is not None:
+            remaining_budget()
         runs = api.pages('/actions/workflows/' + workflow + '/runs?event=' + event + '&head_sha=' + head, 'workflow_runs')
+        if remaining_budget is not None:
+            remaining_budget()
         require(time.monotonic() < deadline, 'Timed out waiting for exact workflow run')
         matches = [r for r in runs if r['id'] > after_id and r.get('head_sha') == head and r.get('event') == event]
         require(len(matches) <= 1, 'Ambiguous workflow run identity')
@@ -226,17 +230,25 @@ def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_di
             require(matches[0].get('conclusion') == 'success', 'Dispatched workflow failed')
             return matches[0]
         remaining = deadline - time.monotonic()
+        if remaining_budget is not None:
+            remaining = min(remaining, remaining_budget())
         if remaining > 0:
             time.sleep(min(10, remaining))
     raise Refused('Timed out waiting for exact workflow run')
 
 
-def dispatch_once(api, workflow, ref, head, inputs, timeout_seconds=None):
+def dispatch_once(api, workflow, ref, head, inputs, remaining_budget=None):
     require(workflow in RUN_WAIT_SECONDS, 'Unsupported workflow wait budget')
+    if remaining_budget is not None:
+        remaining_budget()
     existing = api.pages('/actions/workflows/' + workflow + '/runs?event=workflow_dispatch&head_sha=' + head, 'workflow_runs')
     latest = max((r['id'] for r in existing), default=0)
+    if remaining_budget is not None:
+        remaining_budget()
     api.request('POST', '/actions/workflows/' + workflow + '/dispatches', {'ref': ref, 'inputs': inputs})
-    return await_run(api, workflow, head, latest, min(RUN_WAIT_SECONDS[workflow], timeout_seconds) if timeout_seconds is not None else RUN_WAIT_SECONDS[workflow])
+    if remaining_budget is not None:
+        remaining_budget()
+    return await_run(api, workflow, head, latest, RUN_WAIT_SECONDS[workflow], remaining_budget=remaining_budget)
 
 
 def prepare(api, number, head, base, source):
@@ -248,7 +260,7 @@ def prepare(api, number, head, base, source):
                                        python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
     pr_checks = pr_ci.start(api, plan, revalidate)
     run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
-                        timeout_seconds=pr_checks.remaining())
+                        remaining_budget=pr_checks.remaining)
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
     pr_checks.wait()
     revalidate()

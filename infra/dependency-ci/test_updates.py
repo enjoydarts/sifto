@@ -1377,6 +1377,62 @@ class PipelineTests(unittest.TestCase):
 
 
 class WorkflowWaitTests(unittest.TestCase):
+    def test_shared_pr_deadline_expiring_in_dispatch_inventory_prevents_post(self):
+        clock = FakeClock()
+        mutations = []
+        def remaining():
+            policy.require(clock.elapsed < 20, 'Timed out waiting for exact PR CI')
+            return 20 - clock.elapsed
+        def transport(method, path, body):
+            if method == 'POST': mutations.append((path, body))
+            clock.elapsed += 21
+            return {'workflow_runs': [], 'total_count': 0}
+        api = github.GitHub('owner/repo', transport=transport)
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            try:
+                pipeline.dispatch_once(api, 'dependency-check.yml', 'renovate-ci/pip', SHA,
+                                       {'expected_head': SHA}, remaining_budget=remaining)
+            except TypeError:
+                self.fail('Dispatch must accept the shared remaining-budget authority')
+            except policy.Refused as exc:
+                self.assertIn('Timed out', str(exc))
+            else:
+                self.fail('Expired shared PR deadline must stop dispatch')
+        self.assertEqual(mutations, [])
+
+    def test_shared_pr_deadline_includes_post_and_wait_api_latency_without_replay(self):
+        for expires_in in ('POST', 'wait_GET'):
+            with self.subTest(expires_in=expires_in):
+                clock = FakeClock()
+                mutations = []
+                def remaining():
+                    policy.require(clock.elapsed < 20, 'Timed out waiting for exact PR CI')
+                    return 20 - clock.elapsed
+                def transport(method, path, body):
+                    if method == 'POST':
+                        mutations.append((path, body))
+                        clock.elapsed += 21 if expires_in == 'POST' else 12
+                        return None
+                    if mutations:
+                        clock.elapsed += 9
+                        run = {'id': 16, 'event': 'workflow_dispatch', 'head_sha': SHA,
+                               'path': '.github/workflows/dependency-check.yml', 'status': 'completed', 'conclusion': 'success'}
+                        return {'workflow_runs': [run], 'total_count': 1}
+                    return {'workflow_runs': [], 'total_count': 0}
+                api = github.GitHub('owner/repo', transport=transport)
+                with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+                    try:
+                        pipeline.dispatch_once(api, 'dependency-check.yml', 'renovate-ci/pip', SHA,
+                                               {'expected_head': SHA}, remaining_budget=remaining)
+                    except TypeError:
+                        self.fail('Dispatch must accept the shared remaining-budget authority')
+                    except policy.Refused as exc:
+                        self.assertIn('Timed out', str(exc))
+                    else:
+                        self.fail('Expired shared PR deadline must reject even successful CI')
+                self.assertEqual(len(mutations), 1)
+                self.assertEqual(clock.elapsed, 21)
+
     def test_ci_has_its_own_short_finite_deadline_without_redispatch(self):
         clock = FakeClock()
         mutations = []

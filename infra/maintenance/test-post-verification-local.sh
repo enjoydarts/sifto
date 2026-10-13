@@ -42,6 +42,19 @@ cat > "$post_fixture/bin/docker" <<'EOF'
 set -eu
 test "$1" = compose
 shift
+# Preserve the first base file as the build context, but forward it only once.
+# Some Compose versions reject repeated security_opt entries from duplicate -f.
+test "${1:-}" = -f
+test "${2:-}" = infra/maintenance/compose.yml
+shift 2
+previous=
+for argument in "$@"; do
+  if [ "$previous" = -f ] && [ "$argument" = infra/maintenance/compose.yml ]; then
+    echo fixture_duplicate_base_rejected >&2
+    exit 1
+  fi
+  previous=$argument
+done
 case "$*" in
   *'build controller post-preparation')
     # These are synthetic fixture-only logs. Preserve the actual Docker build
@@ -93,6 +106,13 @@ export INPUT_PLAN_SHA256=ccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 export INPUT_EXECUTOR_SHA=$MAINTENANCE_EXECUTOR_SHA INPUT_APPROVAL_COMMIT=dddddddddddddddddddddddddddddddddddddddd
 export INPUT_APPROVAL_SHA256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee INPUT_DRY_RUN=false
 export GITHUB_STEP_SUMMARY="$post_fixture/summary.md"
+# The interceptor must reject repeated base files before Compose can merge the
+# security settings twice. Exercise its actual argv handling, not source text.
+status=0
+(cd "$post_fixture/repository" && docker compose -f infra/maintenance/compose.yml \
+  -f infra/maintenance/compose.yml --profile controller config --quiet) >"$post_fixture/duplicate-base.log" 2>&1 || status=$?
+test "$status" -ne 0
+rg -q 'fixture_duplicate_base_rejected' "$post_fixture/duplicate-base.log"
 status=0
 (cd "$post_fixture/repository" && sh infra/maintenance/run-post-verification.sh) >"$post_fixture/wrapper.log" 2>&1 || status=$?
 test "$status" -ne 0

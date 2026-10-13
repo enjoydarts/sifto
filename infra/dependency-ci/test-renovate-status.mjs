@@ -30,6 +30,9 @@ import { mergeChildConfig } from '/usr/local/renovate/dist/config/utils.js';
 import { resolveConfigPresets } from '/usr/local/renovate/dist/config/presets/index.js';
 import { branchifyUpgrades } from '/usr/local/renovate/dist/workers/repository/updates/branchify.js';
 import { prAlreadyExisted } from '/usr/local/renovate/dist/workers/repository/update/branch/check-existing.js';
+import { flattenUpdates } from '/usr/local/renovate/dist/workers/repository/updates/flatten.js';
+import { extractPackageFile as extractDocker } from '/usr/local/renovate/dist/modules/manager/dockerfile/extract.js';
+import { extractPackageFile as extractCompose } from '/usr/local/renovate/dist/modules/manager/docker-compose/extract.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -224,8 +227,8 @@ require (
   // then run actual branch generation and closed-PR lookup. This catches a
   // rule that matches JSON but loses precedence during pin/group normalization.
   const resolved = mergeChildConfig(getConfig(), (await resolveConfigPresets(repositoryConfig)).config);
-  const legacy = { ...resolved, packageRules: resolved.packageRules.filter((rule) =>
-    !(rule.recreateWhen === 'never' && rule.matchUpdateTypes?.includes('pin'))) };
+  const unrestrictedConfig = { ...resolved, packageRules: resolved.packageRules.filter((rule) =>
+    !(rule.enabled === false && rule.matchUpdateTypes?.includes('pinDigest'))) };
   const fixtures = [];
   for (const updateType of ['pinDigest', 'pin', 'digest', 'minor', 'patch', 'major']) {
     for (const maintenance of updateType === 'pin' ? [false] : [false, true]) {
@@ -247,7 +250,7 @@ require (
       const generate = async (config, dependencyFixture = deps) => (await branchifyUpgrades({
         ...config, semanticCommits: 'disabled', baseBranch: 'main', repoIsOnboarded: true, errors: [], warnings: [],
       }, { [manager]: [{ packageFile, deps: structuredClone(dependencyFixture) }] })).branches;
-      const before = await generate(legacy);
+      const before = await generate(unrestrictedConfig);
       const after = await generate(resolved);
       assert.ok(after.length > 0, `${updateType}: updates must remain enabled`);
       assert.equal(after.length, before.length);
@@ -261,26 +264,16 @@ require (
         assert.equal(branch.pinDigests, true);
         assert.equal(branch.upgrades.length, previous.upgrades.length);
         if (maintenance) assert.equal(branch.groupName, activationGroup);
-        if (['pin', 'pinDigest'].includes(updateType)) {
-          assert.equal(previous.recreateClosed, true, `${updateType}: default immortal pin group reproduces the bug`);
-          assert.equal(branch.recreateClosed, false, `${updateType}: closed pin proposal must be respected`);
-          assert.ok(branch.upgrades.every((upgrade) => upgrade.recreateWhen === 'never'));
-        } else {
-          assert.equal(branch.recreateWhen, previous.recreateWhen, `${updateType}: retain version/digest policy`);
-          assert.equal(branch.recreateClosed, previous.recreateClosed);
-        }
         fixtures.push({ branch, previous, updateType });
       }
-      if (!['pin', 'pinDigest'].includes(updateType)) {
-        const future = deps.map((dep, index) => ({ ...dep, updates: dep.updates.map((update) => ({
-          ...update,
-          ...(!docker ? { newMajor: index + 10, newVersion: `${index + 10}.1.1`, newValue: `${index + 10}.1.1` } : {}),
-          ...(docker ? { newDigest: `sha256:${String(index + 3).repeat(64)}` } : {}),
-        })) }));
-        const futureBranches = await generate(resolved, future);
-        assert.ok(futureBranches.length > 0, `${updateType}: future updates must remain enabled`);
-        for (const branch of futureBranches) fixtures.push({ branch, updateType, future: true });
-      }
+      const future = deps.map((dep, index) => ({ ...dep, updates: dep.updates.map((update) => ({
+        ...update,
+        ...(!docker ? { newMajor: index + 10, newVersion: `${index + 10}.1.1`, newValue: `${index + 10}.1.1` } : {}),
+        ...(docker ? { newDigest: `sha256:${String(index + 3).repeat(64)}` } : {}),
+      })) }));
+      const futureBranches = await generate(resolved, future);
+      assert.ok(futureBranches.length > 0, `${updateType}: future updates must remain enabled`);
+      for (const branch of futureBranches) fixtures.push({ branch, updateType, future: true });
     }
   }
   for (const [index, { branch, future }] of fixtures.entries()) {
@@ -291,23 +284,95 @@ require (
       base: { ref: 'main' },
     });
   }
-  for (const { branch, previous, updateType, future } of fixtures) {
+  for (const { branch, previous, updateType, future } of [
+    ...fixtures.filter((fixture) => fixture.future), ...fixtures.filter((fixture) => !fixture.future),
+  ]) {
     const existing = await prAlreadyExisted(branch);
     if (future) {
-      assert.equal(existing, null, `${updateType}: future version/digest proposals must remain eligible`);
+      assert.equal(existing, null, `${updateType}: distinct future pin/version/digest proposals must remain eligible`);
       continue;
     }
-    if (['pin', 'pinDigest'].includes(updateType)) {
-      assert.equal(await prAlreadyExisted(previous), null, `${updateType}: legacy behavior ignores closed PR`);
-      assert.equal(existing?.state, 'closed');
-      assert.equal(existing?.title, branch.prTitle);
-      assert.equal(existing?.sourceBranch, branch.branchName);
-    } else {
-      assert.deepEqual(existing, await prAlreadyExisted(previous));
+    assert.equal(branch.recreateWhen, previous.recreateWhen, `${updateType}: retain ordinary update policy`);
+    assert.equal(branch.recreateClosed, previous.recreateClosed);
+    assert.deepEqual(existing, await prAlreadyExisted(previous));
+  }
+
+  // Owner-closed PR #21 (regenerated verbatim as #54) declined these four
+  // specific proposals, not every future pin sharing their immortal group.
+  // Real Docker extraction supplies identities; only registry lookup results
+  // are synthetic. No test-side enabled/skipReason filtering is performed.
+  const rejected = [
+    { manager: 'dockerfile', packageFile: 'api/Dockerfile', depName: 'alpine', currentValue: 'latest',
+      newDigest: 'sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6' },
+    { manager: 'docker-compose', packageFile: 'docker-compose.yml', depName: 'inngest/inngest', currentValue: 'latest',
+      newDigest: 'sha256:9c4a2413bdbfa31a94ff54c32ae2dcc6613dbee84bc76db6cf6644d19e357e3e' },
+    ...['infra/dependency-ci/compose.yml', 'infra/image-security/compose.yml'].map((packageFile) => ({
+      manager: 'docker-compose', packageFile, depName: 'aquasec/trivy', currentValue: '0.75.0',
+      newDigest: 'sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa',
+    })),
+  ];
+  const branchInput = { ...resolved, semanticCommits: 'disabled', baseBranch: 'main', repoIsOnboarded: true, errors: [], warnings: [] };
+  const packageFilesFor = async (proposals) => {
+    const files = {};
+    for (const proposal of proposals) {
+      const { manager, packageFile, depName, currentValue, newDigest, updateType = 'pinDigest' } = proposal;
+      const image = `${depName}:${currentValue}${updateType === 'digest' ? `@sha256:${'e'.repeat(64)}` : ''}`;
+      const parsed = manager === 'dockerfile' ? extractDocker(`FROM ${image}\n`, packageFile, resolved)
+        : extractCompose(`services:\n  fixture:\n    image: ${image}\n`, packageFile, resolved);
+      assert.equal(parsed.deps.length, 1);
+      const dep = parsed.deps[0];
+      assert.equal(dep.depName, depName);
+      assert.equal(dep.currentValue, currentValue);
+      dep.packageName ??= dep.depName; // production extract/manager-files normalization
+      const lookupConfig = await applyPackageRules({ ...resolved, ...dep, manager, packageFile });
+      assert.notEqual(lookupConfig.enabled, false, 'Before digest resolution the dependency must remain enabled');
+      dep.updates = [{ updateType, newValue: currentValue, newDigest }];
+      const managerFiles = files[manager] ??= [];
+      let file = managerFiles.find((entry) => entry.packageFile === packageFile);
+      if (!file) managerFiles.push(file = { packageFile, deps: [] });
+      file.deps.push(dep);
+    }
+    return files;
+  };
+  const rejectedFiles = await packageFilesFor(rejected);
+  assert.equal((await flattenUpdates({ ...branchInput, packageRules: unrestrictedConfig.packageRules }, structuredClone(rejectedFiles))).length, 4);
+  assert.equal((await branchifyUpgrades({ ...branchInput, packageRules: unrestrictedConfig.packageRules }, structuredClone(rejectedFiles))).branches.length, 1);
+  assert.deepEqual(await flattenUpdates(branchInput, structuredClone(rejectedFiles)), [], 'Only the exact owner-declined tuples must be removed by real update filtering');
+  assert.deepEqual((await branchifyUpgrades(branchInput, structuredClone(rejectedFiles))).branches, [], 'Rejected proposals must not create any branch');
+  const identity = ({ manager, packageFile, depName, currentValue, updateType = 'pinDigest', newDigest }) =>
+    JSON.stringify([manager, packageFile, depName, currentValue, updateType, newDigest]);
+  const futurePins = [];
+  for (const proposal of rejected) {
+    for (const variant of [
+      { newDigest: `sha256:${'f'.repeat(64)}` }, // changed digest at the same tag and path
+      { depName: 'future/image' },
+      { packageFile: `future/${proposal.packageFile}` },
+      { currentValue: '0.76.0' },
+      { updateType: 'digest' }, // an already pinned image's ordinary digest update
+    ]) {
+      const futureProposal = { ...proposal, ...variant };
+      const files = await packageFilesFor([futureProposal]);
+      const updates = await flattenUpdates(branchInput, structuredClone(files));
+      assert.deepEqual(updates.map(identity), [identity(futureProposal)], 'Every distinct future proposal must remain enabled');
+      const branches = (await branchifyUpgrades(branchInput, files)).branches;
+      assert.equal(branches.length, 1);
+      const unrestricted = (await branchifyUpgrades({ ...branchInput, packageRules: unrestrictedConfig.packageRules }, await packageFilesFor([futureProposal]))).branches[0];
+      assert.equal(branches[0].branchName, unrestricted.branchName);
+      assert.equal(branches[0].prTitle, unrestricted.prTitle);
+      assert.equal(branches[0].recreateClosed, unrestricted.recreateClosed);
+      assert.equal(branches[0].minimumReleaseAge, '7 days');
+      assert.equal(branches[0].automerge, false);
+      if (futureProposal.updateType !== 'digest') futurePins.push(futureProposal);
     }
   }
+  const mixedFiles = await packageFilesFor([...rejected, ...futurePins]);
+  const mixedUpdates = await flattenUpdates(branchInput, structuredClone(mixedFiles));
+  assert.deepEqual(mixedUpdates.map(identity).sort(), futurePins.map(identity).sort(), 'Mixed groups retain every future proposal and none of the rejected tuples');
+  const mixedBranches = (await branchifyUpgrades(branchInput, mixedFiles)).branches;
+  assert.equal(mixedBranches.flatMap((branch) => branch.upgrades).length, futurePins.length);
+  assert.ok(mixedBranches.every((branch) => branch.minimumReleaseAge === '7 days' && !branch.automerge && !branch.platformAutomerge));
   assert.equal(calls.length, 0, 'Closed-PR policy must only read GitHub');
-  console.log(`Renovate ${installedVersion}: closed pin/pinDigest groups are not recreated; future version/digest updates, seven-day age and maintenance isolation retain their behavior.`);
+  console.log(`Renovate ${installedVersion}: only the four owner-declined pinDigest tuples are filtered; future pins, versions, digests and mixed groups remain enabled with seven-day age and maintenance isolation.`);
   const config = { branchName, statusCheckNames: { minimumReleaseAge: context } };
 
   // Missing status write access aborts both waiting and satisfied age checks.

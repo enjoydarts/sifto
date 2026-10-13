@@ -325,7 +325,7 @@ class SourceAndScopeTests(unittest.TestCase):
             def fetch(self, commit, path, **kwargs): return envelope_raw if path.startswith('approvals/') else p.canonical_json(plan)
             def head(self): return self.parent
             def git(self, *args): return ('\n'.join(self.files) + ('\n' if self.files else '')).encode()
-            def read_at(self, parent, name): return self.files[name]
+            def read_at(self, parent, name): return self.files[name] or None
             def write(self, parent, files):
                 self.files = files; self.writes += 1; self.parent = 'f' * 40
                 raise p.MaintenanceError('ack lost after persisted append')

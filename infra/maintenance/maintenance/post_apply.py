@@ -174,7 +174,9 @@ def append_record(store, files):
         parent = store.head()
         present = set(store.git('ls-tree', '--name-only', parent, '--', *sorted(files)).decode().splitlines())
         if present:
-            require(present == set(files) and all(semantic(store.read_at(parent, name), name) == semantic(raw, name)
+            # GitStore maps empty blobs to None; ls-tree above proves presence,
+            # so preserve an empty diagnostic as exact zero-length bytes.
+            require(present == set(files) and all(semantic(store.read_at(parent, name) or b'', name) == semantic(raw, name)
                                                  for name, raw in files.items()), 'immutable_post_verification_conflict')
             return parent
         require(parent != previous, 'post_verification_write_unknown_without_new_parent')

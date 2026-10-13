@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import ai_navigator_brief, ask, ask_navigator, audio_briefing_script, audio_briefing_tts, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, item_navigator, source_navigator, summary_audio_player, summarize, summary_faithfulness, translate_title, tts_markup_preprocess
-from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current, update_current_trace as langfuse_update_current_trace
+from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current
 from app.services.alibaba_service import alibaba_workspace_context
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
@@ -170,9 +170,18 @@ async def langfuse_request_tracing(request: Request, call_next):
         "purpose": purpose,
     }
     observation_type = "span" if request.url.path == "/extract-body" else "generation"
+    session_id = None
+    if item_id:
+        session_id = f"item:{item_id}"
+    elif digest_id:
+        session_id = f"digest:{digest_id}"
+    elif source_id:
+        session_id = f"source:{source_id}"
     with langfuse_span(
         f"worker:{request.url.path.strip('/') or 'root'}",
         metadata=metadata,
+        user_id=user_id or None,
+        session_id=session_id,
         tags=[
             "worker",
             f"path:{request.url.path}",
@@ -181,22 +190,6 @@ async def langfuse_request_tracing(request: Request, call_next):
         as_type=observation_type,
     ) as current_span:
         request.state.langfuse_span = current_span
-        session_id = ""
-        if item_id:
-            session_id = f"item:{item_id}"
-        elif digest_id:
-            session_id = f"digest:{digest_id}"
-        elif source_id:
-            session_id = f"source:{source_id}"
-        langfuse_update_current_trace(
-            user_id=user_id or None,
-            session_id=session_id or None,
-            tags=[
-                "worker",
-                f"path:{request.url.path}",
-                f"purpose:{purpose or 'unknown'}",
-            ],
-        )
         try:
             response = await call_next(request)
             langfuse_update_current(metadata={"status_code": response.status_code})

@@ -20,7 +20,7 @@ def test_observability_context_entry_failure_does_not_fail_request():
     context = Mock()
     context.__enter__ = Mock(side_effect=RuntimeError("sdk unavailable"))
     context.__exit__ = Mock(return_value=False)
-    client = Mock(start_as_current_span=Mock(return_value=context))
+    client = Mock(spec=["start_as_current_observation"], start_as_current_observation=Mock(return_value=context))
     with patch.object(langfuse_client, "_client", return_value=client):
         with langfuse_client.span("request") as span:
             assert span is None
@@ -28,7 +28,7 @@ def test_observability_context_entry_failure_does_not_fail_request():
 
 def test_observability_must_not_swallow_application_errors():
     from contextlib import nullcontext
-    client = Mock(start_as_current_span=Mock(return_value=nullcontext(Mock())))
+    client = Mock(spec=["start_as_current_observation"], start_as_current_observation=Mock(return_value=nullcontext(Mock())))
     with patch.object(langfuse_client, "_client", return_value=client), pytest.raises(ValueError, match="application"):
         with langfuse_client.span("request"):
             raise ValueError("application failed")

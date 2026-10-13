@@ -64,6 +64,7 @@ class DeclinedTests(unittest.TestCase):
             self.requests.append((method, path, body))
             if self.close_error: raise self.close_error
             self.current['state'] = 'closed'
+            self.current['closed_at'] = '2026-10-13T00:10:00Z'
             if self.after_close: self.after_close()
             return copy.deepcopy(self.current)
         self.reads.append(path)
@@ -106,6 +107,62 @@ class DeclinedTests(unittest.TestCase):
         self.assertEqual(self.requests, [('PATCH', '/pulls/58', {'state': 'closed'})])
         self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
         self.assertEqual(self.old, old)
+
+    def test_close_updates_embedded_repository_stats_without_changing_authority(self):
+        for pr in (self.current, self.old):
+            for side in ('head', 'base'):
+                pr[side]['repo'].update(open_issues_count=4, pushed_at='2026-10-13T00:00:00Z')
+        def closed():
+            for pr in (self.current, self.old):
+                for side in ('head', 'base'):
+                    pr[side]['repo'].update(open_issues_count=3, pushed_at='2026-10-13T00:10:00Z')
+        self.after_close = closed
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Benign close metadata drift blocked deletion: ' + str(exc))
+        self.assertEqual(len(self.requests), 1)
+        self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
+
+    def test_volatile_metadata_on_all_authority_rereads_is_ignored(self):
+        def drift(endpoint):
+            serial = len(self.reads)
+            self.repo['owner']['avatar_url'] = 'https://avatar.invalid/%d' % serial
+            self.events[0]['actor']['avatar_url'] = 'https://avatar.invalid/%d' % serial
+            for pr in (self.current, self.old):
+                pr.update(updated_at='2026-10-13T00:10:00Z', body='Presentation %d' % serial)
+                pr['user']['avatar_url'] = 'https://avatar.invalid/%d' % serial
+                for side in ('head', 'base'):
+                    pr[side]['repo'].update(open_issues_count=serial, pushed_at='2026-10-13T00:10:00Z')
+                    pr[side]['repo']['owner']['avatar_url'] = 'https://avatar.invalid/%d' % serial
+        self.mutate_read = drift
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Volatile presentation metadata blocked cleanup: ' + str(exc))
+        self.assertEqual(len(self.requests), 1)
+        self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
+
+    def test_critical_proposal_identity_changes_after_ack_preserve_branch(self):
+        changes = [lambda: self.current.update(number=999), lambda: self.current.update(title='Changed'),
+                   lambda: self.current.update(state='open'), lambda: self.current.update(merged=True),
+                   lambda: self.current.update(changed_files=4),
+                   lambda: self.current.update(created_at='2026-10-13T00:02:00Z'),
+                   lambda: self.current.update(closed_at=None),
+                   lambda: self.current.update(closed_at='2026-10-14T00:00:00Z'),
+                   lambda: self.current['user'].update(id=999),
+                   lambda: self.current['user'].update(login='other-bot'),
+                   lambda: self.current['user'].update(type='User'),
+                   lambda: self.current['head'].update(sha=OLD),
+                   lambda: self.current['head'].update(ref='renovate-ci/other'),
+                   lambda: self.current['head']['repo'].update(id=999),
+                   lambda: self.current['head']['repo'].update(full_name='other/repo'),
+                   lambda: self.current['base'].update(sha=OLD),
+                   lambda: self.current['base'].update(ref='release'),
+                   lambda: self.current['base']['repo'].update(id=999),
+                   lambda: self.current['base']['repo'].update(full_name='other/repo')]
+        for change in changes:
+            with self.subTest(change=change):
+                self.setUp(); self.after_close = change
+                with self.assertRaises(policy.Refused): self.clean()
+                self.assertEqual(len(self.requests), 1)
+                self.deleted.assert_not_called()
 
     def test_scheduled_owner_manual_owner_and_bot_writers_are_supported(self):
         for event, actor in [('schedule', OWNER), ('workflow_dispatch', OWNER), ('workflow_dispatch', BOT)]:

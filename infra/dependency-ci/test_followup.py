@@ -26,7 +26,9 @@ class CompletedFollowupTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(SPEC, 'Completed-parent follow-up controller must exist')
         self.context = {'GITHUB_REPOSITORY': REPO['full_name'], 'GITHUB_REPOSITORY_ID': '123',
-                        'GITHUB_EVENT_NAME': 'workflow_run', 'GITHUB_REF': 'refs/heads/main',
+                        'GITHUB_ACTOR': BOT['login'], 'GITHUB_ACTOR_ID': str(BOT['id']),
+                        'GITHUB_TRIGGERING_ACTOR': BOT['login'],
+                        'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': 'refs/heads/main',
                         'GITHUB_SHA': MERGED, 'GITHUB_WORKFLOW_SHA': MERGED,
                         'GITHUB_WORKFLOW_REF': 'owner/repo/.github/workflows/dependency-followup.yml@refs/heads/main',
                         'GITHUB_RUN_ID': '30', 'GITHUB_RUN_ATTEMPT': '1'}
@@ -42,9 +44,8 @@ class CompletedFollowupTests(unittest.TestCase):
                        'head_repository': REPO, 'actor': BOT, 'triggering_actor': BOT}
         self.current = dict(self.parent, id=30, workflow_id=21, name='Dependency Completed Follow-up',
                             display_title='Dependency follow-up 10', path=self.self_workflow['path'],
-                            event='workflow_run', head_sha=MERGED, status='in_progress', conclusion=None)
-        self.event = {'action': 'completed', 'repository': copy.deepcopy(REPO),
-                      'workflow_run': copy.deepcopy(self.parent)}
+                            event='workflow_dispatch', head_sha=MERGED, status='in_progress', conclusion=None)
+        self.event = {'inputs': {'parent_run': '10'}, 'repository': copy.deepcopy(REPO)}
         self.jobs = [{'id': 100 + index, 'name': name, 'run_id': 10, 'run_attempt': 1,
                       'head_sha': BASE, 'status': 'completed', 'conclusion': 'success'}
                      for index, name in enumerate(['prepare', 'approve-merge-deploy'])]
@@ -98,12 +99,11 @@ class CompletedFollowupTests(unittest.TestCase):
         self.assertEqual(self.reads.count('/actions/runs/10/approvals'), 2)
         self.assertEqual(sum(path.startswith('/actions/runs/10/jobs?filter=all') for path in self.reads), 2)
 
-    def test_parent_event_and_self_accept_only_plain_or_documented_main_qualified_run_paths(self):
-        for parent_suffix, event_suffix, self_suffix in product(['', '@main'], repeat=3):
-            with self.subTest(parent=parent_suffix, event=event_suffix, child=self_suffix):
+    def test_parent_and_self_accept_only_plain_or_documented_main_qualified_run_paths(self):
+        for parent_suffix, self_suffix in product(['', '@main'], repeat=2):
+            with self.subTest(parent=parent_suffix, child=self_suffix):
                 self.setUp()
                 self.parent['path'] += parent_suffix
-                self.event['workflow_run']['path'] += event_suffix
                 self.current['path'] += self_suffix
                 try:
                     outcome = self.notify()
@@ -125,17 +125,17 @@ class CompletedFollowupTests(unittest.TestCase):
         self.assertEqual(len(self.mutations), 1)
 
     def test_unexpected_run_path_files_refs_and_suffixes_are_refused(self):
-        for target in ['parent', 'event', 'current']:
+        for target in ['parent', 'current']:
             for value in ['@other', '@refs/heads/main', '@refs/tags/main', '@' + MERGED,
                           '@main@main', '@main/extra', '@main\n', '.backup', '', None]:
                 with self.subTest(target=target, suffix=value):
                     self.setUp()
-                    run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                    run = getattr(self, target)
                     run['path'] = run['path'] + value if value else value
                     self.refused()
             with self.subTest(target=target, path='wrong filename'):
                 self.setUp()
-                run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                run = getattr(self, target)
                 run['path'] = '.github/workflows/other.yml@main'
                 self.refused()
 
@@ -144,20 +144,18 @@ class CompletedFollowupTests(unittest.TestCase):
             with self.subTest(target=target):
                 self.setUp()
                 self.parent['path'] += '@main'
-                self.event['workflow_run']['path'] += '@main'
                 self.current['path'] += '@main'
                 getattr(self, target)['path'] += '@main'
                 self.refused()
 
     def test_main_qualified_paths_cannot_bypass_branch_source_or_workflow_id_identity(self):
-        for target in ['parent', 'event', 'current']:
+        for target in ['parent', 'current']:
             for field, value in [('head_branch', 'other'), ('head_sha', 'd' * 40), ('workflow_id', 999)]:
                 with self.subTest(target=target, field=field):
                     self.setUp()
                     self.parent['path'] += '@main'
-                    self.event['workflow_run']['path'] += '@main'
                     self.current['path'] += '@main'
-                    run = self.event['workflow_run'] if target == 'event' else getattr(self, target)
+                    run = getattr(self, target)
                     run[field] = value
                     self.refused()
 
@@ -168,7 +166,7 @@ class CompletedFollowupTests(unittest.TestCase):
         self.assertEqual(self.notify(), 'requested')
 
     def test_parent_active_failed_cancelled_rerun_or_wrong_source_is_refused(self):
-        for field, value in [('status', 'in_progress'), ('conclusion', 'failure'),
+        for field, value in [('status', 'unknown'), ('conclusion', 'failure'),
                              ('conclusion', 'cancelled'), ('run_attempt', 2), ('run_attempt', True),
                              ('event', 'push'), ('head_branch', 'other'), ('head_sha', MERGED),
                              ('path', '.github/workflows/other.yml'), ('workflow_id', 22),
@@ -178,11 +176,12 @@ class CompletedFollowupTests(unittest.TestCase):
                 self.parent[field] = value
                 self.refused()
 
-    def test_event_and_parent_identity_must_match(self):
-        for field in ['head_sha', 'workflow_id', 'run_attempt', 'display_title', 'path', 'head_branch', 'event', 'conclusion']:
-            with self.subTest(field=field):
+    def test_event_inputs_must_be_exact_bounded_parent_identifier(self):
+        for value in [None, {}, {'parent_run': 10}, {'parent_run': True}, {'parent_run': '0'},
+                      {'parent_run': '01'}, {'parent_run': '10', 'other': 'value'}]:
+            with self.subTest(value=value):
                 self.setUp()
-                self.event['workflow_run'][field] = 'foreign'
+                self.event['inputs'] = value
                 self.refused()
 
     def test_foreign_uncompleted_or_invalid_event_is_refused(self):
@@ -191,11 +190,11 @@ class CompletedFollowupTests(unittest.TestCase):
                 self.setUp()
                 if condition == 'foreign_repo': self.event['repository']['full_name'] = 'other/repo'
                 if condition == 'missing_repo_id': del self.event['repository']['id']
-                if condition == 'active': self.event['action'] = 'requested'
-                if condition == 'missing_run': del self.event['workflow_run']
-                if condition == 'string_id': self.event['workflow_run']['id'] = '10'
-                if condition == 'zero_id': self.event['workflow_run']['id'] = 0
-                if condition == 'boolean_id': self.event['workflow_run']['id'] = True
+                if condition == 'active': self.context['GITHUB_EVENT_NAME'] = 'workflow_run'
+                if condition == 'missing_run': del self.event['inputs']
+                if condition == 'string_id': self.event['inputs']['parent_run'] = 'invalid'
+                if condition == 'zero_id': self.event['inputs']['parent_run'] = '0'
+                if condition == 'boolean_id': self.event['inputs']['parent_run'] = True
                 self.refused()
 
     def test_registered_workflow_name_path_state_and_ids_are_authority(self):
@@ -224,12 +223,11 @@ class CompletedFollowupTests(unittest.TestCase):
 
     def test_owner_parent_cannot_reuse_owner_native_approval(self):
         self.parent['actor'] = {'id': 456, 'login': 'enjoydarts', 'type': 'User'}
-        self.event['workflow_run']['actor'] = self.parent['actor']
         self.refused()
 
     def test_self_rerun_context_or_foreign_current_source_cannot_notify(self):
         for field, value in [('GITHUB_RUN_ATTEMPT', '2'), ('GITHUB_RUN_ID', '0'),
-                             ('GITHUB_REPOSITORY_ID', '124'), ('GITHUB_EVENT_NAME', 'workflow_dispatch'),
+                             ('GITHUB_REPOSITORY_ID', '124'), ('GITHUB_EVENT_NAME', 'workflow_run'),
                              ('GITHUB_REF', 'refs/heads/other'), ('GITHUB_SHA', BASE),
                              ('GITHUB_WORKFLOW_SHA', BASE), ('GITHUB_WORKFLOW_REF', 'owner/repo/.github/workflows/other.yml@refs/heads/main')]:
             with self.subTest(field=field):
@@ -429,6 +427,125 @@ class CompletedFollowupTests(unittest.TestCase):
                 with self.assertRaises(Refused): self.notify()
                 self.assertEqual(len(self.mutations), 1)
 
+    def test_active_parent_waits_without_any_notification_until_terminal_success(self):
+        self.parent.update(status='in_progress', conclusion=None)
+        def sleep(seconds):
+            self.assertEqual(seconds, 60)
+            self.assertEqual(self.mutations, [])
+            self.assertEqual(self.reads.count('/actions/runs/10/approvals'), 0)
+            self.parent.update(status='completed', conclusion='success')
+        with patch.object(followup.time, 'sleep', side_effect=sleep):
+            self.assertEqual(self.notify(), 'requested')
+        self.assertEqual(len(self.mutations), 1)
+
+    def test_wait_pins_parent_identity_and_refuses_cancellation_or_rerun(self):
+        for field, value in [('conclusion', 'cancelled'), ('run_attempt', 2),
+                             ('head_sha', MERGED), ('display_title', 'Dependency PR 2 ' + HEAD + ' ' + BASE)]:
+            with self.subTest(field=field):
+                self.setUp()
+                self.parent.update(status='queued', conclusion=None)
+                def sleep(seconds):
+                    self.assertEqual(self.mutations, [])
+                    self.parent.update(status='completed', conclusion='success')
+                    self.parent[field] = value
+                with patch.object(followup.time, 'sleep', side_effect=sleep): self.refused()
+
+    def test_wait_timeout_never_uses_active_native_approval(self):
+        self.parent.update(status='in_progress', conclusion=None)
+        with patch.object(followup.time, 'monotonic', side_effect=[0, 0, 600]), \
+             patch.object(followup.time, 'sleep') as sleep:
+            self.refused()
+        sleep.assert_not_called()
+
+    def test_semantic_approval_job_pr_and_first_child_changes_before_post_are_refused(self):
+        for condition in ['reviewer_id', 'environment_id', 'job_id', 'branch', 'author', 'history', 'self_actor']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        if condition == 'reviewer_id': self.approvals[0]['user']['id'] = 456
+                        if condition == 'environment_id': self.approvals[0]['environments'][0]['id'] = 789
+                        if condition == 'job_id': self.jobs[0]['id'] = 999
+                        if condition == 'branch': self.pr['head']['ref'] = 'renovate-ci/other'
+                        if condition == 'author': self.pr['user'] = dict(BOT, id=999)
+                        if condition == 'history': self.history.insert(0, dict(self.current, id=29))
+                        if condition == 'self_actor': self.current['actor'] = dict(BOT, id=999)
+                self.hook = hook
+                self.refused()
+
+    def test_cosmetic_rest_metadata_cannot_invalidate_unchanged_semantic_authority(self):
+        def hook(path):
+            if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                self.parent['repository'] = dict(REPO, open_issues_count=42)
+                self.parent['head_repository'] = dict(REPO, forks_count=99)
+                self.parent['actor'] = dict(BOT, avatar_url='changed')
+                self.pr['head']['repo'] = dict(REPO, open_issues_count=42)
+                self.pr['base']['repo'] = dict(REPO, forks_count=99)
+                self.pr['user'] = dict(BOT, avatar_url='changed')
+                self.pr['body'], self.pr['labels'] = 'Cosmetic update', [{'name': 'cosmetic'}]
+        self.hook = hook
+        self.assertEqual(self.notify(), 'requested')
+
+    def test_context_bot_identity_is_bound_to_actual_child(self):
+        for field, value in [('GITHUB_ACTOR', 'enjoydarts'), ('GITHUB_ACTOR_ID', '999'),
+                             ('GITHUB_TRIGGERING_ACTOR', 'enjoydarts')]:
+            with self.subTest(field=field):
+                self.setUp()
+                self.context[field] = value
+                self.refused()
+
+    def test_child_context_is_revalidated_after_full_terminal_authority_reads(self):
+        for field, value in [('GITHUB_SHA', BASE), ('GITHUB_WORKFLOW_SHA', BASE),
+                             ('GITHUB_EVENT_NAME', 'workflow_run'), ('GITHUB_RUN_ID', '31'),
+                             ('GITHUB_REPOSITORY_ID', '124'), ('GITHUB_RUN_ATTEMPT', '2'),
+                             ('GITHUB_WORKFLOW_REF', 'owner/repo/.github/workflows/other.yml@refs/heads/main')]:
+            with self.subTest(field=field):
+                self.setUp()
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        self.context[field] = value
+                self.hook = hook
+                self.refused()
+
+    def test_disabled_or_replaced_self_workflow_on_final_authority_read_cannot_notify(self):
+        for field, value in [('state', 'disabled_manually'), ('id', 999), ('name', 'foreign')]:
+            with self.subTest(field=field):
+                self.setUp()
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        self.self_workflow[field] = value
+                self.hook = hook
+                self.refused()
+
+    def test_wait_ignores_repository_stats_and_avatar_but_refuses_main_advance(self):
+        for changed_main in [False, True]:
+            with self.subTest(changed_main=changed_main):
+                self.setUp()
+                self.parent.update(status='queued', conclusion=None)
+                def sleep(seconds):
+                    self.assertEqual(self.mutations, [])
+                    self.parent.update(status='completed', conclusion='success')
+                    self.parent['repository'] = dict(REPO, open_issues_count=99)
+                    self.parent['actor'] = dict(BOT, avatar_url='cosmetic')
+                    if changed_main: self.main = BASE
+                with patch.object(followup.time, 'sleep', side_effect=sleep):
+                    if changed_main: self.refused()
+                    else: self.assertEqual(self.notify(), 'requested')
+
+    def test_security_authority_requires_marker_and_label_on_both_terminal_reads(self):
+        for condition in ['body', 'label']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                self.pr.update(user={'id': 456, 'login': 'enjoydarts', 'type': 'User'},
+                               labels=[{'name': 'dependency-security'}], body='Security fix: vulnerability')
+                self.pr['head']['ref'] = 'dependency-security/python-fix'
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        if condition == 'body': self.pr['body'] = 'ordinary change'
+                        else: self.pr['labels'] = []
+                self.hook = hook
+                self.refused()
+
     def test_event_file_is_bounded_and_duplicate_keys_are_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'event.json'
@@ -455,6 +572,146 @@ class CompletedFollowupTests(unittest.TestCase):
                 self.assertIn('their own CI and native owner approval', summary)
                 self.assertNotIn('created', summary)
                 self.assertEqual(len(self.mutations), 1)
+
+
+class QueueFollowupTests(unittest.TestCase):
+    setUp = CompletedFollowupTests.setUp
+    transport = CompletedFollowupTests.transport
+
+    def queue(self):
+        context = dict(self.context, GITHUB_RUN_ID='10', GITHUB_SHA=BASE, GITHUB_WORKFLOW_SHA=BASE,
+                       GITHUB_WORKFLOW_REF='owner/repo/.github/workflows/dependency-update.yml@refs/heads/main')
+        return followup.queue(self.api, {'pr': 1, 'head': HEAD, 'base': BASE, 'source': BASE,
+                                        'branch': 'renovate-ci/pip'}, MERGED, context)
+
+    def active(self):
+        self.parent.update(status='in_progress', conclusion=None)
+        self.jobs[1].update(status='in_progress', conclusion=None)
+        self.history = []
+
+    def refused(self):
+        with self.assertRaises(Refused): self.queue()
+        self.assertEqual(self.mutations, [])
+
+    def test_native_parent_only_queues_once_and_never_waits_for_child(self):
+        self.active()
+        with patch.object(followup.time, 'sleep', side_effect=AssertionError('Parent must never wait for child')):
+            self.assertEqual(self.queue(), 'requested')
+        self.assertEqual(self.mutations, [('POST', '/actions/workflows/dependency-followup.yml/dispatches',
+                                          {'ref': 'main', 'inputs': {'parent_run': '10'}})])
+        self.assertEqual(self.reads.count('/actions/runs/10'), 2)
+        self.assertEqual(self.reads.count('/actions/runs/10/approvals'), 2)
+        self.assertTrue(all('head_sha=' not in path for path in self.reads))
+
+    def test_any_prior_child_source_event_status_consumes_parent_queue(self):
+        for status in ['queued', 'in_progress', 'completed']:
+            for event in ['workflow_dispatch', 'workflow_run', 'push']:
+                with self.subTest(status=status, event=event):
+                    self.setUp()
+                    self.active()
+                    self.history = [dict(self.current, id=29, head_sha=BASE, status=status, event=event,
+                                         conclusion='failure')]
+                    self.refused()
+
+    def test_queue_requires_actual_native_in_progress_jobs_and_owner_authority(self):
+        for condition in ['parent_done', 'actor', 'title', 'job_done', 'prepare_active', 'approval',
+                          'pr_branch', 'merge_parents', 'main', 'workflow', 'context_actor']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                self.active()
+                if condition == 'parent_done': self.parent.update(status='completed', conclusion='success')
+                if condition == 'actor': self.parent['actor'] = dict(BOT, id=999)
+                if condition == 'title': self.parent['display_title'] = 'Dependency PR 2 ' + HEAD + ' ' + BASE
+                if condition == 'job_done': self.jobs[1].update(status='completed', conclusion='success')
+                if condition == 'prepare_active': self.jobs[0].update(status='in_progress', conclusion=None)
+                if condition == 'approval': self.approvals = []
+                if condition == 'pr_branch': self.pr['head']['ref'] = 'renovate-ci/other'
+                if condition == 'merge_parents': self.commit['parents'].reverse()
+                if condition == 'main': self.main = BASE
+                if condition == 'workflow': self.parent_workflow['state'] = 'disabled_manually'
+                if condition == 'context_actor': self.context['GITHUB_ACTOR_ID'] = '999'
+                self.refused()
+
+    def test_queue_rereads_whole_semantic_authority_history_and_main_before_only_post(self):
+        for condition in ['reviewer', 'environment', 'job', 'pr', 'parents', 'main', 'history', 'actor', 'repo', 'child_workflow']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                self.active()
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        if condition == 'reviewer': self.approvals[0]['user']['id'] = 456
+                        if condition == 'environment': self.approvals[0]['environments'][0]['id'] = 789
+                        if condition == 'job': self.jobs[0]['id'] = 999
+                        if condition == 'pr': self.pr['head']['sha'] = BASE
+                        if condition == 'parents': self.commit['parents'].reverse()
+                        if condition == 'main': self.main = BASE
+                        if condition == 'history': self.history = [self.current]
+                        if condition == 'actor': self.parent['triggering_actor'] = dict(BOT, id=999)
+                        if condition == 'repo': self.parent['repository'] = dict(REPO, id=999)
+                        if condition == 'child_workflow': self.self_workflow['id'] = 999
+                self.hook = hook
+                self.refused()
+
+    def test_queue_unknown_or_rejected_sends_only_once_and_never_replays_history(self):
+        for error, outcome in [(TimeoutError('controlled'), 'unconfirmed'),
+                               (urllib.error.HTTPError('controlled', 403, '', {}, None), 'rejected')]:
+            with self.subTest(outcome=outcome):
+                self.setUp()
+                self.active()
+                self.error = error
+                self.assertEqual(self.queue(), outcome)
+                self.assertEqual(len(self.mutations), 1)
+                self.history = [dict(self.current, head_sha=BASE)]
+                with self.assertRaises(Refused): self.queue()
+                self.assertEqual(len(self.mutations), 1)
+
+    def test_queue_cosmetic_rest_changes_do_not_invalidate_immutable_owner_authority(self):
+        self.active()
+        def hook(path):
+            if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                self.parent['repository'] = dict(REPO, open_issues_count=99)
+                self.parent['actor'] = dict(BOT, avatar_url='cosmetic')
+                self.pr['head']['repo'] = dict(REPO, open_issues_count=99)
+                self.pr['base']['repo'] = dict(REPO, forks_count=99)
+                self.pr['user'] = dict(BOT, avatar_url='cosmetic')
+                self.pr['body'] = 'cosmetic'
+        self.hook = hook
+        self.assertEqual(self.queue(), 'requested')
+
+    def test_child_of_unknown_parent_queue_waits_then_refuses_actual_failed_parent(self):
+        self.active()
+        self.error = TimeoutError('controlled')
+        self.assertEqual(self.queue(), 'unconfirmed')
+        self.error = None
+        self.history = [self.current]
+        def sleep(seconds):
+            self.assertEqual(len(self.mutations), 1)
+            self.parent.update(status='completed', conclusion='failure')
+            self.jobs[1].update(status='completed', conclusion='failure')
+        with patch.object(followup.time, 'sleep', side_effect=sleep), self.assertRaises(Refused):
+            followup.notify(self.api, self.event, self.context)
+        self.assertEqual(len(self.mutations), 1)
+        self.assertIn('/dependency-followup.yml/dispatches', self.mutations[0][1])
+
+    def test_parent_context_is_revalidated_before_final_queue_post(self):
+        for field, value in [('GITHUB_REPOSITORY', 'foreign/repo'), ('GITHUB_REF', 'refs/heads/other'),
+                             ('GITHUB_EVENT_NAME', 'workflow_run'), ('GITHUB_RUN_ATTEMPT', '2')]:
+            with self.subTest(field=field):
+                self.setUp()
+                self.active()
+                def hook(path):
+                    if path == '/actions/runs/10' and self.reads.count(path) == 2:
+                        # The context is passed as a distinct mapping; mutate
+                        # its environmental fields as the REST boundary runs.
+                        self.active_context[field] = value
+                self.hook = hook
+                self.active_context = dict(self.context, GITHUB_RUN_ID='10', GITHUB_SHA=BASE,
+                    GITHUB_WORKFLOW_SHA=BASE,
+                    GITHUB_WORKFLOW_REF='owner/repo/.github/workflows/dependency-update.yml@refs/heads/main')
+                with self.assertRaises(Refused):
+                    followup.queue(self.api, {'pr': 1, 'head': HEAD, 'base': BASE, 'source': BASE,
+                                             'branch': 'renovate-ci/pip'}, MERGED, self.active_context)
+                self.assertEqual(self.mutations, [])
 
 
 if __name__ == '__main__':

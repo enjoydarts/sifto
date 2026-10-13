@@ -922,20 +922,47 @@ class PipelineTests(unittest.TestCase):
         self.image_validation_error = self.image_scan_error = None
         self.image_validation_hook = None
         self.image_events = []
+        self.queue_error = None
 
     def transport(self, method, path, body):
         if method != 'GET':
             self.mutations.append((method, path, body))
+            if path == '/actions/workflows/dependency-followup.yml/dispatches':
+                self.assertEqual(self.image_events[-1], ('merged', self.merged))
+                if self.queue_error: raise self.queue_error
             if method == 'PUT':
                 self.base = self.merged
                 return {'merged': True, 'sha': self.merged}
             return None
         endpoint = path.split('?')[0]
+        repository = {'id': 123, 'full_name': self.repo}
+        bot = {'id': 41898282, 'login': 'github-actions[bot]', 'type': 'Bot'}
+        if endpoint == '': return repository
+        if endpoint in ['/actions/workflows/dependency-update.yml', '/actions/workflows/dependency-followup.yml']:
+            native = endpoint.endswith('/dependency-update.yml')
+            return {'id': 20 if native else 21,
+                    'name': 'Dependency Approve Merge and Deploy' if native else 'Dependency Completed Follow-up',
+                    'path': '.github/workflows/' + endpoint.rsplit('/', 1)[1], 'state': 'active'}
+        if endpoint == '/actions/workflows/dependency-followup.yml/runs':
+            return {'workflow_runs': [], 'total_count': 0}
+        if endpoint == '/git/commits/' + self.merged:
+            return {'sha': self.merged, 'parents': [{'sha': BASE}, {'sha': SHA}]}
+        if endpoint == '/actions/runs/10/jobs':
+            return {'jobs': [{'id': 100 + index, 'name': name, 'run_id': 10, 'run_attempt': 1,
+                             'head_sha': BASE, 'status': 'completed' if index == 0 else 'in_progress',
+                             'conclusion': 'success' if index == 0 else None}
+                            for index, name in enumerate(['prepare', 'approve-merge-deploy'])], 'total_count': 2}
         if endpoint == '/git/ref/heads/main':
             return {'object': {'sha': self.base}}
         if endpoint == '/branches/main':
-            return {'protected': True, 'commit': {'sha': self.base}}
+            return {'name': 'main', 'protected': True, 'commit': {'sha': self.base}}
         if endpoint == '/pulls/1':
+            if self.base == self.merged:
+                return {'number': 1, 'state': 'closed', 'merged': True, 'merge_commit_sha': self.merged,
+                        'user': bot if self.author == 'github-actions[bot]' else {'id': 456, 'login': self.author, 'type': 'User'},
+                        'head': {'sha': self.head, 'ref': self.branch, 'repo': repository},
+                        'base': {'sha': self.base, 'ref': 'main', 'repo': repository},
+                        'labels': self.labels, 'body': self.body}
             return {'state': 'open', 'draft': False, 'merged': False, 'user': {'login': self.author}, 'head': {'sha': self.head, 'ref': self.branch, 'repo': {'full_name': 'other/repo' if self.fork else self.repo}}, 'base': {'sha': self.base, 'ref': 'main', 'repo': {'full_name': self.repo}}, 'changed_files': len(self.paths), 'labels': self.labels, 'body': self.body, 'mergeable': True, 'mergeable_state': self.mergeable_state}
         if endpoint.startswith('/compare/'):
             return {'merge_base_commit': {'sha': self.base}, 'status': 'ahead'}
@@ -953,7 +980,11 @@ class PipelineTests(unittest.TestCase):
                 statuses.append({'context': 'Vercel', 'state': 'failure', 'creator': {'login': 'vercel[bot]'}})
             return statuses
         if endpoint == '/actions/runs/10':
-            return {'event': 'workflow_dispatch', 'head_branch': 'main', 'head_sha': BASE, 'path': '.github/workflows/dependency-update.yml', 'run_attempt': 1, 'actor': {'login': 'github-actions[bot]'}, 'display_title': 'Dependency PR 1 ' + SHA + ' ' + BASE}
+            return {'id': 10, 'workflow_id': 20, 'event': 'workflow_dispatch', 'head_branch': 'main',
+                    'head_sha': BASE, 'path': '.github/workflows/dependency-update.yml', 'run_attempt': 1,
+                    'actor': bot, 'triggering_actor': bot, 'repository': repository, 'head_repository': repository,
+                    'status': 'in_progress', 'conclusion': None,
+                    'display_title': 'Dependency PR 1 ' + SHA + ' ' + BASE}
         if endpoint.endswith('/approvals'):
             return self.approvals
         if endpoint == '/actions/runs/15':
@@ -1116,11 +1147,20 @@ class PipelineTests(unittest.TestCase):
             if self.image_scan_error: raise self.image_scan_error
             return self.image_evidence(ticket['phase'], ticket['head'])
         with tempfile.TemporaryDirectory() as directory:
-            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}), \
+            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10',
+                'GITHUB_REPOSITORY': self.repo, 'GITHUB_REPOSITORY_ID': '123', 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+                'GITHUB_ACTOR': 'github-actions[bot]', 'GITHUB_ACTOR_ID': '41898282',
+                'GITHUB_TRIGGERING_ACTOR': 'github-actions[bot]',
+                'GITHUB_REF': 'refs/heads/main', 'GITHUB_WORKFLOW_SHA': BASE,
+                'GITHUB_WORKFLOW_REF': self.repo + '/.github/workflows/dependency-update.yml@refs/heads/main',
+                'GITHUB_STEP_SUMMARY': directory + '/summary'}), \
                 patch.object(image_security, 'revalidate', side_effect=revalidate), \
                 patch.object(image_security, 'start', side_effect=start), patch.object(image_security, 'wait', side_effect=wait):
-                pipeline.execute(self.api, plan, policy.plan_hash(plan))
-                self.summary = Path(directory + '/summary').read_text()
+                try:
+                    pipeline.execute(self.api, plan, policy.plan_hash(plan))
+                finally:
+                    if Path(directory + '/summary').exists():
+                        self.summary = Path(directory + '/summary').read_text()
 
     def python_candidate(self, uploaded='2026-10-02T12:00:00Z'):
         import base64
@@ -1212,11 +1252,28 @@ class PipelineTests(unittest.TestCase):
 
     def test_approved_candidate_merges_once_then_explicitly_deploys_exact_merge(self):
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
         self.assertEqual(self.mutations[0][2]['sha'], SHA)
         self.assertEqual(self.mutations[1][2]['inputs']['expected_commit'], self.merged)
         self.assertEqual(self.mutations[1][2]['inputs']['approval_run'], '10')
+        self.assertEqual(self.mutations[-1], ('POST', '/actions/workflows/dependency-followup.yml/dispatches',
+                                            {'ref': 'main', 'inputs': {'parent_run': '10'}}))
         self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
+
+    def test_unknown_or_rejected_followup_queue_fails_parent_after_recording_applied_changes(self):
+        import urllib.error
+        for error in [TimeoutError('controlled'), urllib.error.HTTPError('controlled', 403, '', {}, None)]:
+            with self.subTest(error=type(error).__name__):
+                self.setUp()
+                self.queue_error = error
+                with self.assertRaisesRegex(policy.Refused, 'Follow-up queue'):
+                    self.execute(self.plan())
+                self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+                self.assertIn('All affected deployments succeeded', self.summary)
+                self.assertIn('Verified merged image advisory', self.summary)
+                self.assertIn('daily Renovate scan', self.summary)
+                self.assertIn('no replay', self.summary)
+                self.assertIn('Audit', self.summary)
 
     def test_failed_deploy_never_requests_next_proposals(self):
         transport = self.transport
@@ -1282,8 +1339,8 @@ class PipelineTests(unittest.TestCase):
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
             self.execute(self.plan())
         self.assertEqual(clock.elapsed, 62 * 60)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
-        for mutation in self.mutations[1:]:
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST', 'POST'])
+        for mutation in self.mutations[1:3]:
             self.assertEqual(mutation[2]['ref'], 'main')
             self.assertEqual(mutation[2]['inputs'], {'expected_commit': self.merged, 'approval_run': '10', 'approved_pr': '1', 'approved_head': SHA, 'approved_base': BASE})
 
@@ -1340,7 +1397,7 @@ class PipelineTests(unittest.TestCase):
         self.mergeable_state = 'unstable'
         self.preview_failure = True
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
         self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #1'})
 
     def test_unstable_pr_with_failed_fixed_ci_still_cannot_merge(self):
@@ -1511,7 +1568,8 @@ class PipelineTests(unittest.TestCase):
         plan['surfaces'] = ['ci', 'development']
         with patch.object(pipeline, 'candidate', return_value={k: v for k, v in plan.items() if k != 'ci_run'}):
             self.execute(plan)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
+        self.assertEqual(self.mutations[-1][1], '/actions/workflows/dependency-followup.yml/dispatches')
         self.assertIn('after this native approval workflow fully completes', self.summary)
 
     def test_retry_attempt_cannot_reuse_native_approval(self):

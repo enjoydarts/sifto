@@ -343,25 +343,26 @@ class DependencyAutomationContract(unittest.TestCase):
                         'Completed-parent follow-up workflow must exist')
         workflow = read_yaml('.github/workflows/dependency-followup.yml')
         self.assertEqual(workflow.get('on', workflow.get(True)), {
-            'workflow_run': {'workflows': ['Dependency Approve Merge and Deploy'],
-                             'types': ['completed'], 'branches': ['main']}})
+            'workflow_dispatch': {'inputs': {'parent_run': {'description': 'Actual native dependency parent run ID',
+                                   'required': True, 'type': 'string'}}}})
         self.assertEqual(workflow['permissions'], {})
-        self.assertEqual(workflow['run-name'], 'Dependency follow-up ${{ github.event.workflow_run.id }}')
+        self.assertEqual(workflow['run-name'], 'Dependency follow-up ${{ inputs.parent_run }}')
         self.assertEqual(workflow['concurrency'], {
-            'group': 'dependency-followup-${{ github.event.workflow_run.id }}', 'cancel-in-progress': False})
+            'group': 'dependency-followup-${{ inputs.parent_run }}', 'cancel-in-progress': False})
         self.assertEqual(set(workflow['jobs']), {'notify'})
         job = workflow['jobs']['notify']
         self.assertEqual(job['permissions'], {'contents': 'read', 'pull-requests': 'read', 'actions': 'write'})
         self.assertNotIn('environment', job)
         self.assertIn("github.ref == 'refs/heads/main'", job['if'])
-        self.assertIn("github.event.workflow_run.conclusion == 'success'", job['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'", job['if'])
+        self.assertEqual(job['timeout-minutes'], 15)
         checkout, controller = job['steps']
         self.assertTrue(checkout['uses'].startswith('actions/checkout@'))
         self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
         self.assertEqual(controller['env'], {'GH_TOKEN': '${{ github.token }}', 'PYTHONPATH': 'infra/dependency-ci'})
         self.assertEqual(controller['run'], 'python3 -B -m dependency_updates.followup')
         text = (ROOT / '.github/workflows/dependency-followup.yml').read_text()
-        for forbidden in ['secrets.', 'download-artifact', 'head_sha', 'production-maintenance', 'ssh', 'workflow_dispatch']:
+        for forbidden in ['secrets.', 'download-artifact', 'head_sha', 'production-maintenance', 'ssh', 'workflow_run']:
             self.assertNotIn(forbidden, text)
         import ast
         module = ast.parse((ROOT / 'infra/dependency-ci/dependency_updates/pipeline.py').read_text())

@@ -360,7 +360,7 @@ def native_authority(run, approvals):
 
 
 def execute(api, plan, digest):
-    from . import image_security
+    from . import followup, image_security
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Consumed approval cannot be rerun')
     require(plan_hash(plan) == digest and plan['source'] == os.environ['GITHUB_SHA'], 'Untrusted or altered prepared plan')
     run_id = int(os.environ['GITHUB_RUN_ID'])
@@ -409,9 +409,18 @@ def execute(api, plan, digest):
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         image_security.summary(summary, merged_evidence)
         summary.write('\nAll affected deployments succeeded for `%s`. Merge approval remains consumed.\n' % merged)
-        summary.write('\nThe next proposal is handled after this native approval workflow fully completes, '
-                      'by a separate follow-up with fresh CI and owner approval. '
-                      'The daily Renovate scan remains the fallback.\n')
+    try:
+        outcome = followup.queue(api, plan, merged, os.environ)
+    except Refused as exc:
+        outcome = 'refused: ' + str(exc)
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        summary.write('\nFollow-up queue: %s. Merge, affected deployments and merged image evidence are already applied/recorded; '
+                      'approval remains consumed, no replay or deployment rerun and no old owner gate reuse. '
+                      'Audit this native run and the follow-up history if acknowledgement is unconfirmed or rejected. '
+                      'The daily Renovate scan remains the fallback. '
+                      'A requested queue acknowledges dispatch only; the child waits until after this native approval workflow fully completes '
+                      'and verifies terminal success before requesting proposals with their own fresh CI and owner approval.\n' % outcome)
+    require(outcome == 'requested', 'Follow-up queue %s; audit required, no replay; daily Renovate scan remains fallback' % outcome)
 
 
 def entrypoint():

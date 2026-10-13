@@ -112,14 +112,14 @@ status=0
 (cd "$post_fixture/repository" && docker compose -f infra/maintenance/compose.yml \
   -f infra/maintenance/compose.yml --profile controller config --quiet) >"$post_fixture/duplicate-base.log" 2>&1 || status=$?
 test "$status" -ne 0
-rg -q 'fixture_duplicate_base_rejected' "$post_fixture/duplicate-base.log"
+grep -q 'fixture_duplicate_base_rejected' "$post_fixture/duplicate-base.log"
 status=0
 (cd "$post_fixture/repository" && sh infra/maintenance/run-post-verification.sh) >"$post_fixture/wrapper.log" 2>&1 || status=$?
 test "$status" -ne 0
 test -f "$post_fixture/scope.log"
-rg -q 'Pipeline image, distinct executor, credential scope' "$post_fixture/scope.log"
-rg -q 'Do not retry apply' "$post_fixture/summary.md"
-! rg 'fixture-(token|scan-key|ops-key|known-hosts)-never-public|Traceback' "$post_fixture/wrapper.log" "$post_fixture/summary.md" "$post_fixture/scope.log"
+grep -q 'Pipeline image, distinct executor, credential scope' "$post_fixture/scope.log"
+grep -q 'Do not retry apply' "$post_fixture/summary.md"
+! grep -Eq 'fixture-(token|scan-key|ops-key|known-hosts)-never-public|Traceback' "$post_fixture/wrapper.log" "$post_fixture/summary.md" "$post_fixture/scope.log"
 test -z "$(ls -A "$post_fixture/tmp")"
 # Runtime credentials widening must stop before Docker runs.
 export MAINTENANCE_APPLY_SSH_KEY=fixture-forbidden-key

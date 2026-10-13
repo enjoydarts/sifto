@@ -277,6 +277,33 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(Refused): image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
         self.assertEqual(len(self.mutations), 1)
 
+    def test_any_previous_source_consumes_the_parent_phase_before_post(self):
+        for source in ('f' * 40, 'unknown', '', 'rejected-sha'):
+            self.scans = [self.make_run(20, 2, 'f' * 40, self.plan['branch'],
+                ('Dependency image scan 10 candidate ' + source).rstrip(),
+                '.github/workflows/dependency-security.yml')]
+            with self.subTest(source=source), self.assertRaises(Refused):
+                image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+            self.assertEqual(self.mutations, [])
+
+    def test_other_phase_or_parent_does_not_consume_this_dispatch(self):
+        for title in ('Dependency image scan 10 merged ' + 'f' * 40,
+                      'Dependency image scan 11 candidate ' + 'f' * 40):
+            self.scans = [self.make_run(20, 2, 'f' * 40, 'main', title,
+                '.github/workflows/dependency-security.yml')]
+            image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+        self.assertEqual(len(self.mutations), 2)
+
+    def test_other_source_for_same_parent_phase_invalidates_selected_run(self):
+        ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+        self.complete(ticket)
+        evidence = image.wait(self.api, self.plan, ticket)
+        self.scans.append(self.make_run(21, 2, 'f' * 40, self.plan['branch'],
+            'Dependency image scan 10 candidate ' + 'f' * 40,
+            '.github/workflows/dependency-security.yml'))
+        with self.assertRaises(Refused): image.revalidate(self.api, self.plan, evidence)
+        self.assertEqual(len(self.mutations), 1)
+
     def test_child_rerun_foreign_identity_head_actor_marker_ambiguity_refused(self):
         ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
         self.complete(ticket)

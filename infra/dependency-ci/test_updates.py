@@ -920,6 +920,7 @@ class PipelineTests(unittest.TestCase):
         self.preview_failure = False
         self.api = github.GitHub(self.repo, transport=self.transport)
         self.image_validation_error = self.image_scan_error = None
+        self.image_validation_hook = None
         self.image_events = []
 
     def transport(self, method, path, body):
@@ -995,6 +996,20 @@ class PipelineTests(unittest.TestCase):
     def test_prepared_image_evidence_revalidation_failure_prevents_merge(self):
         self.image_validation_error = policy.Refused('Prepared image evidence changed')
         with self.assertRaisesRegex(policy.Refused, 'image evidence changed'):
+            self.execute(self.plan())
+        self.assertEqual(self.mutations, [])
+
+    def test_native_approval_disappears_during_image_revalidation_prevents_merge(self):
+        self.image_validation_hook = self.approvals.clear
+        with self.assertRaises(policy.Refused): self.execute(self.plan())
+        self.assertEqual(self.mutations, [])
+
+    def test_native_approval_authority_changes_during_image_revalidation_prevents_merge(self):
+        # The old owner approval still exists, so verify_approval alone passes.
+        self.image_validation_hook = lambda: self.approvals.append({
+            'state': 'rejected', 'user': {'login': 'enjoydarts'},
+            'environments': [{'name': 'production-maintenance'}]})
+        with self.assertRaisesRegex(policy.Refused, 'authority changed'):
             self.execute(self.plan())
         self.assertEqual(self.mutations, [])
 
@@ -1086,6 +1101,7 @@ class PipelineTests(unittest.TestCase):
         def revalidate(api, current, evidence):
             self.image_events.append(('revalidate', current['head']))
             if self.image_validation_error: raise self.image_validation_error
+            if self.image_validation_hook: self.image_validation_hook()
             return evidence
         def start(api, current, phase, head, ref):
             self.image_events.append((phase, head))

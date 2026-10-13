@@ -265,6 +265,9 @@ def caller(api, plan, phase, head, ref):
 
 
 def history(api, marker):
+    parsed = re.fullmatch(r'Dependency image scan ([1-9][0-9]{0,19}) (candidate|merged) [0-9a-f]{40}', marker)
+    require(parsed is not None, 'Malformed expected image workflow marker')
+    phase_marker = 'Dependency image scan %s %s' % (parsed[1], parsed[2])
     runs = api.pages('/actions/workflows/' + WORKFLOW + '/runs', 'workflow_runs', require_total=True)
     identifiers, matches = set(), []
     for run in runs:
@@ -272,6 +275,12 @@ def history(api, marker):
                 and type(run.get('display_title')) is str and len(run['display_title']) <= 512,
                 'Malformed or duplicate image workflow history')
         identifiers.add(run['id'])
+        # A parent/phase owns one dispatch chance, even if its previous source
+        # was rejected or unknown. Exact SHA selection below is not replay
+        # authorization for a different SHA under the same native parent.
+        if run['display_title'] == phase_marker or run['display_title'].startswith(phase_marker + ' '):
+            require(run['display_title'] == marker,
+                    'Image parent/phase already consumed by another source; no replay')
         if run['display_title'] == marker:
             matches.append(run)
     require(len(matches) <= 1, 'Ambiguous image workflow marker; no replay')

@@ -337,6 +337,28 @@ def merge_once(api, plan):
     return result['sha']
 
 
+def native_authority(run, approvals):
+    """Freeze only native execution, reviewer and environment authority fields."""
+    require(type(approvals) is list and len(approvals) <= 100
+            and all(type(review) is dict and type(review.get('state')) is str
+                    and type(review.get('user')) is dict and type(review.get('environments')) is list
+                    and all(type(environment) is dict and type(environment.get('name')) is str
+                            for environment in review['environments']) for review in approvals),
+            'Malformed native approval authority')
+    def identity(value):
+        require(type(value) is dict, 'Malformed native actor authority')
+        return {key: value.get(key) for key in ('id', 'login', 'type')}
+    proof = {'run': {key: run.get(key) for key in ('id', 'workflow_id', 'event', 'head_branch',
+             'head_sha', 'path', 'run_attempt', 'status', 'conclusion')},
+             'actor': identity(run.get('actor')),
+             'triggering_actor': identity(run.get('triggering_actor', {})),
+             'reviews': [{'state': review['state'], 'user': identity(review['user']),
+                 'environments': [{key: environment.get(key) for key in ('id', 'name')}
+                                  for environment in review['environments']]} for review in approvals]}
+    # Materialize now: transports may reuse mutable objects during downloads.
+    return canonical(proof)
+
+
 def execute(api, plan, digest):
     from . import image_security
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Consumed approval cannot be rerun')
@@ -344,7 +366,9 @@ def execute(api, plan, digest):
     run_id = int(os.environ['GITHUB_RUN_ID'])
     run = api.get('/actions/runs/' + str(run_id))
     require(run.get('event') == 'workflow_dispatch' and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source'] and run.get('path') == '.github/workflows/' + WORKFLOW and run.get('run_attempt') == 1, 'Approval run source mismatch')
-    verify_approval(api.get('/actions/runs/%d/approvals' % run_id), run.get('actor', {}).get('login'))
+    approvals = api.get('/actions/runs/%d/approvals' % run_id)
+    authority = native_authority(run, approvals)
+    verify_approval(approvals, run.get('actor', {}).get('login'))
     require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
             'Prepared plan has no fixed Python artifact-age evidence; prepare again')
     require(type(plan.get('image_security')) is dict,
@@ -356,6 +380,13 @@ def execute(api, plan, digest):
     assert_unchanged(plan, current, digest)
     ci = api.get('/actions/runs/%d' % plan['ci_run'])
     verify_checks(ci, api.pages('/actions/runs/%d/jobs?filter=latest' % plan['ci_run'], 'jobs'), plan['head'])
+    # Artifact downloads and candidate/CI reads can outlive a native review.
+    # Recheck that same authority immediately before the ordinary merge guard.
+    final_run = api.get('/actions/runs/' + str(run_id))
+    final_approvals = api.get('/actions/runs/%d/approvals' % run_id)
+    verify_approval(final_approvals, final_run.get('actor', {}).get('login'))
+    require(native_authority(final_run, final_approvals) == authority,
+            'Native approval authority changed during revalidation; fresh approval required')
     merged = merge_once(api, plan)
     require(main_sha(api) == merged, 'Main advanced after merge; deployment stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:

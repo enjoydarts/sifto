@@ -131,6 +131,9 @@ class Fixture:
 
 class PRCITests(unittest.TestCase):
     def setUp(self):
+        self.flag = patch.dict(os.environ, {'DEPENDENCY_PR_CI_AUTO_APPROVAL': 'true'})
+        self.flag.start()
+        self.addCleanup(self.flag.stop)
         self.assertIsNotNone(importlib.util.find_spec('dependency_updates.pr_ci'),
                              'bounded Bot PR CI approval helper must be implemented')
         from dependency_updates import pr_ci
@@ -150,6 +153,34 @@ class PRCITests(unittest.TestCase):
         self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve', '/actions/runs/201/approve'])
         self.wait(session)
         self.assertEqual(len(self.f.posts), 2)
+
+    def test_default_off_and_nonexact_flag_refuse_holds_without_post(self):
+        for flag in (None, '', 'false', 'TRUE', '1'):
+            with self.subTest(flag=flag), patch.dict(os.environ):
+                os.environ.pop('DEPENDENCY_PR_CI_AUTO_APPROVAL', None)
+                if flag is not None:
+                    os.environ['DEPENDENCY_PR_CI_AUTO_APPROVAL'] = flag
+                self.f = Fixture()
+                with self.assertRaisesRegex(policy.Refused, 'disabled'):
+                    self.start()
+                self.assertEqual(self.f.posts, [])
+
+    def test_default_off_accepts_successful_preapproved_ci(self):
+        with patch.dict(os.environ, {'DEPENDENCY_PR_CI_AUTO_APPROVAL': ''}):
+            for identifier in self.f.runs:
+                self.f.success(identifier)
+            self.wait(self.start())
+            self.assertEqual(self.f.posts, [])
+
+    def test_http_rejection_preserves_only_safe_status_for_live_diagnostic(self):
+        for code in (403, 404):
+            self.f = Fixture()
+            self.f.post_error = HTTPError('https://secret-url', code, 'secret-token', {}, None)
+            with self.subTest(code=code), self.assertRaises(policy.Refused) as failure:
+                self.start()
+            self.assertIn('HTTP %d' % code, str(failure.exception))
+            self.assertNotIn('secret', str(failure.exception))
+            self.assertEqual(len(self.f.posts), 1)
 
     def test_success_queued_and_in_progress_are_never_approved(self):
         for status in ('success', 'queued', 'in_progress'):
@@ -457,6 +488,9 @@ class PRCITests(unittest.TestCase):
 
 class PrepareTests(unittest.TestCase):
     def setUp(self):
+        self.flag = patch.dict(os.environ, {'DEPENDENCY_PR_CI_AUTO_APPROVAL': 'true'})
+        self.flag.start()
+        self.addCleanup(self.flag.stop)
         self.assertIsNotNone(importlib.util.find_spec('dependency_updates.pr_ci'))
 
     def test_pr_approval_starts_before_fixed_dispatch_and_both_checks_gate_output(self):
@@ -524,6 +558,22 @@ class PrepareTests(unittest.TestCase):
             'GITHUB_STEP_SUMMARY': directory + '/summary'}), patch.object(pr_ci, 'start', side_effect=start), patch.object(pipeline, 'dispatch_once', side_effect=dispatch):
             with self.assertRaisesRegex(policy.Refused, 'Timed out'): pipeline.prepare(f.api, 1, SHA, BASE, BASE)
             self.assertFalse(Path(directory + '/output').exists())
+
+    def test_disabled_hold_never_dispatches_fixed_ci_or_outputs_owner_plan(self):
+        from dependency_updates import pr_ci
+        f = Fixture()
+        real_start = pr_ci.start
+        def start(*args, **kwargs):
+            return real_start(*args, clock=f.clock.monotonic, sleep=f.clock.sleep, **kwargs)
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+            'GITHUB_RUN_ATTEMPT': '1', 'DEPENDENCY_PR_CI_AUTO_APPROVAL': '',
+            'GITHUB_OUTPUT': directory + '/output', 'GITHUB_STEP_SUMMARY': directory + '/summary'}), \
+            patch.object(pr_ci, 'start', side_effect=start), patch.object(pipeline, 'dispatch_once') as dispatch:
+            with self.assertRaisesRegex(policy.Refused, 'disabled'):
+                pipeline.prepare(f.api, 1, SHA, BASE, BASE)
+            dispatch.assert_not_called()
+            self.assertFalse(Path(directory + '/output').exists())
+            self.assertEqual(f.posts, [])
 
 
 if __name__ == '__main__':

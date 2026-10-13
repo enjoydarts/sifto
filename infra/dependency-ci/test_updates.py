@@ -960,6 +960,28 @@ class PipelineTests(unittest.TestCase):
         value['ci_run'] = 15
         return value
 
+    def test_diagnostic_namespace_is_never_a_native_candidate(self):
+        for suffix in ('123', 'broken', '0', '123-extra'):
+            self.branch = 'renovate-ci/approval-probe-' + suffix
+            with self.subTest(branch=self.branch), self.assertRaisesRegex(policy.Refused, 'Diagnostic'):
+                self.plan()
+            self.assertEqual(self.mutations, [])
+
+    def test_discovery_explicitly_skips_diagnostic_namespace(self):
+        self.branch = 'renovate-ci/approval-probe-10'
+        original = self.api.transport
+        def transport(method, path, body):
+            if path.startswith('/actions/workflows/dependency-update.yml/runs'):
+                return {'workflow_runs': [], 'total_count': 0}
+            if path.startswith('/pulls?'):
+                return [{'number': 1, 'head': {'sha': SHA, 'ref': self.branch}}]
+            if path == '/pulls/1':
+                raise AssertionError('Diagnostic must be skipped before native candidate lookup')
+            return original(method, path, body)
+        self.api.transport = transport
+        with patch.dict(os.environ, {'GITHUB_SHA': BASE}): pipeline.discover(self.api)
+        self.assertEqual(self.mutations, [])
+
     def execute(self, plan):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_SHA': BASE, 'GITHUB_RUN_ID': '10', 'GITHUB_STEP_SUMMARY': directory + '/summary'}):

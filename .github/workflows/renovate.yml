@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '20 0 * * *'
   workflow_dispatch:
+    inputs:
+      approval_probe:
+        description: Prove GITHUB_TOKEN read-only CI approval with a no-op fixture
+        type: boolean
+        default: false
 permissions: {}
 concurrency:
   group: renovate
@@ -20,18 +25,34 @@ jobs:
       # GITHUB_TOKEN PR/push events are suppressed or require workflow approval;
       # explicit fixed-workflow dispatch runs CI and the native environment gate.
       actions: write
+    outputs:
+      source: ${{ steps.approval-probe.outputs.source }}
+      branch: ${{ steps.approval-probe.outputs.branch }}
+      head: ${{ steps.approval-probe.outputs.head }}
+      tree: ${{ steps.approval-probe.outputs.tree }}
+      pr: ${{ steps.approval-probe.outputs.pr }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Create an owned no-op fixture for CI approval proof
+        id: approval-probe
+        if: ${{ inputs.approval_probe }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+        run: python3 -B -m dependency_updates.approval_probe propose
       # Enable "Allow GitHub Actions to create and approve pull requests".
       # Actions updates remain manual: GITHUB_TOKEN cannot edit workflow files.
       - name: Fix Python artifact publication cutoff for this generation
         id: python-age
+        if: ${{ !inputs.approval_probe }}
         env:
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.release_age
       - name: Propose dependency updates for native owner approval
+        if: ${{ !inputs.approval_probe }}
         uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
         with:
           token: ${{ github.token }}
@@ -47,7 +68,63 @@ jobs:
           RENOVATE_USERNAME: 'github-actions[bot]'
           RENOVATE_CUSTOM_ENV_VARIABLES: ${{ steps.python-age.outputs.custom_env }}
       - name: Request approval pipelines for validated immutable candidates
+        if: ${{ !inputs.approval_probe }}
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.pipeline discover
+  approval-probe-proof:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.approval_probe }}
+    needs: renovate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 65
+    # The actual /approve request must prove the ordinary prepare token scopes.
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
+      actions: write
+    outputs:
+      readonly_ids: ${{ steps.proof.outputs.readonly_ids }}
+      proof: ${{ steps.proof.outputs.proof }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe first security holds and prove ordinary token CI approval
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+          PROBE_SOURCE: ${{ needs.renovate.outputs.source }}
+          PROBE_BRANCH: ${{ needs.renovate.outputs.branch }}
+          PROBE_HEAD: ${{ needs.renovate.outputs.head }}
+          PROBE_TREE: ${{ needs.renovate.outputs.tree }}
+          PROBE_PR: ${{ needs.renovate.outputs.pr }}
+        run: python3 -B -m dependency_updates.approval_probe prove
+  approval-probe-cleanup:
+    if: ${{ always() && github.ref == 'refs/heads/main' && inputs.approval_probe }}
+    needs: [renovate, approval-probe-proof]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Close and remove only the recorded owned diagnostic fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+          PROBE_SOURCE: ${{ needs.renovate.outputs.source }}
+          PROBE_BRANCH: ${{ needs.renovate.outputs.branch }}
+          PROBE_HEAD: ${{ needs.renovate.outputs.head }}
+          PROBE_TREE: ${{ needs.renovate.outputs.tree }}
+          PROBE_PR: ${{ needs.renovate.outputs.pr }}
+          PROBE_READONLY_IDS: ${{ needs.approval-probe-proof.outputs.readonly_ids }}
+        run: python3 -B -m dependency_updates.approval_probe cleanup

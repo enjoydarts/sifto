@@ -80,6 +80,46 @@ class DependencyAutomationContract(unittest.TestCase):
             'actions': 'write',
         })
 
+    def test_diagnostic_is_default_off_main_only_and_always_cleans_owned_fixture(self):
+        workflow = read_yaml('.github/workflows/renovate.yml')
+        events = workflow.get('on', workflow.get(True))
+        self.assertIsInstance(events['workflow_dispatch'], dict, 'Diagnostic input must be explicitly default off')
+        self.assertEqual(events['workflow_dispatch']['inputs'], {'approval_probe': {
+            'description': 'Prove GITHUB_TOKEN read-only CI approval with a no-op fixture',
+            'type': 'boolean', 'default': False}})
+        writer = workflow['jobs']['renovate']
+        self.assertNotIn('environment', writer)
+        checkout = writer['steps'][0]
+        self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
+        for step in writer['steps'][1:]:
+            if step.get('id') == 'approval-probe':
+                self.assertEqual(step['if'], '${{ inputs.approval_probe }}')
+                self.assertEqual(step['run'], 'python3 -B -m dependency_updates.approval_probe propose')
+                self.assertEqual(step['env']['GH_TOKEN'], '${{ github.token }}')
+            else:
+                self.assertEqual(step['if'], '${{ !inputs.approval_probe }}')
+        cleanup = workflow['jobs']['approval-probe-cleanup']
+        self.assertIn('always()', cleanup['if'])
+        self.assertIn("github.ref == 'refs/heads/main'", cleanup['if'])
+        self.assertIn('inputs.approval_probe', cleanup['if'])
+        self.assertEqual(cleanup['needs'], ['renovate', 'approval-probe-proof'])
+        self.assertEqual(cleanup['permissions'], {'contents': 'write', 'pull-requests': 'write', 'actions': 'write'})
+        self.assertNotIn('environment', cleanup)
+        self.assertEqual(cleanup['steps'][0]['with'], checkout['with'])
+        self.assertEqual(cleanup['steps'][1]['run'], 'python3 -B -m dependency_updates.approval_probe cleanup')
+        proof = workflow['jobs']['approval-probe-proof']
+        self.assertEqual(proof['needs'], 'renovate')
+        self.assertIn("github.ref == 'refs/heads/main'", proof['if'])
+        self.assertIn('inputs.approval_probe', proof['if'])
+        self.assertNotIn('environment', proof)
+        self.assertEqual(proof['permissions'], {'contents': 'read', 'pull-requests': 'read', 'statuses': 'read', 'actions': 'write'})
+        self.assertEqual(proof['steps'][0]['with'], checkout['with'])
+        self.assertEqual(proof['steps'][1]['run'], 'python3 -B -m dependency_updates.approval_probe prove')
+        self.assertIn('/repository/infra/dependency-ci/test_approval_probe.py', (ROOT / 'Makefile').read_text())
+        prepare = read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']
+        self.assertEqual(prepare['steps'][1]['env']['DEPENDENCY_PR_CI_AUTO_APPROVAL'],
+                         '${{ vars.DEPENDENCY_PR_CI_AUTO_APPROVAL }}')
+
     def test_public_pr_checks_have_no_write_permissions_or_secrets(self):
         path = '.github/workflows/dependency-check.yml'
         workflow = read_yaml(path)

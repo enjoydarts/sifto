@@ -37,7 +37,7 @@ def blob(api, path, sha):
         raise Refused('Candidate file is not text') from None
 
 
-def candidate(api, number, head, base, source, python_cutoff=None):
+def candidate(api, number, head, base, source, python_cutoff=None, *, _approval_probe=None):
     require(isinstance(number, int) and 0 < number < 10_000_000 and all(SHA.fullmatch(s) for s in (head, base, source)), 'Invalid immutable candidate inputs')
     require(main_sha(api) == base == source, 'Candidate base and trusted workflow source must equal current main')
     pr = api.get('/pulls/' + str(number))
@@ -45,6 +45,12 @@ def candidate(api, number, head, base, source, python_cutoff=None):
     require(pr.get('user', {}).get('login') in {'github-actions[bot]', 'enjoydarts'}, 'Unsupported PR author')
     require(pr.get('head', {}).get('repo', {}).get('full_name') == api.repo and pr.get('base', {}).get('repo', {}).get('full_name') == api.repo, 'Fork candidate refused')
     branch = pr.get('head', {}).get('ref', '')
+    if branch.startswith('renovate-ci/approval-probe-'):
+        require(_approval_probe is not None, 'Diagnostic fixture cannot enter native approval')
+        from .approval_probe import verify_fixture
+        verify_fixture(api, _approval_probe)
+        require((_approval_probe['pr'], _approval_probe['head'], _approval_probe['source'], _approval_probe['branch'])
+                == (number, head, source, branch), 'Diagnostic fixture inputs changed')
     emergency = bool(re.fullmatch(r'dependency-security/[a-z0-9][a-z0-9.-]{0,79}', branch))
     require(bool(re.fullmatch(r'renovate-ci/[a-zA-Z0-9_.-]{1,120}', branch)) or emergency, 'Unsupported dependency branch')
     require(pr['user']['login'] == ('enjoydarts' if emergency else 'github-actions[bot]'), 'PR author does not match its dependency branch namespace')
@@ -200,6 +206,8 @@ def discover(api):
         print('Native dependency approval or deployment is active; no new request')
         return
     for pr in api.pages('/pulls?state=open&base=main'):
+        if pr.get('head', {}).get('ref', '').startswith('renovate-ci/approval-probe-'):
+            continue
         try:
             plan = candidate(api, pr['number'], pr['head']['sha'], source, source)
         except Refused as exc:

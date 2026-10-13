@@ -5,6 +5,7 @@ including foreign rows rather than silently discarding malformed identities.
 Old terminal runs may be superseded; old unfinished or held runs are conflicts.
 Successful reruns are evidence only, and cannot authorize another approval POST.
 """
+import os
 import re
 import time
 from .github import Ambiguous
@@ -32,8 +33,9 @@ def bot(value):
 
 
 class Session:
-    def __init__(self, api, plan, revalidate, clock):
+    def __init__(self, api, plan, revalidate, clock, *, allow_approval=False):
         self.api, self.plan, self.revalidate = api, plan, revalidate
+        self.allow_approval = allow_approval is True
         self.clock = clock
         self.deadline = clock() + WAIT_SECONDS
         self.repository = api.get('')
@@ -182,6 +184,9 @@ class Session:
         # Every selected workflow remains an authority for every mutation,
         # including workflows other than the run being approved next.
         self.approval_eligibility(self.selected)
+        require(self.allow_approval or not any(run['conclusion'] == 'action_required'
+                                             for run in self.selected.values()),
+                'Automatic PR CI approval is disabled; no owner approval request')
         for name, listed in self.selected.items():
             if listed['conclusion'] != 'action_required':
                 continue
@@ -212,8 +217,10 @@ class Session:
                 self.api.request('POST', '/actions/runs/%d/approve' % run['id'])
             except Ambiguous:
                 raise Refused('PR CI approval outcome unknown; no retry or owner approval request') from None
-            except Refused:
-                raise Refused('PR CI approval rejected: GITHUB_TOKEN permission may not support run approval; no retry or token fallback') from None
+            except Refused as exc:
+                status = re.fullmatch(r'GitHub API request rejected \(HTTP ([0-9]{3})\)', str(exc))
+                detail = ' (HTTP %s)' % status[1] if status else ''
+                raise Refused('PR CI approval rejected%s: GITHUB_TOKEN permission may not support run approval; no retry or token fallback' % detail) from None
 
     def wait(self, clock=time.monotonic, sleep=time.sleep):
         while True:
@@ -248,7 +255,8 @@ class Session:
 
 
 def start(api, plan, revalidate, clock=time.monotonic, sleep=time.sleep):
-    session = Session(api, plan, revalidate, clock)
+    session = Session(api, plan, revalidate, clock,
+                      allow_approval=os.environ.get('DEPENDENCY_PR_CI_AUTO_APPROVAL') == 'true')
     session.register()
     # GitHub may expose the Bot-created PR before its automatic runs. Missing
     # required checks may propagate, but never become permission to skip CI.

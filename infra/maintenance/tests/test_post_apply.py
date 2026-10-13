@@ -34,7 +34,8 @@ def fixture():
     envelope = {'plan': plan, 'approval': approval, 'signature': 'fixture-root-already-verified'}
     after = copy.deepcopy(before)
     after.update(collected_at=3000, dpkg_state={'ready': True, 'pending': []},
-                 maintenance_policy={'host_role': 'application', 'database_enabled': False, 'backup_ready': False})
+                 maintenance_policy={'host_role': 'application', 'database_enabled': False, 'backup_ready': False},
+                 simulation_available=True)
     after['packages'] = [{'name': x['name'], 'version': x['target']} for x in plan['packages']]
     history = {'host_id': plan['host_id'], 'receipt_history_complete': True, 'unresolved_execution_count': 0,
         'receipt_total': 1, 'receipt_truncated': 0, 'receipts': [{'plan': plan, 'approval': approval,
@@ -71,6 +72,17 @@ class PostApplyTests(unittest.TestCase):
         self.assertEqual(self.authority(), 'enjoydarts')
         self.run['actor'] = self.run['triggering_actor'] = OWNER
         self.authority()
+
+    def test_unavailable_or_invalid_candidate_solver_keeps_pending_count_unknown(self):
+        for available, simulation in ((False, ''), (False, 'Inst new-package (1 Ubuntu [arm64])\n'),
+                                      (True, 'Inst invalid-solver-output\n')):
+            with self.subTest(available=available, simulation=simulation):
+                self.after.update(simulation_available=available, simulation=simulation)
+                result = self.observe()
+                self.assertEqual(result['status'], 'verified')
+                self.assertIsNone(result['pending_update_count'])
+        self.after.update(simulation_available=True, simulation='Inst new-package (1 Ubuntu [arm64])\n')
+        self.assertEqual(self.observe()['pending_update_count'], 1)
 
     def test_refuses_missing_duplicate_wrong_or_nonterminal_receipts(self):
         for change in ('missing', 'duplicate', 'wrong_plan', 'wrong_approval', 'failed', 'started', 'completed', 'history', 'unresolved', 'truncated', 'count'):

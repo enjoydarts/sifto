@@ -173,10 +173,11 @@ def validate_observation(plan, envelope, host, inventory, history):
                 and 'pgbouncer.service' in services and any(re.fullmatch(r'postgresql@[^/]+\.service', name) for name in services)
                 and runtime.get('database_pool_health') == {'status': 'healthy', 'reason': 'read_only_route_verified'}, 'database_health_invalid')
     pending = None
-    try:
-        pending = len(parse_simulation(inventory.get('simulation', '')))
-    except MaintenanceError:
-        pass
+    if inventory.get('simulation_available') is True:
+        try:
+            pending = len(parse_simulation(inventory.get('simulation', '')))
+        except MaintenanceError:
+            pass
     return {'status': 'verified', 'target_count': len(plan['packages']), 'container_count': len(originals),
             'preserved_container_count': len(originals) - len(recreated), 'recreated_container_count': len(recreated),
             'recreated_containers': recreated,

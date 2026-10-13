@@ -1,0 +1,18 @@
+name: sifto-sentry-privacy-compat
+services:
+  test:
+    image: golang:1.27.1-alpine
+    volumes:
+      - ../../api/internal/service/sentry_privacy.go:/fixture/sentry_privacy.go:ro
+      - ../../api/internal/service/sentry_privacy_test.go:/fixture/sentry_privacy_test.go:ro
+    entrypoint: [sh, -ec]
+    command:
+      - |
+        for sdk_version in 0.36.2 0.49.0; do
+          sdk_dir="/tmp/sentry-$$sdk_version"
+          mkdir -p "$$sdk_dir"
+          cp /fixture/sentry_privacy.go /fixture/sentry_privacy_test.go "$$sdk_dir/"
+          printf 'module sifto-sentry-privacy-test\n\ngo 1.26.4\n\nrequire github.com/getsentry/sentry-go v%s\n' "$$sdk_version" > "$$sdk_dir/go.mod"
+          printf 'Testing Sentry SDK %s\n' "$$sdk_version"
+          (cd "$$sdk_dir" && go test -mod=mod -v ./...)
+        done

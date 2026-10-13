@@ -1,6 +1,10 @@
 package service
 
-import "github.com/getsentry/sentry-go"
+import (
+	"reflect"
+
+	"github.com/getsentry/sentry-go"
+)
 
 // ScrubSentryEvent retains exception types and stack locations, without sending
 // user requests, provider error text, or logging payloads to telemetry.
@@ -10,7 +14,11 @@ func ScrubSentryEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 	}
 	event.Request = nil
 	event.User = sentry.User{}
-	event.Extra = nil
+	// Sentry 0.49 removed Extra. Older SDKs still serialize it, so clear
+	// the legacy field when present without requiring it at compile time.
+	if extra := reflect.ValueOf(event).Elem().FieldByName("Extra"); extra.IsValid() {
+		extra.SetZero()
+	}
 	event.Breadcrumbs = nil
 	event.Message = ""
 	event.Tags = nil

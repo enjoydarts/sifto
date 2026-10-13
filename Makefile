@@ -216,8 +216,12 @@ dependency-audio:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps audio
 
 .PHONY: dependency-check dependency-api dependency-worker dependency-web dependency-contract dependency-renovate-validate dependency-security dependency-inventory dependency-clean
-dependency-api:
+dependency-api: sentry-privacy-compat-test
 	$(DEPENDENCY_COMPOSE) run --build --rm -T api
+
+.PHONY: sentry-privacy-compat-test
+sentry-privacy-compat-test:
+	docker compose --env-file /dev/null -f infra/dependency-ci/compose.sentry-privacy.yml run --rm -T --no-deps test
 
 dependency-worker:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps worker

@@ -2,7 +2,7 @@ import contextvars
 import logging
 import os
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 
 _log = logging.getLogger(__name__)
@@ -13,6 +13,11 @@ try:  # pragma: no cover - optional dependency
     from langfuse import get_client as _langfuse_get_client
 except Exception:  # pragma: no cover
     _langfuse_get_client = None
+
+try:  # pragma: no cover - optional dependency
+    from langfuse import propagate_attributes as _langfuse_propagate_attributes
+except Exception:  # pragma: no cover
+    _langfuse_propagate_attributes = None
 
 
 def enabled() -> bool:
@@ -176,23 +181,14 @@ def score_current(name: str, value, *, comment: str | None = None, data_type: st
         _log.warning("langfuse score_current_span failed: %s", e)
 
 
-def update_current_trace(*, user_id: str | None = None, session_id: str | None = None, metadata=None, tags: list[str] | None = None) -> None:
-    client = _client()
-    if client is None:
+def _update_legacy_trace(client, attributes: dict) -> None:
+    if not attributes:
         return
-    kwargs = {}
-    if user_id:
-        kwargs["user_id"] = user_id
-    if session_id:
-        kwargs["session_id"] = session_id
-    if metadata is not None:
-        kwargs["metadata"] = metadata
-    if tags:
-        kwargs["tags"] = tags
-    if not kwargs:
-        return
-    try:  # pragma: no cover
-        client.update_current_trace(**kwargs)
+    try:
+        # SDK 3 keeps these trace-level fields; SDK 4 uses observation propagation.
+        update_trace = getattr(client, "update_current_trace", None)
+        if callable(update_trace):
+            update_trace(**attributes)
     except Exception as e:
         _log.warning("langfuse update_current_trace failed: %s", e)
 
@@ -258,62 +254,73 @@ def get_prompt_text(name: str, fallback: str, *, variables: dict[str, object] | 
 
 
 @contextmanager
-def span(name: str, *, input=None, metadata=None, tags=None, as_type: str = "span"):
+def _sdk_context(factory, name: str):
+    """Fail open for SDK failures without suppressing application exceptions."""
+    try:
+        sdk_cm = factory()
+        value = sdk_cm.__enter__()
+    except Exception as e:
+        _log.warning("langfuse context unavailable name=%s err=%s", name, e)
+        yield None
+        return
+    try:
+        yield value
+    except BaseException:
+        try:
+            sdk_cm.__exit__(*sys.exc_info())
+        except Exception:
+            _log.warning("langfuse context exit failed name=%s", name)
+        raise
+    else:
+        try:
+            sdk_cm.__exit__(None, None, None)
+        except Exception:
+            _log.warning("langfuse context exit failed name=%s", name)
+
+
+@contextmanager
+def span(
+    name: str, *, input=None, metadata=None, tags=None, as_type: str = "span",
+    user_id: str | None = None, session_id: str | None = None,
+):
     client = _client()
     token = _prompt_refs_var.set(())
     span_token = _current_span_var.set(None)
-    if client is None:
-        try:
-            yield None
-        finally:
-            _prompt_refs_var.reset(token)
-            _current_span_var.reset(span_token)
-        return
-
-    merged_metadata = dict(metadata or {})
-    if tags:
-        merged_metadata["tags"] = list(tags)
-    kwargs = {"name": name}
-    if input is not None:
-        kwargs["input"] = input
-    if merged_metadata:
-        kwargs["metadata"] = merged_metadata
-
     try:
-        if as_type == "span":
-            span_cm = client.start_as_current_span(**kwargs)
-        else:
-            span_cm = client.start_as_current_observation(as_type=as_type, **kwargs)
-    except Exception as e:
-        _log.warning("langfuse span failed name=%s err=%s", name, e)
-        try:
-            yield None
-        finally:
-            _prompt_refs_var.reset(token)
-            _current_span_var.reset(span_token)
-        return
-
-    try:
-        try:
-            current_span = span_cm.__enter__()
-        except Exception:
-            _log.warning("langfuse context unavailable name=%s", name)
+        if client is None:
             yield None
             return
-        _current_span_var.set(current_span)
-        try:
-            yield current_span
-        except BaseException:
-            try:
-                span_cm.__exit__(*sys.exc_info())
-            except Exception:
-                _log.warning("langfuse context exit failed name=%s", name)
-            raise
-        else:
-            try:
-                span_cm.__exit__(None, None, None)
-            except Exception:
-                _log.warning("langfuse context exit failed name=%s", name)
+
+        merged_metadata = dict(metadata or {})
+        attributes = {}
+        if user_id:
+            attributes["user_id"] = user_id
+        if session_id:
+            attributes["session_id"] = session_id
+        if tags:
+            attributes["tags"] = list(tags)
+            merged_metadata["tags"] = list(tags)
+        kwargs = {"name": name, "as_type": as_type}
+        if input is not None:
+            kwargs["input"] = input
+        if merged_metadata:
+            kwargs["metadata"] = merged_metadata
+
+        with _sdk_context(lambda: client.start_as_current_observation(**kwargs), name) as current_span:
+            _current_span_var.set(current_span)
+            if current_span is None:
+                yield None
+                return
+            # Enter after the root exists: propagation sets its attributes as well
+            # as those of children, without changing an enclosing request's span.
+            attribute_scope = (
+                _sdk_context(lambda: _langfuse_propagate_attributes(**attributes), name)
+                if attributes and callable(_langfuse_propagate_attributes)
+                else nullcontext()
+            )
+            with attribute_scope:
+                _update_legacy_trace(client, attributes)
+                yield current_span
     finally:
         _prompt_refs_var.reset(token)
         _current_span_var.reset(span_token)

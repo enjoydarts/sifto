@@ -56,6 +56,11 @@ def candidate(api, number, head, base, source, python_cutoff=None):
     require(comparison.get('merge_base_commit', {}).get('sha') == base and comparison.get('status') == 'ahead', 'Candidate must contain exact current main')
     files = api.pages('/pulls/' + str(number) + '/files')
     require(0 < len(files) <= MAX_FILES and len(files) == pr.get('changed_files'), 'Missing, excessive or truncated dependency diff')
+    from .policy import PYTHON_INPUTS
+    paths = {entry.get('filename') for entry in files}
+    require(len(paths) == len(files), 'Duplicate dependency file inventory')
+    require(all(path.replace('.in', '.txt') in paths for path in paths & PYTHON_INPUTS),
+            'Changed Python input requires its corresponding changed lock file')
     entries = []
     python_age = {'policy': 'emergency-security-bypass' if emergency else 'seven-day',
                   'cutoff': None, 'locks': []}
@@ -101,6 +106,12 @@ def candidate(api, number, head, base, source, python_cutoff=None):
         statuses = api.pages('/commits/' + head + '/statuses')
         age = next((s for s in statuses if s.get('context') == 'renovate/stability-days'), None)
         require(age is not None and age.get('state') == 'success' and age.get('creator', {}).get('login') == 'github-actions[bot]', 'Renovate seven-day stability status has not succeeded')
+        artifacts = next((s for s in statuses if s.get('context') == 'renovate/artifacts'), None)
+        if artifacts is not None:
+            creator = artifacts.get('creator', {})
+            require(artifacts.get('state') == 'success' and creator.get('login') == 'github-actions[bot]'
+                    and type(creator.get('id')) is int and creator['id'] == 41898282
+                    and creator.get('type') == 'Bot', 'Latest Renovate artifact generation status has not succeeded from canonical Bot')
     targets = surfaces([entry['path'] for entry in entries])
     plan = {'version': 2, 'repo': api.repo, 'pr': number, 'head': head, 'base': base, 'source': source, 'branch': branch, 'emergency': emergency, 'files': entries, 'diff_hash': plan_hash(entries), 'surfaces': targets, 'python_age': python_age}
     require(len(base64.b64encode(canonical(plan).encode())) < 47_900,

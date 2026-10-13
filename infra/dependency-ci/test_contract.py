@@ -80,7 +80,7 @@ class DependencyAutomationContract(unittest.TestCase):
             'actions': 'write',
         })
 
-    def test_proven_bot_workflow_has_only_normal_generation_and_discovery(self):
+    def test_proven_bot_workflow_has_generation_declined_cleanup_and_discovery(self):
         workflow = read_yaml('.github/workflows/renovate.yml')
         events = workflow.get('on', workflow.get(True))
         self.assertIsNone(events['workflow_dispatch'])
@@ -90,11 +90,15 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertNotIn('outputs', writer)
         checkout = writer['steps'][0]
         self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
-        self.assertEqual(len(writer['steps']), 4)
+        self.assertEqual(len(writer['steps']), 5)
         for step in writer['steps'][1:]:
             self.assertNotIn('if', step)
         self.assertEqual(writer['steps'][1]['run'], 'python3 -B -m dependency_updates.release_age')
-        self.assertEqual(writer['steps'][3]['run'], 'python3 -B -m dependency_updates.pipeline discover')
+        self.assertEqual(writer['steps'][3]['run'], 'python3 -B -m dependency_updates.declined')
+        self.assertEqual(writer['steps'][3]['env'], {
+            'GH_TOKEN': '${{ github.token }}', 'PYTHONPATH': 'infra/dependency-ci'})
+        self.assertEqual(writer['steps'][4]['run'], 'python3 -B -m dependency_updates.pipeline discover')
+        self.assertIn('test_declined.py', (ROOT / 'Makefile').read_text())
         self.assertNotIn('approval_probe', (ROOT / 'Makefile').read_text())
         self.assertFalse((ROOT / 'infra/dependency-ci/dependency_updates/approval_probe.py').exists())
         self.assertFalse((ROOT / 'infra/dependency-ci/test_approval_probe.py').exists())

@@ -633,6 +633,28 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(policy.Refused):
             api.pages('/pulls', max_pages=2)
 
+    def test_repository_root_get_has_no_trailing_slash_and_keeps_path_guard(self):
+        captured = []
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, limit): return b'{"id":123,"full_name":"owner/repo"}'
+        class Opener:
+            def open(self, request, timeout):
+                captured.append(request)
+                return Response()
+        api = github.GitHub('owner/repo')
+        with patch.dict(os.environ, {'GH_TOKEN': 'secret-token'}), patch('urllib.request.build_opener', return_value=Opener()):
+            try:
+                repository = api.get('')
+            except policy.Refused:
+                self.fail('Exact repository root GET must support the canonical URL without a trailing slash')
+            self.assertEqual(repository['id'], 123)
+            self.assertEqual(captured[0].full_url, 'https://api.github.com/repos/owner/repo')
+            for invalid in ('//foreign', 'https://foreign', 'relative', '/bad\\path'):
+                with self.subTest(path=invalid), self.assertRaises(policy.Refused): api.http('GET', invalid, None)
+            self.assertEqual(len(captured), 1)
+
     def test_mutating_requests_are_never_retried_on_ambiguity(self):
         calls = []
         def transport(*args):
@@ -937,6 +959,28 @@ class PipelineTests(unittest.TestCase):
         value = pipeline.candidate(self.api, 1, SHA, BASE, BASE, python_cutoff='2026-10-05T00:00:00Z')
         value['ci_run'] = 15
         return value
+
+    def test_diagnostic_namespace_is_never_a_native_candidate(self):
+        for suffix in ('123', 'broken', '0', '123-extra'):
+            self.branch = 'renovate-ci/approval-probe-' + suffix
+            with self.subTest(branch=self.branch), self.assertRaisesRegex(policy.Refused, 'Diagnostic'):
+                self.plan()
+            self.assertEqual(self.mutations, [])
+
+    def test_discovery_explicitly_skips_diagnostic_namespace(self):
+        self.branch = 'renovate-ci/approval-probe-10'
+        original = self.api.transport
+        def transport(method, path, body):
+            if path.startswith('/actions/workflows/dependency-update.yml/runs'):
+                return {'workflow_runs': [], 'total_count': 0}
+            if path.startswith('/pulls?'):
+                return [{'number': 1, 'head': {'sha': SHA, 'ref': self.branch}}]
+            if path == '/pulls/1':
+                raise AssertionError('Diagnostic must be skipped before native candidate lookup')
+            return original(method, path, body)
+        self.api.transport = transport
+        with patch.dict(os.environ, {'GITHUB_SHA': BASE}): pipeline.discover(self.api)
+        self.assertEqual(self.mutations, [])
 
     def execute(self, plan):
         with tempfile.TemporaryDirectory() as directory:
@@ -1355,6 +1399,62 @@ class PipelineTests(unittest.TestCase):
 
 
 class WorkflowWaitTests(unittest.TestCase):
+    def test_shared_pr_deadline_expiring_in_dispatch_inventory_prevents_post(self):
+        clock = FakeClock()
+        mutations = []
+        def remaining():
+            policy.require(clock.elapsed < 20, 'Timed out waiting for exact PR CI')
+            return 20 - clock.elapsed
+        def transport(method, path, body):
+            if method == 'POST': mutations.append((path, body))
+            clock.elapsed += 21
+            return {'workflow_runs': [], 'total_count': 0}
+        api = github.GitHub('owner/repo', transport=transport)
+        with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+            try:
+                pipeline.dispatch_once(api, 'dependency-check.yml', 'renovate-ci/pip', SHA,
+                                       {'expected_head': SHA}, remaining_budget=remaining)
+            except TypeError:
+                self.fail('Dispatch must accept the shared remaining-budget authority')
+            except policy.Refused as exc:
+                self.assertIn('Timed out', str(exc))
+            else:
+                self.fail('Expired shared PR deadline must stop dispatch')
+        self.assertEqual(mutations, [])
+
+    def test_shared_pr_deadline_includes_post_and_wait_api_latency_without_replay(self):
+        for expires_in in ('POST', 'wait_GET'):
+            with self.subTest(expires_in=expires_in):
+                clock = FakeClock()
+                mutations = []
+                def remaining():
+                    policy.require(clock.elapsed < 20, 'Timed out waiting for exact PR CI')
+                    return 20 - clock.elapsed
+                def transport(method, path, body):
+                    if method == 'POST':
+                        mutations.append((path, body))
+                        clock.elapsed += 21 if expires_in == 'POST' else 12
+                        return None
+                    if mutations:
+                        clock.elapsed += 9
+                        run = {'id': 16, 'event': 'workflow_dispatch', 'head_sha': SHA,
+                               'path': '.github/workflows/dependency-check.yml', 'status': 'completed', 'conclusion': 'success'}
+                        return {'workflow_runs': [run], 'total_count': 1}
+                    return {'workflow_runs': [], 'total_count': 0}
+                api = github.GitHub('owner/repo', transport=transport)
+                with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
+                    try:
+                        pipeline.dispatch_once(api, 'dependency-check.yml', 'renovate-ci/pip', SHA,
+                                               {'expected_head': SHA}, remaining_budget=remaining)
+                    except TypeError:
+                        self.fail('Dispatch must accept the shared remaining-budget authority')
+                    except policy.Refused as exc:
+                        self.assertIn('Timed out', str(exc))
+                    else:
+                        self.fail('Expired shared PR deadline must reject even successful CI')
+                self.assertEqual(len(mutations), 1)
+                self.assertEqual(clock.elapsed, 21)
+
     def test_ci_has_its_own_short_finite_deadline_without_redispatch(self):
         clock = FakeClock()
         mutations = []

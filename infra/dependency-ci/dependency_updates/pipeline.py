@@ -37,7 +37,7 @@ def blob(api, path, sha):
         raise Refused('Candidate file is not text') from None
 
 
-def candidate(api, number, head, base, source, python_cutoff=None):
+def candidate(api, number, head, base, source, python_cutoff=None, *, _approval_probe=None):
     require(isinstance(number, int) and 0 < number < 10_000_000 and all(SHA.fullmatch(s) for s in (head, base, source)), 'Invalid immutable candidate inputs')
     require(main_sha(api) == base == source, 'Candidate base and trusted workflow source must equal current main')
     pr = api.get('/pulls/' + str(number))
@@ -45,6 +45,12 @@ def candidate(api, number, head, base, source, python_cutoff=None):
     require(pr.get('user', {}).get('login') in {'github-actions[bot]', 'enjoydarts'}, 'Unsupported PR author')
     require(pr.get('head', {}).get('repo', {}).get('full_name') == api.repo and pr.get('base', {}).get('repo', {}).get('full_name') == api.repo, 'Fork candidate refused')
     branch = pr.get('head', {}).get('ref', '')
+    if branch.startswith('renovate-ci/approval-probe-'):
+        require(_approval_probe is not None, 'Diagnostic fixture cannot enter native approval')
+        from .approval_probe import verify_fixture
+        verify_fixture(api, _approval_probe)
+        require((_approval_probe['pr'], _approval_probe['head'], _approval_probe['source'], _approval_probe['branch'])
+                == (number, head, source, branch), 'Diagnostic fixture inputs changed')
     emergency = bool(re.fullmatch(r'dependency-security/[a-z0-9][a-z0-9.-]{0,79}', branch))
     require(bool(re.fullmatch(r'renovate-ci/[a-zA-Z0-9_.-]{1,120}', branch)) or emergency, 'Unsupported dependency branch')
     require(pr['user']['login'] == ('enjoydarts' if emergency else 'github-actions[bot]'), 'PR author does not match its dependency branch namespace')
@@ -200,6 +206,8 @@ def discover(api):
         print('Native dependency approval or deployment is active; no new request')
         return
     for pr in api.pages('/pulls?state=open&base=main'):
+        if pr.get('head', {}).get('ref', '').startswith('renovate-ci/approval-probe-'):
+            continue
         try:
             plan = candidate(api, pr['number'], pr['head']['sha'], source, source)
         except Refused as exc:
@@ -215,10 +223,14 @@ def discover(api):
             return
 
 
-def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch'):
+def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_dispatch', remaining_budget=None):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if remaining_budget is not None:
+            remaining_budget()
         runs = api.pages('/actions/workflows/' + workflow + '/runs?event=' + event + '&head_sha=' + head, 'workflow_runs')
+        if remaining_budget is not None:
+            remaining_budget()
         require(time.monotonic() < deadline, 'Timed out waiting for exact workflow run')
         matches = [r for r in runs if r['id'] > after_id and r.get('head_sha') == head and r.get('event') == event]
         require(len(matches) <= 1, 'Ambiguous workflow run identity')
@@ -226,26 +238,40 @@ def await_run(api, workflow, head, after_id, timeout_seconds, event='workflow_di
             require(matches[0].get('conclusion') == 'success', 'Dispatched workflow failed')
             return matches[0]
         remaining = deadline - time.monotonic()
+        if remaining_budget is not None:
+            remaining = min(remaining, remaining_budget())
         if remaining > 0:
             time.sleep(min(10, remaining))
     raise Refused('Timed out waiting for exact workflow run')
 
 
-def dispatch_once(api, workflow, ref, head, inputs):
+def dispatch_once(api, workflow, ref, head, inputs, remaining_budget=None):
     require(workflow in RUN_WAIT_SECONDS, 'Unsupported workflow wait budget')
+    if remaining_budget is not None:
+        remaining_budget()
     existing = api.pages('/actions/workflows/' + workflow + '/runs?event=workflow_dispatch&head_sha=' + head, 'workflow_runs')
     latest = max((r['id'] for r in existing), default=0)
+    if remaining_budget is not None:
+        remaining_budget()
     api.request('POST', '/actions/workflows/' + workflow + '/dispatches', {'ref': ref, 'inputs': inputs})
-    return await_run(api, workflow, head, latest, RUN_WAIT_SECONDS[workflow])
+    if remaining_budget is not None:
+        remaining_budget()
+    return await_run(api, workflow, head, latest, RUN_WAIT_SECONDS[workflow], remaining_budget=remaining_budget)
 
 
 def prepare(api, number, head, base, source):
+    from . import pr_ci
     plan = candidate(api, number, head, base, source)
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Reruns require a fresh candidate approval request')
-    run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head})
+    def revalidate():
+        assert_unchanged(plan, candidate(api, number, head, base, source,
+                                       python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
+    pr_checks = pr_ci.start(api, plan, revalidate)
+    run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
+                        remaining_budget=pr_checks.remaining)
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
-    assert_unchanged(plan, candidate(api, number, head, base, source,
-                                   python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
+    pr_checks.wait()
+    revalidate()
     plan['ci_run'] = run['id']
     digest = plan_hash(plan)
     encoded = base64.b64encode(canonical(plan).encode()).decode()

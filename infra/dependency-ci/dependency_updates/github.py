@@ -24,7 +24,7 @@ class GitHub:
         self.transport = transport or self.http
 
     def http(self, method, path, body):
-        require(path.startswith('/') and not path.startswith('//') and '\\' not in path, 'Invalid API path')
+        require((method == 'GET' and path == '') or (path.startswith('/') and not path.startswith('//') and '\\' not in path), 'Invalid API path')
         request = urllib.request.Request('https://api.github.com/repos/' + self.repo + path, method=method, data=None if body is None else json.dumps(body).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json'})
         with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
             raw = response.read(5_000_001)
@@ -53,10 +53,11 @@ class GitHub:
         expected_total = None
         for page in range(1, max_pages + 1):
             data = self.get(path + ('&' if '?' in path else '?') + 'per_page=100&page=' + str(page))
+            require(not key or type(data) is dict and key in data, 'Malformed API pagination')
             rows = data[key] if key else data
             require(isinstance(rows, list), 'Malformed API pagination')
             if require_total:
-                require(isinstance(data.get('total_count'), int) and data['total_count'] >= 0, 'API inventory total is missing')
+                require(type(data.get('total_count')) is int and data['total_count'] >= 0, 'API inventory total is missing')
                 if expected_total is None:
                     expected_total = data['total_count']
                 require(data['total_count'] == expected_total, 'API inventory changed during pagination')

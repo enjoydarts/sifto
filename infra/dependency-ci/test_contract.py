@@ -80,6 +80,46 @@ class DependencyAutomationContract(unittest.TestCase):
             'actions': 'write',
         })
 
+    def test_diagnostic_is_default_off_main_only_and_always_cleans_owned_fixture(self):
+        workflow = read_yaml('.github/workflows/renovate.yml')
+        events = workflow.get('on', workflow.get(True))
+        self.assertIsInstance(events['workflow_dispatch'], dict, 'Diagnostic input must be explicitly default off')
+        self.assertEqual(events['workflow_dispatch']['inputs'], {'approval_probe': {
+            'description': 'Prove GITHUB_TOKEN read-only CI approval with a no-op fixture',
+            'type': 'boolean', 'default': False}})
+        writer = workflow['jobs']['renovate']
+        self.assertNotIn('environment', writer)
+        checkout = writer['steps'][0]
+        self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
+        for step in writer['steps'][1:]:
+            if step.get('id') == 'approval-probe':
+                self.assertEqual(step['if'], '${{ inputs.approval_probe }}')
+                self.assertEqual(step['run'], 'python3 -B -m dependency_updates.approval_probe propose')
+                self.assertEqual(step['env']['GH_TOKEN'], '${{ github.token }}')
+            else:
+                self.assertEqual(step['if'], '${{ !inputs.approval_probe }}')
+        cleanup = workflow['jobs']['approval-probe-cleanup']
+        self.assertIn('always()', cleanup['if'])
+        self.assertIn("github.ref == 'refs/heads/main'", cleanup['if'])
+        self.assertIn('inputs.approval_probe', cleanup['if'])
+        self.assertEqual(cleanup['needs'], ['renovate', 'approval-probe-proof'])
+        self.assertEqual(cleanup['permissions'], {'contents': 'write', 'pull-requests': 'write', 'actions': 'write'})
+        self.assertNotIn('environment', cleanup)
+        self.assertEqual(cleanup['steps'][0]['with'], checkout['with'])
+        self.assertEqual(cleanup['steps'][1]['run'], 'python3 -B -m dependency_updates.approval_probe cleanup')
+        proof = workflow['jobs']['approval-probe-proof']
+        self.assertEqual(proof['needs'], 'renovate')
+        self.assertIn("github.ref == 'refs/heads/main'", proof['if'])
+        self.assertIn('inputs.approval_probe', proof['if'])
+        self.assertNotIn('environment', proof)
+        self.assertEqual(proof['permissions'], {'contents': 'read', 'pull-requests': 'read', 'statuses': 'read', 'actions': 'write'})
+        self.assertEqual(proof['steps'][0]['with'], checkout['with'])
+        self.assertEqual(proof['steps'][1]['run'], 'python3 -B -m dependency_updates.approval_probe prove')
+        self.assertIn('/repository/infra/dependency-ci/test_approval_probe.py', (ROOT / 'Makefile').read_text())
+        prepare = read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']
+        self.assertEqual(prepare['steps'][1]['env']['DEPENDENCY_PR_CI_AUTO_APPROVAL'],
+                         '${{ vars.DEPENDENCY_PR_CI_AUTO_APPROVAL }}')
+
     def test_public_pr_checks_have_no_write_permissions_or_secrets(self):
         path = '.github/workflows/dependency-check.yml'
         workflow = read_yaml(path)
@@ -94,6 +134,39 @@ class DependencyAutomationContract(unittest.TestCase):
         text = (ROOT / path).read_text()
         for target in ['dependency-api', 'dependency-worker', 'dependency-web', 'maintenance-test', 'maintenance-syntax', 'maintenance-postgres-data-mount-test', 'dependency-contract', 'dependency-renovate-validate', 'dependency-python-locks-check', 'dependency-audio']:
             self.assertIn(target, text)
+
+    def test_automatic_bot_ci_approval_has_an_exact_read_only_workflow_allowlist(self):
+        from dependency_updates import pr_ci
+        self.assertEqual(pr_ci.WORKFLOWS, ('dependency-check.yml', 'app-runtime.yml', 'maintenance-test.yml'))
+        for name in pr_ci.WORKFLOWS:
+            with self.subTest(workflow=name):
+                path = '.github/workflows/' + name
+                workflow = read_yaml(path)
+                events = workflow.get('on', workflow.get(True))
+                self.assertIn('pull_request', events)
+                self.assertTrue({'pull_request_target', 'workflow_run'}.isdisjoint(events))
+                self.assertEqual(workflow['permissions'], {'contents': 'read'})
+                text = (ROOT / path).read_text()
+                self.assertNotIn('secrets', text.lower())
+                self.assertNotIn('production-maintenance', text)
+                for job in workflow['jobs'].values():
+                    self.assertNotIn('environment', job)
+                    self.assertNotIn('permissions', job)
+                    for step in job['steps']:
+                        if step.get('uses', '').startswith('actions/checkout@'):
+                            self.assertIs(step['with']['persist-credentials'], False)
+                if name == 'maintenance-test.yml':
+                    self.assertNotIn('maintenance apply', text)
+                    self.assertNotIn('maintenance-apply', text)
+        prepare = read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']
+        self.assertEqual(prepare['permissions'], {'contents': 'read', 'pull-requests': 'read', 'statuses': 'read', 'actions': 'write'})
+        self.assertNotIn('environment', prepare)
+        self.assertGreaterEqual(prepare['timeout-minutes'] * 60, pr_ci.WAIT_SECONDS + 10 * 60)
+        self.assertLessEqual(prepare['timeout-minutes'], 65)
+        helper = (ROOT / 'infra/dependency-ci/dependency_updates/pr_ci.py').read_text()
+        self.assertNotIn('pending_deployments', helper)
+        makefile = (ROOT / 'Makefile').read_text()
+        self.assertIn('/repository/infra/dependency-ci/test_pr_ci.py', makefile)
 
     def test_mount_regression_blocks_automatic_dependency_approval(self):
         job = read_yaml('.github/workflows/dependency-check.yml')['jobs']['policy']

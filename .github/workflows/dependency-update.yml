@@ -27,7 +27,8 @@ jobs:
   prepare:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    # PR CI visibility/approval/runtime share a 50m deadline; 15m for API/setup.
+    timeout-minutes: 65
     permissions:
       contents: read
       pull-requests: read
@@ -49,6 +50,7 @@ jobs:
           INPUT_HEAD: ${{ inputs.head_sha }}
           INPUT_BASE: ${{ inputs.base_sha }}
           INPUT_SOURCE: ${{ inputs.source_sha }}
+          DEPENDENCY_PR_CI_AUTO_APPROVAL: ${{ vars.DEPENDENCY_PR_CI_AUTO_APPROVAL }}
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.pipeline prepare
   approve-merge-deploy:

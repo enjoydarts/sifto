@@ -232,6 +232,8 @@ dependency-web:
 dependency-contract: dependency-python-locks-mounts-test
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps contract
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_updates.py
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_pr_ci.py
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps contract python -B /repository/infra/dependency-ci/test_approval_probe.py
 	sh -n infra/dependency-ci/init-db.sh
 
 dependency-renovate-validate:

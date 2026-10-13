@@ -213,7 +213,14 @@ class Session:
         return self.actual_jobs(run, name)
 
     def actual_jobs(self, run, name):
-        jobs = self.attempt_jobs(run)
+        try:
+            jobs = self.attempt_jobs(run)
+        except Refused as exc:
+            # The validated run can precede its attempt job inventory. Missing
+            # jobs remain pending, never empty/successful evidence or POST authority.
+            if str(exc) == 'GitHub API request rejected (HTTP 404)':
+                return False
+            raise
         self.verify_actual_jobs(run, name, jobs)
         final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
         require(final['id'] == run['id'] and final['run_attempt'] == run['run_attempt']

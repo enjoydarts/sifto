@@ -310,6 +310,79 @@ class PRCITests(unittest.TestCase):
         self.assertEqual(self.f.clock.elapsed, 100)
         self.assertEqual(len(self.f.posts), 2)
 
+    def test_attempt_jobs_404_visibility_uses_shared_deadline_without_reapproval(self):
+        for preapproved in (False, True):
+            for delay in (30, 51 * 60):
+                with self.subTest(preapproved=preapproved, delay=delay):
+                    self.f = Fixture()
+                    if preapproved:
+                        self.f.runs[200].update(run_attempt=2, status='in_progress', conclusion=None,
+                                                triggering_actor=copy.deepcopy(REPO['owner']))
+                        self.f.finish_at = delay
+                    original = self.f.api.transport
+                    def transport(method, path, body):
+                        if '/actions/runs/200/attempts/2/jobs' in path and self.f.clock.elapsed < delay:
+                            raise HTTPError('public', 404, 'not visible', {}, None)
+                        if path == '/actions/runs/201/approve':
+                            self.assertGreaterEqual(self.f.clock.elapsed, delay)
+                        return original(method, path, body)
+                    self.f.api.transport = transport
+                    if delay < 50 * 60:
+                        session = self.start()
+                        self.wait(session)
+                        self.assertEqual(self.f.clock.elapsed, delay)
+                        self.assertEqual([p[1] for p in self.f.posts],
+                                         ([] if preapproved else ['/actions/runs/200/approve']) + ['/actions/runs/201/approve'])
+                        self.assertEqual(session.approved, {201} if preapproved else {200, 201})
+                    else:
+                        with self.assertRaisesRegex(policy.Refused, 'Timed out'): self.start()
+                        self.assertEqual(self.f.clock.elapsed, 50 * 60)
+                        self.assertEqual(len(self.f.posts), 0 if preapproved else 1)
+
+    def test_attempt_jobs_404_still_checks_other_authorities_before_next_post(self):
+        for condition in ('failure', 'job_failure', 'head', 'source', 'attempt', 'actor'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                if condition == 'job_failure':
+                    self.f.runs[201].update(run_attempt=2, triggering_actor=copy.deepcopy(REPO['owner']))
+                    self.f.success(201)
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    if self.f.clock.elapsed >= 10:
+                        if condition == 'failure': self.f.runs[201]['conclusion'] = 'failure'
+                        if condition == 'job_failure': self.f.jobs[201][0]['conclusion'] = 'failure'
+                        if condition == 'head': self.f.candidate.head = 'c' * 40
+                        if condition == 'source': self.f.candidate.base = 'c' * 40
+                        if condition == 'attempt': self.f.runs[200]['run_attempt'] = 3
+                        if condition == 'actor': self.f.runs[200]['triggering_actor'] = REPO['owner']
+                    if '/actions/runs/200/attempts/2/jobs' in path:
+                        raise HTTPError('public', 404, 'not visible', {}, None)
+                    return original(method, path, body)
+                self.f.api.transport = transport
+                with self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.clock.elapsed, 10)
+                self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
+    def test_attempt_jobs_other_errors_after_ack_fail_closed_without_visibility_poll(self):
+        for condition in ('forbidden', 'unknown_http', 'timeout', 'malformed', 'unknown_job'):
+            with self.subTest(condition=condition):
+                self.f = Fixture()
+                original = self.f.api.transport
+                def transport(method, path, body):
+                    if '/actions/runs/200/attempts/2/jobs' in path:
+                        if condition == 'forbidden': raise HTTPError('public', 403, 'forbidden', {}, None)
+                        if condition == 'unknown_http': raise HTTPError('public', 418, 'unknown', {}, None)
+                        if condition == 'timeout': raise TimeoutError()
+                        if condition == 'malformed': return {'jobs': []}
+                        if condition == 'unknown_job':
+                            return {'jobs': [{'id': 1, 'run_id': 200, 'run_attempt': 2, 'head_sha': SHA,
+                                              'name': 'Dependency API', 'status': 'unknown', 'conclusion': None}], 'total_count': 1}
+                    return original(method, path, body)
+                self.f.api.transport = transport
+                with patch.object(github.time, 'sleep'), self.assertRaises(policy.Refused): self.start()
+                self.assertEqual(self.f.clock.elapsed, 0)
+                self.assertEqual([p[1] for p in self.f.posts], ['/actions/runs/200/approve'])
+
     def test_unknown_http_outcome_cannot_be_promoted_by_real_successful_jobs(self):
         session = self.ci.Session(self.f.api, self.f.plan, self.f.revalidate,
                                   self.f.clock.monotonic, allow_approval=True)

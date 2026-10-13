@@ -1,9 +1,10 @@
 """One data-only Renovate notification after native approval fully completes."""
 import os
 import re
+import time
 
 from .github import Ambiguous, GitHub
-from .policy import Refused, SHA, load_json, require, verify_approval
+from .policy import Refused, SHA, canonical, load_json, require, verify_approval
 
 WORKFLOW = 'dependency-followup.yml'
 PARENT_WORKFLOW = 'dependency-update.yml'
@@ -58,22 +59,87 @@ def run_identity(run, expected, repo, repo_id):
     bot(run.get('triggering_actor'))
 
 
-def parent(api, event_run, parent_id, repo_id, source):
+def native_run(api, parent_id, repo_id):
     run = api.get('/actions/runs/' + str(parent_id))
     require(type(run) is dict and type(run.get('display_title')) is str,
             'Missing immutable dependency title')
-    title = re.fullmatch(r'Dependency PR ([1-9][0-9]{0,6}) ([0-9a-f]{40}) ([0-9a-f]{40})',
-                         run['display_title'])
-    require(title is not None, 'Invalid immutable dependency title')
-    number, head, base = int(title[1]), title[2], title[3]
+    number, head, base = parse_title(run)
     expected = {'id': parent_id, 'workflow_id': registered(api, PARENT_WORKFLOW, PARENT_NAME),
                 'display_title': run['display_title'], 'path': '.github/workflows/' + PARENT_WORKFLOW,
                 'event': 'workflow_dispatch', 'head_branch': 'main', 'head_sha': base,
-                'run_attempt': 1, 'status': 'completed', 'conclusion': 'success'}
+                'run_attempt': 1}
     # GitHub run.name can be the dynamic run-name. Registered metadata above
     # supplies the top-level workflow name; neither REST nor event run.name does.
     run_identity(run, expected, api.repo, repo_id)
-    run_identity(event_run, expected, api.repo, repo_id)
+    return run, number, head, base
+
+
+def immutable_run(run):
+    proof = {key: run.get(key) for key in ('id', 'workflow_id', 'display_title', 'event',
+             'head_branch', 'head_sha', 'run_attempt')}
+    for key in ('repository', 'head_repository'):
+        proof[key] = identity(run[key], ('id', 'full_name'))
+    for key in ('actor', 'triggering_actor'):
+        proof[key] = identity(run[key], ('id', 'login', 'type'))
+    proof['path'] = run['path'].removesuffix('@main')
+    return proof
+
+
+def identity(value, keys):
+    return {key: value.get(key) for key in keys}
+
+
+def context_actor(context, run):
+    require(context.get('GITHUB_ACTOR') == run['actor']['login']
+            and context_id(context.get('GITHUB_ACTOR_ID')) == run['actor']['id']
+            and context.get('GITHUB_TRIGGERING_ACTOR') == run['triggering_actor']['login'],
+            'Follow-up context actor differs from actual canonical Bot run')
+
+
+def trusted_context(api, context, workflow, source):
+    require(type(source) is str and SHA.fullmatch(source)
+            and context.get('GITHUB_REPOSITORY') == api.repo
+            and context.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+            and context.get('GITHUB_REF') == 'refs/heads/main'
+            and context.get('GITHUB_RUN_ATTEMPT') == '1'
+            and context.get('GITHUB_SHA') == source
+            and context.get('GITHUB_WORKFLOW_SHA') == source
+            and context.get('GITHUB_WORKFLOW_REF') == api.repo + '/.github/workflows/' + workflow + '@refs/heads/main',
+            'Follow-up requires the first trusted current-main execution context')
+    return context_id(context.get('GITHUB_RUN_ID')), context_id(context.get('GITHUB_REPOSITORY_ID'))
+
+
+def wait_parent(api, parent_id, repo_id, source):
+    deadline = time.monotonic() + 600
+    pinned = None
+    while True:
+        run, number, head, base = native_run(api, parent_id, repo_id)
+        identity = canonical(immutable_run(run))
+        require(pinned is None or pinned == identity, 'Native parent identity changed while waiting')
+        pinned = identity
+        require(time.monotonic() < deadline, 'Timed out waiting for native parent completion; daily Renovate scan remains fallback')
+        if run.get('status') == 'completed':
+            require(run.get('conclusion') == 'success', 'Native parent did not complete successfully')
+            return run, number, head, base
+        require(run.get('status') in {'queued', 'in_progress', 'waiting', 'pending', 'requested'}
+                and run.get('conclusion') is None, 'Native parent is not a valid pending execution')
+        current_main(api, source)
+        remaining = deadline - time.monotonic()
+        require(remaining > 0, 'Timed out waiting for native parent completion; daily Renovate scan remains fallback')
+        time.sleep(min(60, remaining))
+
+
+def parent(api, event_run, parent_id, repo_id, source, active=False, plan=None):
+    # Keep the prior callable shape for read-only historical audits. A dispatch
+    # child supplies the REST-verified run, never a workflow_run event payload.
+    run, number, head, base = native_run(api, parent_id, repo_id) if event_run is None else (
+        event_run, *parse_title(event_run))
+    require(run.get('status') == ('in_progress' if active else 'completed')
+            and run.get('conclusion') == (None if active else 'success'),
+            'Native parent is not in the required execution state')
+    if plan is not None:
+        require((number, head, base) == (plan['pr'], plan['head'], plan['base'])
+                and base == plan['source'], 'Queued parent does not match the exact approved dependency plan')
     approvals = api.get('/actions/runs/%d/approvals' % parent_id)
     require(type(approvals) is list and len(approvals) <= 100
             and all(type(review) is dict and type(review.get('user')) is dict
@@ -85,8 +151,9 @@ def parent(api, event_run, parent_id, repo_id, source):
     require(len(jobs) == 2 and all(type(job) is dict and positive(job.get('id'))
             and type(job.get('run_id')) is int and job['run_id'] == parent_id
             and type(job.get('run_attempt')) is int and job['run_attempt'] == 1
-            and job.get('head_sha') == base and job.get('status') == 'completed'
-            and job.get('conclusion') == 'success' for job in jobs)
+            and job.get('head_sha') == base
+            and job.get('status') == ('in_progress' if active and job.get('name') == 'approve-merge-deploy' else 'completed')
+            and job.get('conclusion') == (None if active and job.get('name') == 'approve-merge-deploy' else 'success') for job in jobs)
             and len({job['id'] for job in jobs}) == 2
             and {job.get('name') for job in jobs} == {'prepare', 'approve-merge-deploy'},
             'Complete first-attempt native job success is required')
@@ -127,7 +194,27 @@ def parent(api, event_run, parent_id, repo_id, source):
             'Approved immutable merge parent mismatch')
     # Closed PR base.sha can move with main. Only immutable Git parents prove
     # which base/head consumed this native approval.
-    return number, head, base
+    if plan is not None:
+        require(branch == plan['branch'],
+                'Queued parent does not match the exact approved dependency plan')
+    from .pipeline import native_authority
+    normalized_run = dict(run, path=run['path'].removesuffix('@main'))
+    return canonical({'run': immutable_run(run), 'authority': native_authority(normalized_run, approvals),
+        'jobs': [{key: job.get(key) for key in ('id', 'name', 'run_id', 'run_attempt', 'head_sha', 'status', 'conclusion')}
+                 for job in sorted(jobs, key=lambda job: job['id'])],
+        'pr': {**identity(pr, ('number', 'state', 'merged', 'merge_commit_sha')),
+               'user': identity(pr['user'], ('id', 'login', 'type')),
+               'head': {**identity(pr['head'], ('sha', 'ref')), 'repo': identity(pr['head']['repo'], ('id', 'full_name'))},
+               'security': {'emergency': emergency, 'label': emergency and 'dependency-security' in {label['name'] for label in labels},
+                            'stated_fix': emergency and type(body) is str and 'Security fix:' in body}},
+        'base': {'ref': pr['base']['ref'], 'repo': identity(pr['base']['repo'], ('id', 'full_name'))},
+        'merge': {'sha': commit['sha'], 'parents': [item['sha'] for item in commit['parents']]}})
+
+
+def parse_title(run):
+    title = re.fullmatch(r'Dependency PR ([1-9][0-9]{0,6}) ([0-9a-f]{40}) ([0-9a-f]{40})', run['display_title'])
+    require(title is not None, 'Invalid immutable dependency title')
+    return int(title[1]), title[2], title[3]
 
 
 def current_main(api, source):
@@ -154,44 +241,78 @@ def first_child(api, self_id, parent_id):
         identifiers.add(run['id'])
         if run['display_title'] == 'Dependency follow-up %d' % parent_id:
             matches.append(run['id'])
-    require(self_id in matches and min(matches) == self_id,
+    require((not matches if self_id is None else self_id in matches and min(matches) == self_id),
             'Parent follow-up already consumed or current child identity missing')
 
 
 def notify(api, event, context):
-    require(type(event) is dict and event.get('action') == 'completed'
-            and type(event.get('workflow_run')) is dict,
-            'Only a completed native workflow event may notify')
-    parent_id = event['workflow_run'].get('id')
-    require(positive(parent_id), 'Invalid completed parent run identifier')
-    self_id, repo_id = context_id(context.get('GITHUB_RUN_ID')), context_id(context.get('GITHUB_REPOSITORY_ID'))
+    require(type(event) is dict and type(event.get('inputs')) is dict
+            and set(event['inputs']) == {'parent_run'}, 'Only an exact native-parent dispatch may notify')
+    parent_id = context_id(event['inputs']['parent_run'])
     source = context.get('GITHUB_SHA')
-    require(type(source) is str and SHA.fullmatch(source)
-            and context.get('GITHUB_REPOSITORY') == api.repo
-            and context.get('GITHUB_EVENT_NAME') == 'workflow_run'
-            and context.get('GITHUB_REF') == 'refs/heads/main'
-            and context.get('GITHUB_RUN_ATTEMPT') == '1'
-            and context.get('GITHUB_WORKFLOW_SHA') == source
-            and context.get('GITHUB_WORKFLOW_REF') == api.repo + '/.github/workflows/' + WORKFLOW + '@refs/heads/main',
-            'Follow-up must use the first trusted current-main execution')
+    self_id, repo_id = trusted_context(api, context, WORKFLOW, source)
     repository(api.get(''), api.repo, repo_id)
     repository(event.get('repository'), api.repo, repo_id)
     expected = {'id': self_id, 'workflow_id': registered(api, WORKFLOW, NAME),
                 'display_title': 'Dependency follow-up %d' % parent_id,
-                'path': '.github/workflows/' + WORKFLOW, 'event': 'workflow_run',
+                'path': '.github/workflows/' + WORKFLOW, 'event': 'workflow_dispatch',
                 'head_branch': 'main', 'head_sha': source, 'run_attempt': 1,
                 'status': 'in_progress', 'conclusion': None}
-    run_identity(api.get('/actions/runs/' + str(self_id)), expected, api.repo, repo_id)
-    approved = parent(api, event['workflow_run'], parent_id, repo_id, source)
+    self_run = api.get('/actions/runs/' + str(self_id))
+    run_identity(self_run, expected, api.repo, repo_id)
+    context_actor(context, self_run)
     current_main(api, source)
+    run, _, _, _ = wait_parent(api, parent_id, repo_id, source)
+    approved = parent(api, run, parent_id, repo_id, source)
     first_child(api, self_id, parent_id)
     # Read back the whole terminal authority immediately before the only POST.
     # A parent rerun, changed review/jobs or main drift fails closed.
-    require(parent(api, event['workflow_run'], parent_id, repo_id, source) == approved,
+    require(parent(api, None, parent_id, repo_id, source) == approved,
             'Completed dependency authority changed before notification')
+    require(registered(api, WORKFLOW, NAME) == expected['workflow_id'],
+            'Follow-up workflow registration changed before notification')
+    require(trusted_context(api, context, WORKFLOW, source) == (self_id, repo_id),
+            'Follow-up execution context changed before notification')
+    self_run = api.get('/actions/runs/' + str(self_id))
+    run_identity(self_run, expected, api.repo, repo_id)
+    context_actor(context, self_run)
+    repository(api.get(''), api.repo, repo_id)
+    first_child(api, self_id, parent_id)
     current_main(api, source)
     try:
         api.request('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'})
+    except Ambiguous:
+        return 'unconfirmed'
+    except Refused:
+        return 'rejected'
+    return 'requested'
+
+
+def queue(api, plan, merged, context):
+    """Queue once without waiting: the child must wait for this parent to finish."""
+    parent_id, repo_id = trusted_context(api, context, PARENT_WORKFLOW, plan['source'])
+    require(type(merged) is str and SHA.fullmatch(merged), 'Invalid merged follow-up source')
+    repository(api.get(''), api.repo, repo_id)
+    child_workflow = registered(api, WORKFLOW, NAME)
+    run, _, _, _ = native_run(api, parent_id, repo_id)
+    context_actor(context, run)
+    approved = parent(api, run, parent_id, repo_id, merged, active=True, plan=plan)
+    first_child(api, None, parent_id)
+    current_main(api, merged)
+    run, _, _, _ = native_run(api, parent_id, repo_id)
+    require(trusted_context(api, context, PARENT_WORKFLOW, plan['source']) == (parent_id, repo_id),
+            'Native execution context changed before queueing')
+    context_actor(context, run)
+    require(parent(api, run, parent_id, repo_id, merged, active=True, plan=plan) == approved,
+            'Native dependency authority changed before queueing')
+    repository(api.get(''), api.repo, repo_id)
+    require(registered(api, WORKFLOW, NAME) == child_workflow,
+            'Follow-up workflow registration changed before queueing')
+    first_child(api, None, parent_id)
+    current_main(api, merged)
+    try:
+        api.request('POST', '/actions/workflows/' + WORKFLOW + '/dispatches',
+                    {'ref': 'main', 'inputs': {'parent_run': str(parent_id)}})
     except Ambiguous:
         return 'unconfirmed'
     except Refused:
@@ -215,6 +336,7 @@ def entrypoint():
     event = read_event(os.environ['GITHUB_EVENT_PATH'])
     outcome = notify(GitHub(os.environ['GITHUB_REPOSITORY']), event, os.environ)
     text = ('Renovate follow-up notification: %s. The native parent has fully completed. '
+            'Dispatch acknowledgement does not prove scan success; audit Renovate run history if unconfirmed or rejected. '
             'No notification replay is permitted; the daily Renovate scan remains the fallback. '
             'Fresh proposals require their own CI and native owner approval.\n') % outcome
     print(text.strip())

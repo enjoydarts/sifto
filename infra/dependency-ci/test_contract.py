@@ -148,7 +148,7 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(prepare['permissions'], {'contents': 'read', 'pull-requests': 'read', 'statuses': 'read', 'actions': 'write'})
         self.assertNotIn('environment', prepare)
         self.assertGreaterEqual(prepare['timeout-minutes'] * 60, pr_ci.WAIT_SECONDS + 10 * 60)
-        self.assertLessEqual(prepare['timeout-minutes'], 65)
+        self.assertLessEqual(prepare['timeout-minutes'], 90)
         helper = (ROOT / 'infra/dependency-ci/dependency_updates/pr_ci.py').read_text()
         self.assertNotIn('pending_deployments', helper)
         makefile = (ROOT / 'Makefile').read_text()
@@ -175,6 +175,61 @@ class DependencyAutomationContract(unittest.TestCase):
         step = next(step for step in job['steps'] if 'make image-security-test' in step.get('run', ''))
         self.assertNotIn('if', step)
         self.assertIsNot(step.get('continue-on-error'), True)
+
+    def test_image_advisory_dispatch_binds_source_parent_phase_before_every_build(self):
+        from dependency_updates import image_security
+        workflow = read_yaml('.github/workflows/dependency-security.yml')
+        events = workflow.get('on', workflow.get(True))
+        self.assertEqual(set(events['workflow_dispatch']['inputs']), {'expected_head', 'parent_run', 'phase'})
+        self.assertIn('Dependency image scan', workflow['run-name'])
+        self.assertIn('inputs.parent_run, inputs.phase, inputs.expected_head', workflow['concurrency']['group'])
+        self.assertIs(workflow['concurrency']['cancel-in-progress'], False)
+        self.assertEqual(workflow['permissions'], {'contents': 'read'})
+        job = workflow['jobs']['images']
+        guard = next(step for step in job['steps'] if step.get('name') == image_security.GUARD)
+        build = next(step for step in job['steps'] if step.get('name') == image_security.IMAGE_STEPS[6])
+        self.assertLess(job['steps'].index(guard), job['steps'].index(build))
+        self.assertIn('EXPECTED_HEAD', guard['run'])
+        self.assertIn('PARENT_RUN', guard['run'])
+        self.assertIn('SCAN_PHASE', guard['run'])
+        self.assertIn('git rev-parse HEAD', guard['run'])
+        self.assertNotIn('environment', job)
+        self.assertNotIn('secrets', str(workflow).lower())
+        self.assertIn('/repository/infra/dependency-ci/test_image_security.py', (ROOT / 'Makefile').read_text())
+        self.assertGreaterEqual(read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']['timeout-minutes'] * 60,
+                                image_security.WAIT_SECONDS + 10 * 60)
+        self.assertLessEqual(read_yaml('.github/workflows/dependency-update.yml')['jobs']['prepare']['timeout-minutes'], 90)
+        self.assertEqual(set(image_security.EXPECTED), {'api', 'worker', 'web', 'audio-concat', 'maintenance'})
+        inventory_summary = next(step for step in workflow['jobs']['inventory']['steps']
+                                 if step.get('name') == 'Publish package and CVE inventory in summary')
+        self.assertIn('test -s .dependency-vulnerabilities.txt', inventory_summary['run'])
+
+    def test_image_source_guard_accepts_default_manual_and_refuses_unpaired_or_changed_inputs(self):
+        import os
+        import subprocess
+        from dependency_updates import image_security
+        workflow = read_yaml('.github/workflows/dependency-security.yml')
+        script = next(step['run'] for step in workflow['jobs']['images']['steps']
+                      if step.get('name') == image_security.GUARD)
+        head = 'a' * 40
+        cases = [({}, True), ({'EXPECTED_HEAD': head}, True),
+                 ({'EXPECTED_HEAD': head, 'PARENT_RUN': '10', 'SCAN_PHASE': 'candidate'}, True),
+                 ({'EXPECTED_HEAD': head, 'PARENT_RUN': '10', 'SCAN_PHASE': 'merged'}, True),
+                 ({'GITHUB_SHA': 'b' * 40}, False),
+                 ({'EXPECTED_HEAD': 'b' * 40}, False), ({'EXPECTED_HEAD': 'short'}, False),
+                 ({'PARENT_RUN': '10'}, False), ({'SCAN_PHASE': 'candidate'}, False),
+                 ({'EXPECTED_HEAD': head, 'PARENT_RUN': '0', 'SCAN_PHASE': 'candidate'}, False),
+                 ({'EXPECTED_HEAD': head, 'PARENT_RUN': '10', 'SCAN_PHASE': 'unknown'}, False)]
+        environment = dict(os.environ, GITHUB_SHA=head, GITHUB_EVENT_NAME='workflow_dispatch',
+                           EXPECTED_HEAD='', PARENT_RUN='', SCAN_PHASE='')
+        # The contract container has a non-executable tmpfs; mock only git's
+        # immutable source read with a shell function, run the real guard body.
+        script = "git() { printf '%s\\n' '" + head + "'; }\n" + script
+        for inputs, expected in cases:
+            with self.subTest(inputs=inputs):
+                result = subprocess.run(['sh', '-c', script], env=dict(environment, **inputs),
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                self.assertEqual(result.returncode == 0, expected)
 
     def test_real_maintenance_fixtures_block_dependency_approval(self):
         jobs = read_yaml('.github/workflows/dependency-check.yml')['jobs']
@@ -288,25 +343,26 @@ class DependencyAutomationContract(unittest.TestCase):
                         'Completed-parent follow-up workflow must exist')
         workflow = read_yaml('.github/workflows/dependency-followup.yml')
         self.assertEqual(workflow.get('on', workflow.get(True)), {
-            'workflow_run': {'workflows': ['Dependency Approve Merge and Deploy'],
-                             'types': ['completed'], 'branches': ['main']}})
+            'workflow_dispatch': {'inputs': {'parent_run': {'description': 'Actual native dependency parent run ID',
+                                   'required': True, 'type': 'string'}}}})
         self.assertEqual(workflow['permissions'], {})
-        self.assertEqual(workflow['run-name'], 'Dependency follow-up ${{ github.event.workflow_run.id }}')
+        self.assertEqual(workflow['run-name'], 'Dependency follow-up ${{ inputs.parent_run }}')
         self.assertEqual(workflow['concurrency'], {
-            'group': 'dependency-followup-${{ github.event.workflow_run.id }}', 'cancel-in-progress': False})
+            'group': 'dependency-followup-${{ inputs.parent_run }}', 'cancel-in-progress': False})
         self.assertEqual(set(workflow['jobs']), {'notify'})
         job = workflow['jobs']['notify']
         self.assertEqual(job['permissions'], {'contents': 'read', 'pull-requests': 'read', 'actions': 'write'})
         self.assertNotIn('environment', job)
         self.assertIn("github.ref == 'refs/heads/main'", job['if'])
-        self.assertIn("github.event.workflow_run.conclusion == 'success'", job['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'", job['if'])
+        self.assertEqual(job['timeout-minutes'], 15)
         checkout, controller = job['steps']
         self.assertTrue(checkout['uses'].startswith('actions/checkout@'))
         self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
         self.assertEqual(controller['env'], {'GH_TOKEN': '${{ github.token }}', 'PYTHONPATH': 'infra/dependency-ci'})
         self.assertEqual(controller['run'], 'python3 -B -m dependency_updates.followup')
         text = (ROOT / '.github/workflows/dependency-followup.yml').read_text()
-        for forbidden in ['secrets.', 'download-artifact', 'head_sha', 'production-maintenance', 'ssh', 'workflow_dispatch']:
+        for forbidden in ['secrets.', 'download-artifact', 'head_sha', 'production-maintenance', 'ssh', 'workflow_run']:
             self.assertNotIn(forbidden, text)
         import ast
         module = ast.parse((ROOT / 'infra/dependency-ci/dependency_updates/pipeline.py').read_text())
@@ -351,7 +407,8 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertGreaterEqual(approval['prepare']['timeout-minutes'] * 60, budgets['dependency-check.yml'] + 10 * 60)
         execution_timeout = approval['approve-merge-deploy']['timeout-minutes']
         self.assertLessEqual(execution_timeout, 360)
-        self.assertGreaterEqual(execution_timeout * 60, budgets['deploy.yml'] + budgets['deploy-audio-concat.yml'] + 10 * 60)
+        from dependency_updates import image_security
+        self.assertGreaterEqual(execution_timeout * 60, budgets['deploy.yml'] + budgets['deploy-audio-concat.yml'] + image_security.WAIT_SECONDS + 10 * 60)
 
     def test_bot_merge_has_an_explicit_exact_commit_deployment_entrypoint(self):
         workflow = read_yaml('.github/workflows/deploy.yml')

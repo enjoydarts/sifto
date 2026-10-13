@@ -12,6 +12,11 @@ from .github import Ambiguous
 from .policy import Refused, require
 
 WAIT_SECONDS = 50 * 60
+# Full authorities remain mandatory before mutations and success. Only pending
+# loops are paced: reserve the shared 1,000/hour github.token quota for those
+# immediate proofs, the ordinary explicit CI wait, and other repository work.
+POLL_SECONDS = 120
+POLL_READS_PER_HOUR = 180
 WORKFLOWS = ('dependency-check.yml', 'app-runtime.yml', 'maintenance-test.yml')
 BOT = {'id': 41898282, 'login': 'github-actions[bot]', 'type': 'Bot'}
 JOBS = {
@@ -38,7 +43,8 @@ class Session:
         self.allow_approval = allow_approval is True
         self.clock = clock
         self.deadline = clock() + WAIT_SECONDS
-        self.repository = api.get('')
+        self.read_count = 0
+        self.repository = self.read('')
         require(type(self.repository) is dict and positive(self.repository.get('id'))
                 and self.repository.get('full_name') == api.repo, 'Malformed live PR CI repository identity')
         if plan['emergency']:
@@ -47,6 +53,21 @@ class Session:
                     and owner.get('type') == 'User', 'Emergency PR CI repository owner identity mismatch')
         self.workflows, self.selected, self.approved, self.issued = {}, {}, set(), set()
         self.propagating = False
+
+    def read(self, path):
+        self.read_count += 1
+        return self.api.get(path)
+
+    def pages(self, path, key):
+        self.read_count += 1
+        rows = self.api.pages(path, key, require_total=True)
+        self.read_count += len(rows) // 100
+        return rows
+
+    def pause(self, clock, sleep, before):
+        reads = self.read_count - before
+        interval = max(POLL_SECONDS, reads * 3600 / POLL_READS_PER_HOUR)
+        sleep(min(interval, self.remaining(clock)))
 
     def remaining(self, clock=None):
         clock = clock or self.clock
@@ -73,8 +94,8 @@ class Session:
     def candidate_identity(self):
         # Cheap current authorities during waits; the complete semantic/age
         # proof is recomputed before mutation and before returning success.
-        main = self.api.get('/git/ref/heads/main')
-        pr = self.api.get('/pulls/%d' % self.plan['pr'])
+        main = self.read('/git/ref/heads/main')
+        pr = self.read('/pulls/%d' % self.plan['pr'])
         require(main.get('object', {}).get('sha') == self.plan['source'] == self.plan['base'],
                 'Main changed during PR CI')
         require(pr.get('state') == 'open' and pr.get('merged') is False and pr.get('draft') is False
@@ -90,7 +111,7 @@ class Session:
     def register(self):
         from .pipeline import blob
         for name in WORKFLOWS:
-            workflow = self.api.get('/actions/workflows/' + name)
+            workflow = self.read('/actions/workflows/' + name)
             path = '.github/workflows/' + name
             require(type(workflow) is dict and positive(workflow.get('id'))
                     and workflow.get('path') == path and workflow.get('state') == 'active',
@@ -138,8 +159,8 @@ class Session:
         selected, identifiers = {}, set()
         self.propagating = False
         for name, workflow in self.workflows.items():
-            rows = self.api.pages('/actions/workflows/%d/runs?event=pull_request&head_sha=%s' %
-                                  (workflow['id'], self.plan['head']), 'workflow_runs', require_total=True)
+            rows = self.pages('/actions/workflows/%d/runs?event=pull_request&head_sha=%s' %
+                              (workflow['id'], self.plan['head']), 'workflow_runs')
             for row in rows:
                 self.validate(row, name)
                 if row['id'] in self.approved:
@@ -155,7 +176,7 @@ class Session:
                 for row in rows:
                     require(row['id'] == newest['id'] or row['status'] == 'completed'
                             and row['conclusion'] != 'action_required', 'Older PR CI run is still pending or held')
-                current = self.validate(self.api.get('/actions/runs/%d' % newest['id']), name)
+                current = self.validate(self.read('/actions/runs/%d' % newest['id']), name)
                 require(current['id'] == newest['id'], 'PR CI run changed during inventory')
                 if current['run_attempt'] != newest['run_attempt']:
                     require(current['id'] in self.approved
@@ -175,12 +196,10 @@ class Session:
         return names
 
     def jobs(self, run, all_attempts=False):
-        return self.api.pages('/actions/runs/%d/jobs?filter=%s' % (run['id'], 'all' if all_attempts else 'latest'),
-                              'jobs', require_total=True)
+        return self.pages('/actions/runs/%d/jobs?filter=%s' % (run['id'], 'all' if all_attempts else 'latest'), 'jobs')
 
     def attempt_jobs(self, run):
-        return self.api.pages('/actions/runs/%d/attempts/%d/jobs' % (run['id'], run['run_attempt']),
-                              'jobs', require_total=True)
+        return self.pages('/actions/runs/%d/attempts/%d/jobs' % (run['id'], run['run_attempt']), 'jobs')
 
     def held(self, run, *, historical=False):
         require(run['status'] == 'completed' and run['conclusion'] == 'action_required'
@@ -192,7 +211,7 @@ class Session:
                 'PR CI held run has already executed jobs')
 
     def original_hold(self, run, name):
-        initial = self.validate(self.api.get('/actions/runs/%d/attempts/1' % run['id']), name)
+        initial = self.validate(self.read('/actions/runs/%d/attempts/1' % run['id']), name)
         require(initial['id'] == run['id'], 'Original PR CI attempt identity mismatch')
         self.held(initial, historical=True)
 
@@ -222,7 +241,7 @@ class Session:
                 return False
             raise
         self.verify_actual_jobs(run, name, jobs)
-        final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
+        final = self.validate(self.read('/actions/runs/%d' % run['id']), name)
         require(final['id'] == run['id'] and final['run_attempt'] == run['run_attempt']
                 and final['triggering_actor'] == run['triggering_actor'],
                 'PR CI changed while verifying actual jobs')
@@ -251,6 +270,7 @@ class Session:
         # checking every selected authority and immutable candidate each time.
         require(self.issued <= self.approved, 'PR CI approval outcome unacknowledged; no success proof')
         while True:
+            before = self.read_count
             self.remaining(clock)
             self.candidate_identity()
             latest = self.inventory()
@@ -271,8 +291,9 @@ class Session:
             self.remaining(clock)
             if not pending:
                 self.selected = latest
+                self.last_authority_reads = self.read_count - before
                 return latest
-            sleep(min(10, self.remaining(clock)))
+            self.pause(clock, sleep, before)
 
     def approval_eligibility(self, runs):
         for run in runs.values():
@@ -293,7 +314,7 @@ class Session:
             if listed['conclusion'] != 'action_required':
                 continue
             self.remaining(clock)
-            run = self.validate(self.api.get('/actions/runs/%d' % listed['id']), name)
+            run = self.validate(self.read('/actions/runs/%d' % listed['id']), name)
             require(run['id'] == listed['id'] and run['run_attempt'] == listed['run_attempt'], 'PR CI run changed before approval')
             if run['status'] in ACTIVE or run['conclusion'] == 'success':
                 continue
@@ -306,7 +327,7 @@ class Session:
                 continue
             self.held(run)
             self.candidate_identity()
-            final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
+            final = self.validate(self.read('/actions/runs/%d' % run['id']), name)
             require(final == run, 'PR CI run changed immediately before approval')
             require(self.authorities(clock, sleep)[name] == run,
                     'PR CI run changed immediately before approval')
@@ -328,6 +349,9 @@ class Session:
         while True:
             self.remaining(clock)
             current = self.authorities(clock, sleep)
+            # authorities() already paced any visibility waits internally.
+            # Charge only its final pass, not all earlier paced requests again.
+            before = self.read_count - self.last_authority_reads
             require(set(current) == set(self.selected), 'PR CI inventory changed during wait')
             success = True
             for name, run in current.items():
@@ -340,7 +364,7 @@ class Session:
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
                 jobs = self.jobs(run)
                 self.verify_actual_jobs(run, name, jobs)
-                final = self.validate(self.api.get('/actions/runs/%d' % run['id']), name)
+                final = self.validate(self.read('/actions/runs/%d' % run['id']), name)
                 require(final == run, 'PR CI changed while verifying successful jobs')
             self.remaining(clock)
             if success:
@@ -348,7 +372,7 @@ class Session:
                 self.candidate_identity()
                 self.remaining(clock)
                 return
-            sleep(min(10, self.remaining(clock)))
+            self.pause(clock, sleep, before)
 
 
 def start(api, plan, revalidate, clock=time.monotonic, sleep=time.sleep):
@@ -358,11 +382,12 @@ def start(api, plan, revalidate, clock=time.monotonic, sleep=time.sleep):
     # GitHub may expose the Bot-created PR before its automatic runs. Missing
     # required checks may propagate, but never become permission to skip CI.
     while True:
+        before = session.read_count
         session.remaining(clock)
         session.candidate_identity()
         session.selected = session.inventory()
         if session.required() <= set(session.selected):
             break
-        sleep(min(10, session.remaining(clock)))
+        session.pause(clock, sleep, before)
     session.approve(clock, sleep)
     return session

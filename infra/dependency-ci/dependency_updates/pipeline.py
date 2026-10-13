@@ -266,19 +266,23 @@ def dispatch_once(api, workflow, ref, head, inputs, remaining_budget=None):
 
 
 def prepare(api, number, head, base, source):
-    from . import pr_ci
+    from . import pr_ci, image_security
     plan = candidate(api, number, head, base, source)
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Reruns require a fresh candidate approval request')
     def revalidate():
         assert_unchanged(plan, candidate(api, number, head, base, source,
                                        python_cutoff=plan['python_age']['cutoff']), plan_hash(plan))
+    image_scan = image_security.start(api, plan, 'candidate', head, plan['branch'])
     pr_checks = pr_ci.start(api, plan, revalidate)
     run = dispatch_once(api, 'dependency-check.yml', plan['branch'], head, {'expected_head': head},
                         remaining_budget=pr_checks.remaining)
     verify_checks(run, api.pages('/actions/runs/%d/jobs?filter=latest' % run['id'], 'jobs'), head)
     pr_checks.wait()
     revalidate()
+    image_evidence = image_security.wait(api, plan, image_scan)
+    revalidate()
     plan['ci_run'] = run['id']
+    plan['image_security'] = image_evidence
     digest = plan_hash(plan)
     encoded = base64.b64encode(canonical(plan).encode()).decode()
     require(len(encoded) < 48_000, 'Dependency plan exceeds immutable output limit; split the PR')
@@ -291,6 +295,7 @@ def prepare(api, number, head, base, source):
         for key in ('head', 'base', 'source', 'diff_hash', 'ci_run'):
             summary.write('**%s:** `%s`\n\n' % (key, plan[key]))
         summary.write('**Plan SHA256:** `%s`\n\n' % digest)
+        image_security.summary(summary, image_evidence)
         summary.write('**Affected resources:** %s\n\n' % ', '.join(plan['surfaces']))
         summary.write('Operating system package updates require the separate maintenance approval workflow. This dependency plan does not activate OS updates or the pinned live maintenance executor.\n\n')
         if 'development' in plan['surfaces']:
@@ -332,21 +337,56 @@ def merge_once(api, plan):
     return result['sha']
 
 
+def native_authority(run, approvals):
+    """Freeze only native execution, reviewer and environment authority fields."""
+    require(type(approvals) is list and len(approvals) <= 100
+            and all(type(review) is dict and type(review.get('state')) is str
+                    and type(review.get('user')) is dict and type(review.get('environments')) is list
+                    and all(type(environment) is dict and type(environment.get('name')) is str
+                            for environment in review['environments']) for review in approvals),
+            'Malformed native approval authority')
+    def identity(value):
+        require(type(value) is dict, 'Malformed native actor authority')
+        return {key: value.get(key) for key in ('id', 'login', 'type')}
+    proof = {'run': {key: run.get(key) for key in ('id', 'workflow_id', 'event', 'head_branch',
+             'head_sha', 'path', 'run_attempt', 'status', 'conclusion')},
+             'actor': identity(run.get('actor')),
+             'triggering_actor': identity(run.get('triggering_actor', {})),
+             'reviews': [{'state': review['state'], 'user': identity(review['user']),
+                 'environments': [{key: environment.get(key) for key in ('id', 'name')}
+                                  for environment in review['environments']]} for review in approvals]}
+    # Materialize now: transports may reuse mutable objects during downloads.
+    return canonical(proof)
+
+
 def execute(api, plan, digest):
+    from . import followup, image_security
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Consumed approval cannot be rerun')
     require(plan_hash(plan) == digest and plan['source'] == os.environ['GITHUB_SHA'], 'Untrusted or altered prepared plan')
     run_id = int(os.environ['GITHUB_RUN_ID'])
     run = api.get('/actions/runs/' + str(run_id))
     require(run.get('event') == 'workflow_dispatch' and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source'] and run.get('path') == '.github/workflows/' + WORKFLOW and run.get('run_attempt') == 1, 'Approval run source mismatch')
-    verify_approval(api.get('/actions/runs/%d/approvals' % run_id), run.get('actor', {}).get('login'))
+    approvals = api.get('/actions/runs/%d/approvals' % run_id)
+    authority = native_authority(run, approvals)
+    verify_approval(approvals, run.get('actor', {}).get('login'))
     require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
             'Prepared plan has no fixed Python artifact-age evidence; prepare again')
+    require(type(plan.get('image_security')) is dict,
+            'Prepared plan has no mandatory candidate image evidence; prepare again')
     current = candidate(api, plan['pr'], plan['head'], plan['base'], plan['source'],
                         python_cutoff=plan['python_age']['cutoff'])
     current['ci_run'] = plan['ci_run']
+    current['image_security'] = image_security.revalidate(api, current, plan['image_security'])
     assert_unchanged(plan, current, digest)
     ci = api.get('/actions/runs/%d' % plan['ci_run'])
     verify_checks(ci, api.pages('/actions/runs/%d/jobs?filter=latest' % plan['ci_run'], 'jobs'), plan['head'])
+    # Artifact downloads and candidate/CI reads can outlive a native review.
+    # Recheck that same authority immediately before the ordinary merge guard.
+    final_run = api.get('/actions/runs/' + str(run_id))
+    final_approvals = api.get('/actions/runs/%d/approvals' % run_id)
+    verify_approval(final_approvals, final_run.get('actor', {}).get('login'))
+    require(native_authority(final_run, final_approvals) == authority,
+            'Native approval authority changed during revalidation; fresh approval required')
     merged = merge_once(api, plan)
     require(main_sha(api) == merged, 'Main advanced after merge; deployment stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
@@ -363,11 +403,24 @@ def execute(api, plan, digest):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
             summary.write('\nAudio Concat deployment run %d succeeded for `%s`.\n' % (audio['id'], merged))
     require(main_sha(api) == merged, 'Main advanced after deployment; completion stopped')
+    merged_scan = image_security.start(api, plan, 'merged', merged, 'main')
+    merged_evidence = image_security.wait(api, plan, merged_scan)
+    require(main_sha(api) == merged, 'Main advanced after merged image scan; completion stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        image_security.summary(summary, merged_evidence)
         summary.write('\nAll affected deployments succeeded for `%s`. Merge approval remains consumed.\n' % merged)
-        summary.write('\nThe next proposal is handled after this native approval workflow fully completes, '
-                      'by a separate follow-up with fresh CI and owner approval. '
-                      'The daily Renovate scan remains the fallback.\n')
+    try:
+        outcome = followup.queue(api, plan, merged, os.environ)
+    except Refused as exc:
+        outcome = 'refused: ' + str(exc)
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+        summary.write('\nFollow-up queue: %s. Merge, affected deployments and merged image evidence are already applied/recorded; '
+                      'approval remains consumed, no replay or deployment rerun and no old owner gate reuse. '
+                      'Audit this native run and the follow-up history if acknowledgement is unconfirmed or rejected. '
+                      'The daily Renovate scan remains the fallback. '
+                      'A requested queue acknowledges dispatch only; the child waits until after this native approval workflow fully completes '
+                      'and verifies terminal success before requesting proposals with their own fresh CI and owner approval.\n' % outcome)
+    require(outcome == 'requested', 'Follow-up queue %s; audit required, no replay; daily Renovate scan remains fallback' % outcome)
 
 
 def entrypoint():

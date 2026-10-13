@@ -1,19 +1,21 @@
 name: Dependency Completed Follow-up
-run-name: Dependency follow-up ${{ github.event.workflow_run.id }}
+run-name: Dependency follow-up ${{ inputs.parent_run }}
 on:
-  workflow_run:
-    workflows: [Dependency Approve Merge and Deploy]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      parent_run:
+        description: Actual native dependency parent run ID
+        required: true
+        type: string
 permissions: {}
 concurrency:
-  group: dependency-followup-${{ github.event.workflow_run.id }}
+  group: dependency-followup-${{ inputs.parent_run }}
   cancel-in-progress: false
 jobs:
   notify:
-    if: github.ref == 'refs/heads/main' && github.event.workflow_run.conclusion == 'success'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: read

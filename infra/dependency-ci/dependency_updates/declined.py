@@ -47,6 +47,7 @@ def authority(api, context, now):
     require(repo.get('default_branch') == 'main' and type(owner) is dict
             and positive(owner.get('id')) and owner.get('login') == 'enjoydarts'
             and owner.get('type') == 'User', 'Cleanup repository owner/default branch mismatch')
+    owner = {key: owner[key] for key in ('id', 'login', 'type')}
     run = api.get('/actions/runs/' + str(run_id))
     expected = {'id': run_id, 'workflow_id': registered(api, WORKFLOW, 'Renovate'),
                 'path': '.github/workflows/' + WORKFLOW, 'event': event,
@@ -109,6 +110,26 @@ def proposal(pr, repo, repo_id, state):
     return branch
 
 
+def proposal_snapshot(pr, repo, repo_id, state):
+    """Only authority fields are immutable; REST embeds mutable repo statistics."""
+    proposal(pr, repo, repo_id, state)
+    require(type(pr.get('changed_files')) is int and 0 < pr['changed_files'] <= pipeline.MAX_FILES,
+            'Invalid proposal changed-file count')
+    created = timestamp(pr.get('created_at'))
+    require('closed_at' in pr, 'Missing proposal close timestamp')
+    if state == 'open':
+        require(pr['closed_at'] is None, 'Open proposal has a close timestamp')
+    else:
+        require(created <= timestamp(pr['closed_at']), 'Invalid closed proposal lifetime')
+    result = {key: pr[key] for key in ('number', 'title', 'state', 'merged', 'changed_files',
+                                      'created_at', 'closed_at')}
+    result['user'] = {key: pr['user'][key] for key in ('id', 'login', 'type')}
+    for side in ('head', 'base'):
+        result[side] = {key: pr[side][key] for key in ('sha', 'ref')}
+        result[side]['repo'] = {key: pr[side]['repo'][key] for key in ('id', 'full_name')}
+    return result
+
+
 def decision(api, pr, owner, now):
     created, closed = timestamp(pr.get('created_at')), timestamp(pr.get('closed_at'))
     require(created <= closed <= now, 'Invalid declined proposal lifetime')
@@ -129,7 +150,9 @@ def decision(api, pr, owner, now):
             and type(decisions[-1].get('actor')) is dict
             and all(decisions[-1]['actor'].get(key) == owner[key] for key in ('id', 'login', 'type')),
             'Latest close decision is not the actual repository owner')
-    return decisions[-1]
+    latest = decisions[-1]
+    return {**{key: latest[key] for key in ('id', 'event', 'created_at')},
+            'actor': {key: latest['actor'][key] for key in ('id', 'login', 'type')}}
 
 
 def native_history(api, repo_id):
@@ -230,6 +253,7 @@ def cleanup(api, context, now=None):
             require(started < created <= now and current['base']['sha'] == source,
                     'Proposal predates this writer or uses stale main')
             require(not requested(history, number), 'Proposal already entered native approval')
+            current_snapshot = proposal_snapshot(current, api.repo, repo_id, 'open')
             files = inventory(api, current)
             matched = None
             priors = [prior for prior in old_inventory if prior.get('number') != number
@@ -251,15 +275,19 @@ def cleanup(api, context, now=None):
             if matched is None:
                 continue
             old, vote = matched
+            old_snapshot = proposal_snapshot(old, api.repo, repo_id, 'closed')
             validate_ref(branch)
             now = fixed_now or datetime.now(timezone.utc)
             require(authority(api, context, now) == trusted, 'Trusted writer changed before cleanup')
             final_history = native_history(api, repo_id)
             require(final_history is not None and not requested(final_history, number), 'Native approval raced cleanup')
-            require(api.get('/pulls/%d' % old['number']) == old
-                    and decision(api, old, owner, now) == vote and inventory(api, old) == files,
+            observed_old = api.get('/pulls/%d' % old['number'])
+            require(proposal_snapshot(observed_old, api.repo, repo_id, 'closed') == old_snapshot
+                    and decision(api, observed_old, owner, now) == vote and inventory(api, observed_old) == files,
                     'Owner declined proposal changed before cleanup')
-            require(api.get('/pulls/%d' % number) == current and inventory(api, current) == files,
+            observed_current = api.get('/pulls/%d' % number)
+            require(proposal_snapshot(observed_current, api.repo, repo_id, 'open') == current_snapshot
+                    and inventory(api, observed_current) == files,
                     'Current proposal changed before cleanup')
             require(api.get('/git/ref/heads/' + quote(branch, safe='/')).get('object', {}).get('sha') == current['head']['sha'],
                     'Proposal branch head changed before cleanup')
@@ -280,9 +308,9 @@ def cleanup(api, context, now=None):
         require(type(result) is dict and result.get('number') == number and result.get('state') == 'closed'
                 and result.get('merged') is False, 'Declined close acknowledgement rejected')
         closed = api.get('/pulls/%d' % number)
-        proposal(closed, api.repo, repo_id, 'closed')
-        immutable = ('number', 'title', 'user', 'head', 'base', 'changed_files', 'created_at')
-        require(all(closed.get(key) == current.get(key) for key in immutable),
+        closed_snapshot = proposal_snapshot(closed, api.repo, repo_id, 'closed')
+        immutable = set(current_snapshot) - {'state', 'closed_at'}
+        require(all(closed_snapshot[key] == current_snapshot[key] for key in immutable),
                 'Closed proposal changed; branch deletion refused')
         # The acknowledged close consumes the mutation; these are fresh read
         # authorities for the separate Git mutation. A native request or owner
@@ -290,12 +318,13 @@ def cleanup(api, context, now=None):
         now = fixed_now or datetime.now(timezone.utc)
         require(authority(api, context, now) == trusted,
                 'Trusted writer changed after close; branch retained')
-        require(api.get('/pulls/%d' % old['number']) == old
-                and decision(api, old, owner, now) == vote and inventory(api, old) == files,
+        observed_old = api.get('/pulls/%d' % old['number'])
+        require(proposal_snapshot(observed_old, api.repo, repo_id, 'closed') == old_snapshot
+                and decision(api, observed_old, owner, now) == vote and inventory(api, observed_old) == files,
                 'Owner declined proposal changed after close; branch retained')
         closed = api.get('/pulls/%d' % number)
-        proposal(closed, api.repo, repo_id, 'closed')
-        require(all(closed.get(key) == current.get(key) for key in immutable),
+        require(proposal_snapshot(closed, api.repo, repo_id, 'closed') == closed_snapshot
+                and timestamp(closed['closed_at']) <= now,
                 'Closed proposal changed during deletion validation; branch retained')
         require(inventory(api, closed) == files,
                 'Closed proposal file inventory changed; branch retained')

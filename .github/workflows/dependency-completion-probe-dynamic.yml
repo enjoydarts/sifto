@@ -1,0 +1,31 @@
+# TEMPORARY: retire after the completion delivery experiment.
+name: Dependency Completion Probe Dynamic Receiver
+run-name: Completion delivery probe dynamic receiver ${{ github.event.workflow_run.id }}
+on:
+  workflow_run:
+    workflows: ['Dependency completion probe *']
+    types: [completed]
+    branches: [main]
+permissions: {}
+concurrency:
+  group: dependency-completion-probe-dynamic-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe terminal temporary parent with dynamic filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+          COMPLETION_PROBE_KIND: dynamic
+        run: python3 -B -m dependency_updates.completion_probe

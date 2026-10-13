@@ -1078,11 +1078,11 @@ class PipelineTests(unittest.TestCase):
 
     def test_approved_candidate_merges_once_then_explicitly_deploys_exact_merge(self):
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
         self.assertEqual(self.mutations[0][2]['sha'], SHA)
         self.assertEqual(self.mutations[1][2]['inputs']['expected_commit'], self.merged)
         self.assertEqual(self.mutations[1][2]['inputs']['approval_run'], '10')
-        self.assertEqual(self.mutations[2], ('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'}))
+        self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
 
     def test_failed_deploy_never_requests_next_proposals(self):
         transport = self.transport
@@ -1108,28 +1108,17 @@ class PipelineTests(unittest.TestCase):
             self.execute(self.plan())
         self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
 
-    def test_next_proposal_rejection_or_lost_ack_is_separate_from_deploy_and_never_replayed(self):
-        for error, outcome in [(policy.Refused('controlled rejection'), 'rejected'),
-                               (TimeoutError('controlled lost acknowledgement'), 'unconfirmed')]:
-            with self.subTest(outcome=outcome):
-                self.setUp()
-                transport = self.transport
-                def controlled(method, path, body):
-                    if method == 'POST' and path == '/actions/workflows/renovate.yml/dispatches':
-                        self.mutations.append((method, path, body))
-                        raise error
-                    return transport(method, path, body)
-                self.api = github.GitHub(self.repo, transport=controlled)
-                plan = self.plan()
-                self.execute(plan)
-                self.assertIn('All affected deployments succeeded', self.summary)
-                self.assertIn('Regeneration request: ' + outcome, self.summary)
-                self.assertIn('daily Renovate scan', self.summary)
-                self.assertEqual(len([m for m in self.mutations if '/renovate.yml/' in m[1]]), 1)
-                before = list(self.mutations)
-                with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '2'}), self.assertRaises(policy.Refused):
-                    pipeline.execute(self.api, plan, policy.plan_hash(plan))
-                self.assertEqual(self.mutations, before)
+    def test_next_proposal_is_deferred_until_parent_fully_completes(self):
+        plan = self.plan()
+        self.execute(plan)
+        self.assertIn('All affected deployments succeeded', self.summary)
+        self.assertIn('after this native approval workflow fully completes', self.summary)
+        self.assertIn('daily Renovate scan', self.summary)
+        self.assertFalse(any('/renovate.yml/' in mutation[1] for mutation in self.mutations))
+        before = list(self.mutations)
+        with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '2'}), self.assertRaises(policy.Refused):
+            pipeline.execute(self.api, plan, policy.plan_hash(plan))
+        self.assertEqual(self.mutations, before)
 
     def delayed_deployments(self, clock, ready_after, conclusion='success'):
         transport = self.transport
@@ -1158,8 +1147,8 @@ class PipelineTests(unittest.TestCase):
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
             self.execute(self.plan())
         self.assertEqual(clock.elapsed, 62 * 60)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST', 'POST'])
-        for mutation in self.mutations[1:-1]:
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+        for mutation in self.mutations[1:]:
             self.assertEqual(mutation[2]['ref'], 'main')
             self.assertEqual(mutation[2]['inputs'], {'expected_commit': self.merged, 'approval_run': '10', 'approved_pr': '1', 'approved_head': SHA, 'approved_base': BASE})
 
@@ -1216,7 +1205,7 @@ class PipelineTests(unittest.TestCase):
         self.mergeable_state = 'unstable'
         self.preview_failure = True
         self.execute(self.plan())
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
+        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
         self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #1'})
 
     def test_unstable_pr_with_failed_fixed_ci_still_cannot_merge(self):
@@ -1387,8 +1376,8 @@ class PipelineTests(unittest.TestCase):
         plan['surfaces'] = ['ci', 'development']
         with patch.object(pipeline, 'candidate', return_value={k: v for k, v in plan.items() if k != 'ci_run'}):
             self.execute(plan)
-        self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST'])
-        self.assertEqual(self.mutations[-1], ('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'}))
+        self.assertEqual([m[0] for m in self.mutations], ['PUT'])
+        self.assertIn('after this native approval workflow fully completes', self.summary)
 
     def test_retry_attempt_cannot_reuse_native_approval(self):
         plan = self.plan()

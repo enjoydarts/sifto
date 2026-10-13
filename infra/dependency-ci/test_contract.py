@@ -272,7 +272,7 @@ class DependencyAutomationContract(unittest.TestCase):
                     self.assertNotIn('.env', volume)
 
     def test_new_actions_are_immutable_and_checkout_drops_credentials(self):
-        for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'deploy', 'deploy-audio-concat']:
+        for name in ['renovate', 'dependency-check', 'dependency-security', 'dependency-update', 'dependency-followup', 'deploy', 'deploy-audio-concat']:
             workflow = read_yaml(f'.github/workflows/{name}.yml')
             for job in workflow['jobs'].values():
                 for step in job['steps']:
@@ -296,6 +296,38 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(execution['needs'], 'prepare')
         self.assertIn('dependency_updates.pipeline execute', str(execution))
         self.assertIn('dependency_updates.pipeline discover', (ROOT / '.github/workflows/renovate.yml').read_text())
+
+    def test_followup_only_runs_after_native_parent_completion_from_trusted_main(self):
+        self.assertTrue((ROOT / '.github/workflows/dependency-followup.yml').is_file(),
+                        'Completed-parent follow-up workflow must exist')
+        workflow = read_yaml('.github/workflows/dependency-followup.yml')
+        self.assertEqual(workflow.get('on', workflow.get(True)), {
+            'workflow_run': {'workflows': ['Dependency Approve Merge and Deploy'],
+                             'types': ['completed'], 'branches': ['main']}})
+        self.assertEqual(workflow['permissions'], {})
+        self.assertEqual(workflow['run-name'], 'Dependency follow-up ${{ github.event.workflow_run.id }}')
+        self.assertEqual(workflow['concurrency'], {
+            'group': 'dependency-followup-${{ github.event.workflow_run.id }}', 'cancel-in-progress': False})
+        self.assertEqual(set(workflow['jobs']), {'notify'})
+        job = workflow['jobs']['notify']
+        self.assertEqual(job['permissions'], {'contents': 'read', 'pull-requests': 'read', 'actions': 'write'})
+        self.assertNotIn('environment', job)
+        self.assertIn("github.ref == 'refs/heads/main'", job['if'])
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", job['if'])
+        checkout, controller = job['steps']
+        self.assertTrue(checkout['uses'].startswith('actions/checkout@'))
+        self.assertEqual(checkout['with'], {'ref': '${{ github.sha }}', 'persist-credentials': False})
+        self.assertEqual(controller['env'], {'GH_TOKEN': '${{ github.token }}', 'PYTHONPATH': 'infra/dependency-ci'})
+        self.assertEqual(controller['run'], 'python3 -B -m dependency_updates.followup')
+        text = (ROOT / '.github/workflows/dependency-followup.yml').read_text()
+        for forbidden in ['secrets.', 'download-artifact', 'head_sha', 'production-maintenance', 'ssh', 'workflow_dispatch']:
+            self.assertNotIn(forbidden, text)
+        import ast
+        module = ast.parse((ROOT / 'infra/dependency-ci/dependency_updates/pipeline.py').read_text())
+        execute = next(node for node in module.body if isinstance(node, ast.FunctionDef) and node.name == 'execute')
+        self.assertFalse(any(isinstance(node, ast.Constant) and isinstance(node.value, str)
+                             and '/renovate.yml/' in node.value for node in ast.walk(execute)))
+        self.assertIn('test_followup.py', (ROOT / 'Makefile').read_text())
 
     def test_workflow_waits_and_approval_job_cover_the_actual_job_dag(self):
         from dependency_updates import pipeline

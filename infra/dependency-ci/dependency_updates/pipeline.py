@@ -356,20 +356,12 @@ def execute(api, plan, digest):
         require(audio.get('path') == '.github/workflows/deploy-audio-concat.yml', 'Unexpected Audio Concat workflow')
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
             summary.write('\nAudio Concat deployment run %d succeeded for `%s`.\n' % (audio['id'], merged))
-    require(main_sha(api) == merged, 'Main advanced after deployment; regeneration stopped')
-    # Regeneration is a separate, unprivileged follow-up. It gets fresh inputs,
-    # CI and owner approval; it cannot reuse this consumed merge authorization.
+    require(main_sha(api) == merged, 'Main advanced after deployment; completion stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         summary.write('\nAll affected deployments succeeded for `%s`. Merge approval remains consumed.\n' % merged)
-    regeneration = 'requested'
-    try:
-        api.request('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'})
-    except Ambiguous:
-        regeneration = 'unconfirmed'
-    except Refused:
-        regeneration = 'rejected'
-    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-        summary.write('\nRegeneration request: %s. No request replay in this run; the daily Renovate scan provides the next opportunity.\n' % regeneration)
+        summary.write('\nThe next proposal is handled after this native approval workflow fully completes, '
+                      'by a separate follow-up with fresh CI and owner approval. '
+                      'The daily Renovate scan remains the fallback.\n')
 
 
 def entrypoint():

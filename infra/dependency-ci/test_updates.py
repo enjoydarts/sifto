@@ -902,7 +902,12 @@ class PipelineTests(unittest.TestCase):
         self.head, self.base, self.merged = SHA, BASE, 'c' * 40
         self.repo = 'owner/repo'
         self.approvals = [{'state': 'approved', 'user': {'login': 'enjoydarts'}, 'environments': [{'name': 'production-maintenance'}]}]
-        self.paths = ['worker/requirements.in']
+        self.paths = ['worker/requirements.in', 'worker/requirements.txt']
+        releases = patch('dependency_updates.release_age.PyPI.release', return_value={
+            'info': {'name': 'httpx', 'version': '0.29.0'}, 'urls': [
+                {'digests': {'sha256': 'a' * 64}, 'upload_time_iso_8601': '2026-10-02T12:00:00Z', 'yanked': False}]})
+        releases.start()
+        self.addCleanup(releases.stop)
         self.mutations = []
         self.author = 'github-actions[bot]'
         self.fork = False
@@ -936,6 +941,8 @@ class PipelineTests(unittest.TestCase):
         if endpoint.startswith('/contents/'):
             import base64
             text = 'httpx==0.28.1\n' if 'ref=' + BASE in path else self.after
+            if '/requirements.txt?' in path:
+                text = policy.UV_HEADER + text.rstrip('\n') + ' \\\n    --hash=sha256:' + 'a' * 64 + '\n    # via -r requirements.in\n'
             return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
         if endpoint.endswith('/statuses'):
             statuses = [{'context': 'renovate/stability-days', 'state': 'success', 'creator': {'login': 'github-actions[bot]'}}]
@@ -964,6 +971,35 @@ class PipelineTests(unittest.TestCase):
         for suffix in ('123', 'broken', '0', '123-extra'):
             self.branch = 'renovate-ci/approval-probe-' + suffix
             with self.subTest(branch=self.branch), self.assertRaisesRegex(policy.Refused, 'Diagnostic'):
+                self.plan()
+            self.assertEqual(self.mutations, [])
+
+    def test_python_input_without_changed_lock_refused_before_ci_for_both_paths(self):
+        for emergency in (False, True):
+            self.setUp()
+            self.paths = ['worker/requirements.in']
+            if emergency:
+                self.branch, self.author = 'dependency-security/critical', 'enjoydarts'
+                self.labels, self.body = [{'name': 'dependency-security'}], 'Security fix: critical advisory'
+            with self.subTest(emergency=emergency), self.assertRaisesRegex(policy.Refused, 'corresponding.*lock'):
+                self.plan()
+            self.assertEqual(self.mutations, [])
+
+    def test_latest_renovate_artifact_failure_or_foreign_creator_refused(self):
+        for state, creator in [('failure', {'login': 'github-actions[bot]', 'id': 41898282, 'type': 'Bot'}),
+                               ('pending', {'login': 'github-actions[bot]', 'id': 41898282, 'type': 'Bot'}),
+                               ('error', {'login': 'github-actions[bot]', 'id': 41898282, 'type': 'Bot'}),
+                               ('success', {'login': 'github-actions[bot]', 'id': 999, 'type': 'Bot'})]:
+            self.setUp()
+            original = self.transport
+            def transport(method, path, body):
+                value = original(method, path, body)
+                if path.split('?')[0].endswith('/statuses'):
+                    return [{'context': 'renovate/artifacts', 'state': state, 'creator': creator},
+                            {'context': 'renovate/artifacts', 'state': 'success', 'creator': {'login': 'github-actions[bot]', 'id': 41898282, 'type': 'Bot'}}] + value
+                return value
+            self.api = github.GitHub(self.repo, transport=transport)
+            with self.subTest(state=state, creator=creator), self.assertRaisesRegex(policy.Refused, 'artifact'):
                 self.plan()
             self.assertEqual(self.mutations, [])
 
@@ -1159,7 +1195,7 @@ class PipelineTests(unittest.TestCase):
         self.api = github.GitHub(self.repo, transport=controlled)
 
     def test_application_and_audio_can_each_succeed_after_thirty_minutes(self):
-        self.paths.append('infra/audio-concat/requirements.in')
+        self.paths.extend(['infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt'])
         clock = FakeClock()
         self.delayed_deployments(clock, {'deploy.yml': 31 * 60, 'deploy-audio-concat.yml': 62 * 60})
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
@@ -1171,7 +1207,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(mutation[2]['inputs'], {'expected_commit': self.merged, 'approval_run': '10', 'approved_pr': '1', 'approved_head': SHA, 'approved_base': BASE})
 
     def test_deployment_deadline_expires_once_without_merge_or_dispatch_replay(self):
-        self.paths.append('infra/audio-concat/requirements.in')
+        self.paths.extend(['infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt'])
         clock = FakeClock()
         self.delayed_deployments(clock, {})
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
@@ -1182,7 +1218,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.mutations[1][1], '/actions/workflows/deploy.yml/dispatches')
 
     def test_audio_deadline_expires_once_after_application_success(self):
-        self.paths.append('infra/audio-concat/requirements.in')
+        self.paths.extend(['infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt'])
         clock = FakeClock()
         self.delayed_deployments(clock, {'deploy.yml': 0})
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
@@ -1193,7 +1229,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.mutations[-1][1], '/actions/workflows/deploy-audio-concat.yml/dispatches')
 
     def test_failed_deployment_after_thirty_minutes_stops_without_audio_or_replay(self):
-        self.paths.append('infra/audio-concat/requirements.in')
+        self.paths.extend(['infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt'])
         clock = FakeClock()
         self.delayed_deployments(clock, {'deploy.yml': 31 * 60}, conclusion='failure')
         with patch.object(pipeline.time, 'monotonic', clock.monotonic), patch.object(pipeline.time, 'sleep', clock.sleep):
@@ -1520,6 +1556,7 @@ class DeploymentAuthorizationTests(unittest.TestCase):
         self.deploy = deploy
         self.fixture = PipelineTests()
         self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
         self.fixture.base = self.fixture.merged
         self.override = ''
         self.api = github.GitHub(self.fixture.repo, transport=self.transport)
@@ -1604,6 +1641,7 @@ class ReproposalTests(unittest.TestCase):
     def test_daily_discovery_dispatches_a_fresh_run_after_unconsumed_prepare_failure(self):
         fixture = PipelineTests()
         fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
         original = self.transport
         def transport(method, path, body):
             if path.split('?')[0] == '/pulls':
@@ -1619,6 +1657,7 @@ class ReproposalTests(unittest.TestCase):
     def test_daily_discovery_respects_owner_denial_without_redispatch(self):
         fixture = PipelineTests()
         fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
         self.approvals = [{'state': 'rejected', 'user': {'login': 'enjoydarts'}, 'environments': [{'name': 'production-maintenance'}]}]
         original = self.transport
         def transport(method, path, body):
@@ -1685,6 +1724,7 @@ class SerialDiscoveryTests(unittest.TestCase):
     def setUp(self):
         self.fixture = PipelineTests()
         self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
         self.runs = []
         self.inventory = None
         self.reads = []

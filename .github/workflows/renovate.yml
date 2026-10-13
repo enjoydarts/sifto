@@ -47,6 +47,11 @@ jobs:
           RENOVATE_GIT_AUTHOR: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
           RENOVATE_USERNAME: 'github-actions[bot]'
           RENOVATE_CUSTOM_ENV_VARIABLES: ${{ steps.python-age.outputs.custom_env }}
+      - name: Close exact proposals previously declined by the repository owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: infra/dependency-ci
+        run: python3 -B -m dependency_updates.declined
       - name: Request approval pipelines for validated immutable candidates
         env:
           GH_TOKEN: ${{ github.token }}

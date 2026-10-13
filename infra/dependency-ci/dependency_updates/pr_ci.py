@@ -281,7 +281,7 @@ class Session:
             elif run['status'] == 'completed':
                 require(run['conclusion'] == 'success', 'PR CI failed; no owner approval request')
 
-    def approve(self, clock, sleep=time.sleep, acknowledge=None):
+    def approve(self, clock, sleep=time.sleep):
         # Every selected workflow remains an authority for every mutation,
         # including workflows other than the run being approved next.
         require(self.issued <= self.approved, 'PR CI approval outcome unacknowledged; no retry')
@@ -322,8 +322,6 @@ class Session:
                 detail = ' (HTTP %s)' % status[1] if status else ''
                 raise Refused('PR CI approval rejected%s: GITHUB_TOKEN permission may not support run approval; no retry or token fallback' % detail) from None
             self.approved.add(run['id'])
-            if acknowledge is not None:
-                acknowledge(self)
             self.authorities(clock, sleep)
 
     def wait(self, clock=time.monotonic, sleep=time.sleep):

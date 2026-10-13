@@ -40,6 +40,36 @@
       "groupName": "Docker image digests"
     },
     {
+      "description": ["Respect the exact Alpine pin declined in https://github.com/enjoydarts/sifto/pull/21; distinct future pins remain eligible."],
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["pinDigest"],
+      "matchFileNames": ["api/Dockerfile"],
+      "matchPackageNames": ["alpine"],
+      "matchJsonata": ["packageFile = 'api/Dockerfile' and depName = 'alpine' and currentValue = 'latest' and newDigest = 'sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6'"],
+      "enabled": false
+    },
+    {
+      "description": ["Respect the exact Inngest pin declined in https://github.com/enjoydarts/sifto/pull/21; distinct future pins remain eligible."],
+      "matchManagers": ["docker-compose"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["pinDigest"],
+      "matchFileNames": ["docker-compose.yml"],
+      "matchPackageNames": ["inngest/inngest"],
+      "matchJsonata": ["packageFile = 'docker-compose.yml' and depName = 'inngest/inngest' and currentValue = 'latest' and newDigest = 'sha256:9c4a2413bdbfa31a94ff54c32ae2dcc6613dbee84bc76db6cf6644d19e357e3e'"],
+      "enabled": false
+    },
+    {
+      "description": ["Respect the two exact Trivy pins declined in https://github.com/enjoydarts/sifto/pull/21; distinct future pins remain eligible."],
+      "matchManagers": ["docker-compose"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["pinDigest"],
+      "matchFileNames": ["infra/dependency-ci/compose.yml", "infra/image-security/compose.yml"],
+      "matchPackageNames": ["aquasec/trivy"],
+      "matchJsonata": ["(packageFile = 'infra/dependency-ci/compose.yml' or packageFile = 'infra/image-security/compose.yml') and depName = 'aquasec/trivy' and currentValue = '0.75.0' and newDigest = 'sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa'"],
+      "enabled": false
+    },
+    {
       "matchManagers": ["pip-compile"],
       "matchDepTypes": ["indirect"],
       "rangeStrategy": "update-lockfile",

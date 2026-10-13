@@ -107,7 +107,7 @@ services:
       - meilisearch_data:/meili_data
 
   inngest:
-    image: inngest/inngest:latest
+    image: inngest/inngest:latest@sha256:9c4a2413bdbfa31a94ff54c32ae2dcc6613dbee84bc76db6cf6644d19e357e3e
     ports:
       - "8288:8288"
     command: ["inngest", "dev", "-u", "${INNGEST_DEV_UPSTREAM_URL}"]

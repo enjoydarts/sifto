@@ -9,7 +9,7 @@ export POST_REAL_DOCKER POST_FIXTURE
 cleanup() {
   fixture_status=$?
   if [ "$fixture_status" -ne 0 ]; then
-    for log in scope.log wrapper.log docker.log; do
+    for log in scope.log wrapper.log docker.log build.log; do
       if [ -f "$post_fixture/$log" ]; then cat "$post_fixture/$log" >&2; fi
     done
   fi
@@ -43,6 +43,14 @@ set -eu
 test "$1" = compose
 shift
 case "$*" in
+  *'build controller post-preparation')
+    # These are synthetic fixture-only logs. Preserve the actual Docker build
+    # reason before the production wrapper correctly deletes its private logs.
+    status=0
+    "$POST_REAL_DOCKER" compose -f infra/maintenance/compose.yml -f "$POST_FIXTURE/network-none.yml" "$@" >"$POST_FIXTURE/build.log" 2>&1 || status=$?
+    cat "$POST_FIXTURE/build.log"
+    exit "$status"
+    ;;
   *'post-preparation python -B -m maintenance.post_apply prepare')
     status=0
     "$POST_REAL_DOCKER" compose -f infra/maintenance/compose.yml -f "$POST_FIXTURE/network-none.yml" "$@" >"$POST_FIXTURE/docker.log" 2>&1 || status=$?

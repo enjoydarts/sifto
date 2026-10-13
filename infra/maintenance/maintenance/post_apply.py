@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 
 from .cli import github
-from .host import strict_json
+from .host import RECREATED_CONTAINER_IMAGE, strict_json
+from . import recreation_identity_matches
 from .plan import (HASH, SHA, MaintenanceError, canonical_json, matches, parse_simulation,
                    plan_sha256, require, validate_approval, validate_plan)
 from .ssh import Client, parse_hosts
@@ -139,8 +140,30 @@ def validate_observation(plan, envelope, host, inventory, history):
     require(type(containers) is list and type(originals) is list and all(type(x) is dict for x in containers + originals), 'containers_invalid')
     current = {x.get('id'): x for x in containers}
     require(len(current) == len(containers) and len({x.get('id') for x in originals}) == len(originals), 'container_identity_ambiguous')
+    recreated = []
     for original in originals:
         observed = current.get(original.get('id'))
+        if observed is None:
+            # Recognition of the exact receipt already VERIFIED by native root,
+            # not a new opt-in or authority to mutate root configuration.
+            restart_permitted = ((plan.get('action', 'apt_upgrade') == 'apt_upgrade'
+                                  and plan.get('allow_service_restarts') is True
+                                  and plan.get('restart_scope') == 'package_scripts_and_listed_services')
+                                 or (plan.get('action') == 'reboot' and plan.get('allow_reboot') is True))
+            same_image = lambda item: item.get('image') == original.get('image') and item.get('image_id') == original.get('image_id')
+            replacements = [item for item in containers if same_image(item)]
+            require(host['role'] == 'application' and restart_permitted and original.get('status') == 'running'
+                    and matches(RECREATED_CONTAINER_IMAGE, original.get('image'))
+                    and len([item for item in originals if same_image(item)]) == 1 and len(replacements) == 1,
+                    'original_container_changed')
+            observed = replacements[0]
+            require(observed.get('id') != original.get('id') and observed.get('status') == 'running'
+                    and observed.get('health') == 'healthy'
+                    and recreation_identity_matches(original.get('recreation_identity'), observed.get('recreation_identity')),
+                    'root_verified_sentinel_recreation_changed')
+            recreated.append({'original_id': original['id'], 'replacement_id': observed['id'],
+                              'image': original['image'], 'image_id': original['image_id']})
+            continue
         require(observed is not None and all(key in original and observed.get(key) == original[key]
                 for key in ('id', 'image_id', 'image', 'recreation_identity'))
                 and observed.get('status') == 'running' and observed.get('health') in ('healthy', 'none'), 'original_container_changed')
@@ -155,6 +178,8 @@ def validate_observation(plan, envelope, host, inventory, history):
     except MaintenanceError:
         pass
     return {'status': 'verified', 'target_count': len(plan['packages']), 'container_count': len(originals),
+            'preserved_container_count': len(originals) - len(recreated), 'recreated_container_count': len(recreated),
+            'recreated_containers': recreated,
             'service_count': len(services), 'pending_update_count': pending, 'observed_at': inventory['collected_at']}
 
 
@@ -272,7 +297,8 @@ def run():
     commit = append_record(store, files)
     message = 'Maintenance post-verification: ' + result['status'] + '.\n'
     if not failure:
-        message += 'Installed targets: ' + str(result['target_count']) + '; preserved containers: ' + str(result['container_count']) + '.\n'
+        message += ('Installed targets: ' + str(result['target_count']) + '; containers checked: ' + str(result['container_count'])
+                    + '; verified Sentinel recreations: ' + str(result['recreated_container_count']) + '.\n')
     message += 'Private evidence: https://github.com/' + repo + '/tree/' + commit + '/' + prefix + '\n'
     if failure:
         message += 'Do not retry apply. The daily scanner remains the next observation; inspect private evidence.\n'

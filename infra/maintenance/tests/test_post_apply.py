@@ -9,6 +9,7 @@ from maintenance import plan as p
 from test_plan import inventory
 from test_container_identity import raw_identity
 from maintenance import normalize_recreation_identity
+import test_host
 
 try:
     from maintenance import post_apply as post
@@ -186,6 +187,90 @@ class PostApplyTests(unittest.TestCase):
             with self.assertRaises(p.MaintenanceError): post.validate_documents(p.canonical_json(self.plan), raw, inputs, EXECUTOR, '123', 'enjoydarts')
             inputs[key] = saved
         with self.assertRaises(p.MaintenanceError): post.validate_documents(p.canonical_json(self.plan), raw + b'\n', inputs, EXECUTOR, '123', 'enjoydarts')
+
+
+class NativeSentinelObservationTests(unittest.TestCase):
+    def setUp(self):
+        self.native = test_host.HostTests()
+        self.native.setUp()
+        self.addCleanup(self.native.tmp.cleanup)
+        self.request = self.native.sentinel_upgrade_request()
+        result = self.native.agent.run('apply', self.request)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(self.native.agent.run('verify', {'plan_id': result['plan_id']})['status'], 'verified')
+        self.plan = self.request['envelope']['plan']
+        self.envelope = self.request['envelope']
+        self.after = self.native.agent.run('scan', {})
+        self.history = self.native.agent.run('report', {})
+        self.host = {'host_id': self.plan['host_id'], 'role': 'application', 'address': '192.0.2.1', 'port': 22}
+
+    def observe(self):
+        return post.validate_observation(self.plan, self.envelope, self.host, self.after, self.history)
+
+    def test_recognizes_unchanged_native_root_verified_sentinel_recreation(self):
+        self.assertTrue(self.history['receipt_history_complete'])
+        self.assertEqual(self.history['unresolved_execution_count'], 0)
+        before_calls = list(self.native.runner.calls)
+        result = self.observe()
+        self.assertEqual(result['status'], 'verified')
+        self.assertEqual(result['container_count'], 2)
+        self.assertEqual(result['preserved_container_count'], 1)
+        self.assertEqual(result['recreated_container_count'], 1)
+        recreation = result['recreated_containers'][0]
+        self.assertEqual((recreation['original_id'], recreation['replacement_id']), ('a' * 64, 'e' * 64))
+        self.assertEqual(recreation['image'], 'docker.io/coollabsio/sentinel:1.0.2')
+        self.assertEqual(self.native.runner.calls, before_calls, 'reader recognition must never call native mutation')
+
+    def test_signed_vendor_script_restart_scope_does_not_require_listed_docker_unit(self):
+        vendor = test_host.HostTests()
+        vendor.setUp()
+        self.addCleanup(vendor.tmp.cleanup)
+        vendor.config['allowed_recreated_container_images'] = ['docker.io/coollabsio/sentinel:1.0.2']
+        vendor.runner.containers = vendor.sentinel_containers()
+        vendor.runner.before_install = lambda: vendor.runner.containers[0].update(id='e' * 64)
+        request = vendor.request()
+        plan = request['envelope']['plan']
+        self.assertEqual(plan['restart_services'], [])
+        result = vendor.agent.run('apply', request)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(vendor.agent.run('verify', {'plan_id': result['plan_id']})['status'], 'verified')
+        result = post.validate_observation(plan, request['envelope'], self.host,
+                                          vendor.agent.run('scan', {}), vendor.agent.run('report', {}))
+        self.assertEqual(result['recreated_container_count'], 1)
+
+    def test_near_miss_recreations_remain_refused(self):
+        for change in ('ordinary_app', 'changed_image', 'changed_config', 'mount', 'name', 'network', 'shared_network',
+                       'links', 'driver_options', 'duplicate_original', 'duplicate_current', 'unhealthy', 'none_health',
+                       'stopped', 'present_original', 'database', 'restart_denied', 'scope_missing'):
+            with self.subTest(change=change):
+                plan, envelope, host, after, history = copy.deepcopy((self.plan, self.envelope, self.host, self.after, self.history))
+                original = history['receipts'][0]['before_runtime']['containers'][0]
+                current = after['runtime']['containers'][0]
+                if change == 'ordinary_app': after['runtime']['containers'][1]['id'] = 'f' * 64
+                elif change == 'changed_image': current['image'] = 'docker.io/coollabsio/sentinel:1.0.3'
+                elif change == 'changed_config': current['image_id'] = 'sha256:' + 'f' * 64
+                elif change == 'mount': current['recreation_identity']['mounts'][0]['source'] = '/other'
+                elif change == 'name': current['recreation_identity']['name'] = '/other'
+                elif change == 'network': current['recreation_identity']['networks'][0]['network_id'] = '2' * 64
+                elif change == 'shared_network':
+                    original['recreation_identity']['network_mode'] = current['recreation_identity']['network_mode'] = 'container:' + 'f' * 64
+                elif change == 'links':
+                    original['recreation_identity']['links'] = current['recreation_identity']['links'] = ['fixture-link']
+                elif change == 'driver_options':
+                    original['recreation_identity']['networks'][0]['driver_options_present'] = True
+                    current['recreation_identity']['networks'][0]['driver_options_present'] = True
+                elif change == 'duplicate_original':
+                    history['receipts'][0]['before_runtime']['containers'].append({**original, 'id': 'f' * 64})
+                elif change == 'duplicate_current': after['runtime']['containers'].append({**current, 'id': 'f' * 64})
+                elif change == 'unhealthy': current['health'] = 'unhealthy'
+                elif change == 'none_health': current['health'] = 'none'
+                elif change == 'stopped': current['status'] = 'exited'
+                elif change == 'present_original': after['runtime']['containers'].append({**original, 'health': 'unhealthy'})
+                elif change == 'database': host['role'] = after['maintenance_policy']['host_role'] = 'database'
+                elif change == 'restart_denied': plan['allow_service_restarts'] = False
+                elif change == 'scope_missing': plan['restart_scope'] = 'none'
+                history['receipts'][0]['plan'] = envelope['plan'] = plan
+                with self.assertRaises(p.MaintenanceError): post.validate_observation(plan, envelope, host, after, history)
 
 
 class AppendTests(unittest.TestCase):

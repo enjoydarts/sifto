@@ -1,0 +1,16 @@
+services:
+  controller:
+    environment:
+      GITHUB_SHA:
+      GITHUB_REPOSITORY:
+  post-preparation:
+    extends:
+      file: compose.yml
+      service: controller
+    volumes:
+      - type: bind
+        source: ${MAINTENANCE_SECRET_DIR:-/nonexistent-maintenance-secrets}
+        target: /secrets
+        read_only: false
+    environment:
+      GH_TOKEN: ""

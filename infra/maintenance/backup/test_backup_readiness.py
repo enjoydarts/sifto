@@ -12,6 +12,11 @@ import signal
 import unittest
 from unittest.mock import patch
 
+RESTORE_IMAGES = {
+    "application": "docker.io/library/postgres:15.19-bookworm@sha256:d4a8e1f88f475ee3e0137fa89d21ebc59f6c6ab16bf369ee92907607cc3455ae",
+    "database": "docker.io/library/postgres:16.13-bookworm@sha256:472efd9a66f2b2f1a5aeb18b28de74332e6ef88c2b93a1a5d812fb6db67a5f60",
+}
+
 
 class ReadinessTests(unittest.TestCase):
     def setUp(self):
@@ -541,6 +546,166 @@ class ReadinessTests(unittest.TestCase):
                 self.m.restore_database("database", self.dump, self.state)
         self.assertFalse(any("rm" in c for c in self.commands))
 
+    def docker_restore_transport(self, *, missing=False, failure=None, image_id=None):
+        image_id = image_id if image_id is not None else "sha256:" + "c" * 64
+        self.docker_calls = []
+        inspections = 0
+        def docker(command, **kwargs):
+            nonlocal inspections
+            if command[0] != "/usr/bin/docker" or "compose" in command:
+                return self.transport(command, **kwargs)
+            self.commands.append(command)
+            self.docker_calls.append((command, kwargs))
+            if "inspect" in command:
+                inspections += 1
+                if (missing and inspections == 1) or (failure == "reinspect" and inspections > 1):
+                    raise self.m.BackupError("image inspect failed")
+                return image_id + "\n"
+            if "pull" in command and failure == "pull":
+                raise self.m.BackupError("image pull failed")
+            if "psql" in command:
+                return "1\n"
+            return ""
+        return docker
+
+    def test_missing_fixed_restore_image_is_pulled_once_then_restored_for_each_role(self):
+        for role, reference in RESTORE_IMAGES.items():
+            with self.subTest(role=role):
+                self.commands = []
+                observed_id = reference.split("@")[1] if role == "application" else "sha256:" + "c" * 64
+                docker = self.docker_restore_transport(missing=True, image_id=observed_id)
+                with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive") as restore:
+                    image_id = self.m.restore_database(role, self.dump, self.state)
+                self.assertEqual(image_id, observed_id)
+                self.assertEqual([c[1] for c, _ in self.docker_calls[:4]], ["image", "pull", "image", "run"])
+                image_calls = [(c, options) for c, options in self.docker_calls if "inspect" in c or "pull" in c]
+                self.assertEqual([c for c, _ in image_calls], [
+                    ["/usr/bin/docker", "image", "inspect", reference, "--format", "{{.Id}}"],
+                    ["/usr/bin/docker", "pull", reference],
+                    ["/usr/bin/docker", "image", "inspect", reference, "--format", "{{.Id}}"],
+                ])
+                self.assertEqual(image_calls[0][1]["timeout"], 60)
+                self.assertEqual(image_calls[2][1]["timeout"], 60)
+                self.assertGreater(image_calls[1][1]["timeout"], 0)
+                self.assertLessEqual(image_calls[1][1]["timeout"], 600)
+                self.assertGreater(image_calls[1][1]["limit"], 0)
+                self.assertLessEqual(image_calls[1][1]["limit"], 2 * 1024 * 1024)
+                create = self.docker_calls[3][0]
+                self.assertEqual(create[-1], reference)
+                self.assertIn("--pull=never", create)
+                self.assertEqual(create[create.index("--memory") + 1], "768m" if role == "database" else "256m")
+                self.assertEqual(create[create.index("--network") + 1], "none")
+                self.assertEqual(create[create.index("--cpus") + 1], "1")
+                self.assertEqual(create[create.index("--mount") + 1], "type=bind,src=" + str(self.state) + ",dst=/var/lib/postgresql/data")
+                restore.assert_called_once()
+                self.assertIn("--exit-on-error", restore.call_args.args[2])
+                self.assertEqual(sum("psql" in c for c, _ in self.docker_calls), 2)
+                self.assertEqual(self.docker_calls[-1][0], ["/usr/bin/docker", "rm", "-f", "sifto-offhost-restore-" + role])
+
+    def test_cached_fixed_restore_image_runs_reference_without_pull_or_config_override(self):
+        self.original["restore_image"] = "postgres:latest"
+        for role, reference in RESTORE_IMAGES.items():
+            with self.subTest(role=role):
+                self.original["host_role"] = role
+                self.original["backup_destination"]["prefix"] = role
+                self.write(self.config, json.dumps(self.original))
+                self.write(self.env, self.env_text.replace("APPROVED=database", "APPROVED=" + role).replace("/database", "/" + role))
+                if role == "application":
+                    source = self.root / "coolify-source"
+                    source.mkdir(mode=0o700)
+                    self.m.COOLIFY_SOURCE = source
+                    for name in ("source", "ssh", "ssl", "proxy"):
+                        (source / name).mkdir(mode=0o700)
+                    backups = self.state / "backups"
+                    backups.mkdir(mode=0o700)
+                    self.write(backups / "coolify.dump", "synthetic frozen dump bytes")
+                    self.write(backups / "created_at", str(int(time.time())) + "\n")
+                    archive = backups / "coolify-config.tar.gz"
+                    with tarfile.open(archive, "w:gz") as tar:
+                        for name in ("source", "ssh", "ssl", "proxy"):
+                            member = tarfile.TarInfo(name)
+                            member.type = tarfile.DIRTYPE
+                            tar.addfile(member)
+                    archive.chmod(0o600)
+                observed_id = reference.split("@")[1] if role == "application" else "sha256:" + "c" * 64
+                self.commands = []
+                docker = self.docker_restore_transport(image_id=observed_id)
+                with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive"):
+                    self.m.backup(role)
+                self.assertFalse(any("pull" in c for c, _ in self.docker_calls))
+                create = next(c for c, _ in self.docker_calls if "run" in c)
+                self.assertEqual(create[-1], reference)
+                self.assertIn("--pull=never", create)
+                proof = json.loads(self.config.read_text())["backup_readiness"]
+                self.assertEqual(proof["image_id"], observed_id)
+
+    def test_pull_or_reinspect_failure_never_creates_container_or_refreshes_proof(self):
+        for failure in ("pull", "reinspect"):
+            with self.subTest(failure=failure):
+                self.commands = []
+                docker = self.docker_restore_transport(missing=True, failure=failure)
+                with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive") as restore:
+                    with self.assertRaises(self.m.BackupError):
+                        self.m.backup("database")
+                self.assertEqual(sum("pull" in c for c, _ in self.docker_calls), 1)
+                self.assertFalse(any("run" in c or "rm" in c for c, _ in self.docker_calls))
+                self.assertFalse(any("forget" in c for c in self.commands))
+                restore.assert_not_called()
+                self.assert_old()
+
+    def test_malformed_inspected_image_never_pulls_or_creates_container_or_refreshes_proof(self):
+        for missing in (False, True):
+            for image_id in ("", "postgres:latest", "sha256:" + "c" * 63, "sha256:" + "c" * 64 + "\nsha256:" + "d" * 64):
+                with self.subTest(missing=missing, image_id=image_id):
+                    self.commands = []
+                    docker = self.docker_restore_transport(missing=missing, image_id=image_id)
+                    with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive") as restore:
+                        with self.assertRaises(self.m.BackupError):
+                            self.m.backup("database")
+                    self.assertEqual(sum("pull" in c for c, _ in self.docker_calls), int(missing))
+                    self.assertFalse(any("run" in c or "rm" in c for c, _ in self.docker_calls))
+                    self.assertFalse(any("forget" in c for c in self.commands))
+                    restore.assert_not_called()
+                    self.assert_old()
+
+    def test_unknown_restore_role_is_rejected_before_any_docker_command(self):
+        docker = self.docker_restore_transport()
+        with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive") as restore:
+            with self.assertRaises(self.m.BackupError):
+                self.m.restore_database("unknown", self.dump, self.state)
+        self.assertEqual(self.commands, [])
+        restore.assert_not_called()
+        self.assert_old()
+
+    def test_recovered_image_does_not_refresh_proof_when_full_restore_fails(self):
+        docker = self.docker_restore_transport(missing=True)
+        with patch.object(self.m, "run", docker), patch.object(self.m, "restore_archive", side_effect=self.m.BackupError("restore failed")):
+            with self.assertRaises(self.m.BackupError):
+                self.m.backup("database")
+        self.assertEqual(sum("pull" in c for c, _ in self.docker_calls), 1)
+        self.assertEqual(self.docker_calls[-1][0], ["/usr/bin/docker", "rm", "-f", "sifto-offhost-restore-database"])
+        self.assertFalse(any("forget" in c for c in self.commands))
+        self.assert_old()
+
+    def test_recovered_image_requires_post_restore_query_before_proof_or_retention(self):
+        docker = self.docker_restore_transport(missing=True)
+        query_count = 0
+        def failed_final_query(command, **kwargs):
+            nonlocal query_count
+            result = docker(command, **kwargs)
+            if "psql" in command:
+                query_count += 1
+                return "0\n" if query_count == 2 else result
+            return result
+        with patch.object(self.m, "run", failed_final_query), patch.object(self.m, "restore_archive") as restore:
+            with self.assertRaises(self.m.BackupError):
+                self.m.backup("database")
+        restore.assert_called_once()
+        self.assertEqual(query_count, 2)
+        self.assertEqual(self.docker_calls[-1][0], ["/usr/bin/docker", "rm", "-f", "sifto-offhost-restore-database"])
+        self.assertFalse(any("forget" in c for c in self.commands))
+        self.assert_old()
+
     def test_full_restore_uses_fixed_isolated_container_and_cleans_only_its_container(self):
         def docker(command, **kwargs):
             self.commands.append(command)
@@ -555,7 +720,8 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(create[create.index("--network") + 1], "none")
         self.assertEqual(create[create.index("--cpus") + 1], "1")
         self.assertEqual(create[create.index("--memory") + 1], "768m")
-        self.assertTrue(any("postgres:16.13-bookworm" in c for c in self.commands))
+        self.assertEqual(create[-1], RESTORE_IMAGES["database"])
+        self.assertIn("--pull=never", create)
         self.assertIn("--exit-on-error", restore.call_args.args[2])
         self.assertTrue(any(c[-3:] == ["rm", "-f", "sifto-offhost-restore-database"] for c in self.commands))
 

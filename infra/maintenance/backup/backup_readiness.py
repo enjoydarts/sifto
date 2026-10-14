@@ -34,6 +34,10 @@ COOLIFY_SOURCE = Path("/data/coolify")
 SOURCE_UID = None
 SAFE_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 HEX = re.compile(r"[0-9a-f]{64}")
+RESTORE_IMAGES = {
+    "application": "docker.io/library/postgres:15.19-bookworm@sha256:d4a8e1f88f475ee3e0137fa89d21ebc59f6c6ab16bf369ee92907607cc3455ae",
+    "database": "docker.io/library/postgres:16.13-bookworm@sha256:472efd9a66f2b2f1a5aeb18b28de74332e6ef88c2b93a1a5d812fb6db67a5f60",
+}
 REPOSITORY = re.compile(r"s3:https://[0-9a-f]{32}\.r2\.cloudflarestorage\.com/"
                         r"([a-z0-9][a-z0-9.-]{2,62})/([A-Za-z0-9][A-Za-z0-9_./-]{0,800})")
 
@@ -328,17 +332,29 @@ def restore_archive(role, dump, command, *, env=None):
             require(result.returncode == 0, "full retrieved database restore failed")
 
 
+def ensure_restore_image(role):
+    require(role in RESTORE_IMAGES, "fixed restore host role required")
+    reference = RESTORE_IMAGES[role]
+    inspect = ["/usr/bin/docker", "image", "inspect", reference, "--format", "{{.Id}}"]
+    try:
+        image = run(inspect, timeout=60).strip()
+    except BackupError:
+        # Recover a pruned cache once, using only the previously verified index.
+        run(["/usr/bin/docker", "pull", reference], timeout=600, limit=2 * 1024 * 1024)
+        image = run(inspect, timeout=60).strip()
+    # Docker's opaque ID can be a config or index digest depending on its store.
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", image), "invalid fixed PostgreSQL image ID")
+    return reference, image
+
+
 def restore_database(role, dump, work):
-    version = "16.13" if role == "database" else "15.19"
+    reference, image = ensure_restore_image(role)
     memory = "768m" if role == "database" else "256m"
     name = "sifto-offhost-restore-" + role
-    image = run(["/usr/bin/docker", "image", "inspect", "postgres:" + version + "-bookworm",
-                 "--format", "{{.Id}}"], timeout=60).strip()
-    require(re.fullmatch(r"sha256:[0-9a-f]{64}", image), "fixed PostgreSQL image must be preloaded")
     # Never remove a pre-existing container; only successful creation owns cleanup.
-    run(["/usr/bin/docker", "run", "-d", "--name", name, "--network", "none", "--memory", memory,
+    run(["/usr/bin/docker", "run", "--pull=never", "-d", "--name", name, "--network", "none", "--memory", memory,
          "--cpus", "1", "-e", "POSTGRES_DB=offhost_restore", "-e", "POSTGRES_HOST_AUTH_METHOD=trust",
-         "--mount", "type=bind,src=" + str(work) + ",dst=/var/lib/postgresql/data", image], timeout=60)
+         "--mount", "type=bind,src=" + str(work) + ",dst=/var/lib/postgresql/data", reference], timeout=60)
     try:
         sql = ["/usr/bin/docker", "exec", name, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
                "-d", "offhost_restore", "-Atc", "SELECT 1"]

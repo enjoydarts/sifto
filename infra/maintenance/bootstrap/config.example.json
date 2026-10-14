@@ -9,5 +9,16 @@
   "allowed_recreated_container_images": ["docker.io/coollabsio/sentinel:1.0.2"],
   "monitored_services": ["docker.service", "ssh.service"],
   "database_enabled": false,
+  "coolify_patch_policy": {
+    "enabled": false,
+    "profile_id": "coolify-4.4.2-to-4.4.6-arm64-v1",
+    "resources": {
+      "memory_bytes": 1342177280,
+      "host_reserve_memory_bytes": 1073741824,
+      "staging_free_bytes": 4294967296,
+      "cpu_millis": 1750,
+      "command_timeout_seconds": 30
+    }
+  },
   "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "application"}
 }

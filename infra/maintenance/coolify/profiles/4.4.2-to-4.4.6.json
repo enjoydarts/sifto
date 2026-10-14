@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "profile_id": "coolify-4.4.2-to-4.4.6-arm64-v1",
+  "publication_at": 1791571325,
+  "not_before": 1792176125,
+  "controlled_startup_verified": false,
+  "controlled_startup_limitations": "Normal boot has remote Seeder and AppInit side effects and a maintenance webhook exception; controlled startup and an image-only path have not been verified.",
+  "new_migrations": [
+    "2026_10_09_092903_normalize_ipv6_server_ips",
+    "2026_10_09_115444_remove_duplicate_redis_username_environment_variables",
+    "2026_10_09_124641_remove_duplicate_nixpacks_node_version_environment_variables"
+  ],
+  "bundle": {
+    "schema_version": 1,
+    "platform": "linux/arm64",
+    "rollback": {
+      "version": "4.4.2",
+      "release_commit": "76d3386a4d69f894258210ea265717a8fb8cd778",
+      "artifacts": {
+        "docker-compose.yml": "2532ee9258e10ad4e86cb3c2b46c29fe9329f5a0dace0f7da410744feec279bd",
+        "docker-compose.prod.yml": "4cd00e83e117e847e6d6bdfe64f2a2f958bb09965692c5230fa9231a0315f80f",
+        ".env.production": "7895e54f7c9d40063e76afec9b35839048d91e5c3b5107d64ea49ef6987c304a",
+        "scripts/upgrade.sh": "8dc02adee5ea0f27027405243a15e9be8bced5ea290870de90c8ec0ce4979fda",
+        "scripts/upgrade-postgres.sh": "aa65c277fc13ab5b27c349fbfef12defc59c084b244e4b258329e1f6c570ae8d"
+      },
+      "images": {
+        "coolify": {
+          "repository": "docker.io/coollabsio/coolify",
+          "index_digest": "sha256:cd884496945d4a2656a480401238e1dda4a1569424102df7474ce3ac73550cd6",
+          "platform_manifest": "sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960"
+        },
+        "postgres": {
+          "repository": "docker.io/library/postgres",
+          "index_digest": "sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81",
+          "platform_manifest": "sha256:91a22c143801df42c2e4a8f9926eab5e48f39f40beb5220b7c29d4478263c341"
+        },
+        "redis": {
+          "repository": "docker.io/library/redis",
+          "index_digest": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+          "platform_manifest": "sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85"
+        }
+      }
+    },
+    "target": {
+      "version": "4.4.6",
+      "release_commit": "f55efc859dfcbbf79274c4907b3df89f9767c11d",
+      "artifacts": {
+        "docker-compose.yml": "2532ee9258e10ad4e86cb3c2b46c29fe9329f5a0dace0f7da410744feec279bd",
+        "docker-compose.prod.yml": "4cd00e83e117e847e6d6bdfe64f2a2f958bb09965692c5230fa9231a0315f80f",
+        ".env.production": "7895e54f7c9d40063e76afec9b35839048d91e5c3b5107d64ea49ef6987c304a",
+        "scripts/upgrade.sh": "8dc02adee5ea0f27027405243a15e9be8bced5ea290870de90c8ec0ce4979fda",
+        "scripts/upgrade-postgres.sh": "aa65c277fc13ab5b27c349fbfef12defc59c084b244e4b258329e1f6c570ae8d"
+      },
+      "images": {
+        "coolify": {
+          "repository": "docker.io/coollabsio/coolify",
+          "platform_manifest": "sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5"
+        },
+        "postgres": {
+          "repository": "docker.io/library/postgres",
+          "index_digest": "sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81",
+          "platform_manifest": "sha256:91a22c143801df42c2e4a8f9926eab5e48f39f40beb5220b7c29d4478263c341"
+        },
+        "redis": {
+          "repository": "docker.io/library/redis",
+          "index_digest": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+          "platform_manifest": "sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85"
+        }
+      }
+    }
+  }
+}

@@ -43,6 +43,16 @@ class CoolifyObservationTests(unittest.TestCase):
         with patch.object(report.urllib.request, 'urlopen', return_value=self.response('9.1.0')):
             self.assertEqual(report.observe_coolify(self.inventory)['status'], 'current')
 
+    def test_fixed_digest_only_reference_can_be_observed_without_claiming_update_readiness(self):
+        from maintenance import coolify_plan
+        self.inventory['runtime']['containers'][0]['image'] = (
+            'docker.io/coollabsio/coolify@' + coolify_plan.OLD_ARM)
+        with patch.object(report.urllib.request, 'urlopen', return_value=self.response('4.4.6')):
+            result = report.observe_coolify(self.inventory, now=coolify_plan.NOT_BEFORE)
+        self.assertEqual(result['current_version'], '4.4.2')
+        self.assertEqual(result['reason'], 'report_only_manual_review')
+        self.assertNotIn('eligible', result)
+
     def test_fetch_failure_untrusted_release_prerelease_and_alias_are_unknown(self):
         with patch.object(report.urllib.request, 'urlopen', side_effect=OSError('private-details')):
             result = report.observe_coolify(self.inventory)

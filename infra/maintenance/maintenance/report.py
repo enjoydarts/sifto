@@ -37,6 +37,18 @@ def observe_coolify(inventory, *, now=None):
         require(len(images) == 1, "ambiguous running instance")
         versions = set()
         for image in images:
+            # A known immutable public reference can identify release provenance
+            # for observation. It is not a registry/platform or runtime readiness
+            # proof; coolify-report establishes descriptors separately.
+            from .coolify_plan import fixed_profile
+            digest_versions = {side['images']['coolify']['repository'] + '@' + digest: side['version']
+                               for side in fixed_profile()['bundle'].values() if type(side) is dict
+                               and 'images' in side
+                               for key, digest in side['images']['coolify'].items()
+                               if key in ('platform_manifest', 'index_digest')}
+            if image in digest_versions:
+                versions.add(digest_versions[image])
+                continue
             match = re.fullmatch(r"(?:ghcr\.io/|docker\.io/)?coollabsio/coolify:v?(" + STABLE_VERSION +
                                  r")(?:@sha256:[0-9a-f]{64})?", image)
             require(match is not None, "stable image version unavailable")

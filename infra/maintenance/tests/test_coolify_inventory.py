@@ -37,7 +37,8 @@ class CoolifyRuntimeInventoryTests(unittest.TestCase):
         self.assertEqual(result['current_version'], '4.4.2')
         self.assertRegex(result['instance_sha256'], r'^[0-9a-f]{64}$')
         for container in result['containers'].values():
-            self.assertEqual(set(container), {'identity_sha256', 'image_config_digest', 'health'})
+            self.assertEqual(set(container), {'identity_sha256', 'engine_image_id', 'health'})
+            self.assertNotIn('image_config_digest', container)
         encoded = json.dumps(result)
         for private in ['fixture-not-for-output', inventory['host_id'], '/srv/fixture',
                         'fixture-alias', '192.0.2.10', '1' * 64]:

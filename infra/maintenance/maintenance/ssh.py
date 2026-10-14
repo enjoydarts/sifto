@@ -87,7 +87,7 @@ class Client:
 
     def argv(self, host, mode):
         parse_hosts(json.dumps([host]))
-        require(mode in ({"scan", "refresh", "report"} if self.role == "scan" else {"apply", "verify"}),
+        require(mode in ({"scan", "refresh", "report", "coolify-report"} if self.role == "scan" else {"apply", "verify"}),
                 "forbidden SSH command")
         return ["ssh", "-T", "-F", "/dev/null", "-i", str(self.key), "-p", str(host["port"]),
                 "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",

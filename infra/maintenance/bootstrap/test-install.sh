@@ -32,6 +32,11 @@ if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
 fi
 userdel sifto-maint-scan
 bash /fixture/install-host.sh /root/payload
+for native in coolify_host.py coolify_plan.py; do
+  cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
+  [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
+  [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
+done
 groupadd docker
 usermod -a -G docker sifto-maint-scan
 if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
@@ -70,6 +75,28 @@ ssh_call() {
 }
 report=$(printf '{}' | ssh_call scan report)
 [[ "$report" == *'"host_id":"fixture"'* ]]
+before=$(find /var/lib/sifto-maintenance -type f -printf '%p\n' | sort)
+coolify_report=$(printf '{}' | ssh_call scan coolify-report)
+[[ "$coolify_report" == *'"eligible":false'* && "$coolify_report" == *'"status":"disabled"'* ]]
+after=$(find /var/lib/sifto-maintenance -type f -printf '%p\n' | sort)
+[[ "$before" == "$after" ]]
+if printf '{"ready":true}' | ssh_call scan coolify-report >/tmp/denied.out 2>&1; then
+  printf 'caller-supplied Coolify readiness unexpectedly accepted\n' >&2; exit 1
+fi
+if printf '{}' | ssh_call apply coolify-report >/tmp/denied.out 2>&1; then
+  printf 'apply key unexpectedly entered Coolify report gateway\n' >&2; exit 1
+fi
+for native in coolify_host.py coolify_plan.py; do
+  cp -p "/opt/sifto-maintenance/maintenance/$native" /root/native.saved
+  printf 'from pathlib import Path\nPath("/root/untrusted-native-executed").touch()\n' > "/opt/sifto-maintenance/maintenance/$native"
+  chmod 0666 "/opt/sifto-maintenance/maintenance/$native"
+  if printf '{}' | ssh_call scan coolify-report >/tmp/denied.out 2>&1; then
+    printf 'unprotected native source unexpectedly accepted\n' >&2; exit 1
+  fi
+  [[ ! -e /root/untrusted-native-executed ]]
+  [[ $(cat /tmp/denied.out) == *'maintenance bootstrap rejected'* ]]
+  mv -f /root/native.saved "/opt/sifto-maintenance/maintenance/$native"
+done
 if printf '{}' | ssh_call scan apply >/tmp/denied.out 2>&1; then
   printf 'scan key unexpectedly entered apply gateway\n' >&2
   exit 1

@@ -1,6 +1,6 @@
 """Hash summaries of existing private scan metadata; no commands or secrets.
 
-Image config digests identify locally running images. They do not prove registry
+Opaque Engine image IDs identify locally running images. They do not prove registry
 platform-manifest digests or authorize an update.
 """
 import re
@@ -60,10 +60,10 @@ def summarize_runtime(inventory):
             require(container.get('health') in ('healthy', 'unhealthy', 'starting', 'none'),
                     'invalid selected container health')
             identity = canonical_recreation_identity(container['recreation_identity'])
-            stable[role] = {'id': container['id'], 'image_config_digest': container['image_id'],
+            stable[role] = {'id': container['id'], 'engine_image_id': container['image_id'],
                             'image': container['image'], 'recreation_identity': identity}
             result[role] = {'identity_sha256': plan_sha256(stable[role]),
-                            'image_config_digest': container['image_id'], 'health': container['health']}
+                            'engine_image_id': container['image_id'], 'health': container['health']}
         require(len({container['id'] for container in roles.values()}) == 3,
                 'ambiguous selected container identity')
         return {'schema_version': 1, 'status': 'observed', 'current_version': version.group(1),

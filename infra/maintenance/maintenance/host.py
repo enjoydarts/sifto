@@ -85,7 +85,7 @@ def read_request(stream):
 
 
 def gateway_mode(gateway, original_command):
-    allowed = {"scan-gateway": {"scan", "refresh", "report"},
+    allowed = {"scan-gateway": {"scan", "refresh", "report", "coolify-report"},
                "apply-gateway": {"apply", "verify"}}
     require(gateway in allowed and original_command in allowed[gateway], "command denied by forced gateway")
     return original_command
@@ -103,6 +103,12 @@ def secure_path(path, *, directory=False):
     require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode), "invalid file type")
 
 
+def validate_coolify_policy(config):
+    if "coolify_patch_policy" in config:
+        from .coolify_host import validate_policy
+        validate_policy(config["coolify_patch_policy"])
+
+
 def load_config(path="/etc/sifto-maintenance/config.json"):
     require(os.geteuid() == 0, "host agent requires root")
     secure_path(path)
@@ -111,6 +117,7 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     required = {"host_id", "trusted_public_key", "approved_workflow_sha", "state_path",
                 "allowed_restart_services", "database_enabled", "host_role"}
     require(type(config) is dict and required <= set(config), "missing root config")
+    validate_coolify_policy(config)
     require(config["state_path"] == "/var/lib/sifto-maintenance", "invalid state path")
     require(matches(SHA, config["approved_workflow_sha"]), "invalid pinned executor SHA")
     require(type(config["database_enabled"]) is bool, "invalid database flag")
@@ -745,6 +752,9 @@ class HostAgent:
 
     def run(self, mode, request):
         require(type(request) is dict, "request must be an object")
+        if mode == "coolify-report":
+            from .coolify_host import collect_report
+            return collect_report(self.config, request, runner=self.runner, now=int(self.clock()))
         if mode == "apply":
             require(type(request.get("dry_run", False)) is bool, "dry_run must be boolean")
         with self.locked(existing_only=mode == "apply" and request.get("dry_run") is True):

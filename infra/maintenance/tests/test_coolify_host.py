@@ -246,7 +246,7 @@ class SelectedReportTests(unittest.TestCase):
         installer = (root / 'bootstrap/install-host.sh').read_text()
         fixture_image = (root / 'bootstrap/Dockerfile.test').read_text()
         for name in ['coolify_host.py', 'coolify_plan.py', 'coolify_rehearsal.py',
-                     'coolify_evidence.py', 'coolify_docker.py', 'coolify-public-manifest.json', 'coolify_probe.php']:
+                     'coolify_evidence.py', 'coolify_docker.py', 'coolify_rehearsal_engine.py', 'coolify-public-manifest.json', 'coolify_probe.php']:
             self.assertIn('maintenance/' + name, entrypoint.split('try:\n    validate_installed_sources()')[0])
             self.assertIn(name, installer)
             self.assertIn('maintenance/' + name, fixture_image)

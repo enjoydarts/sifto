@@ -8,7 +8,7 @@ payload=$(realpath -- "$1")
 [[ -d "$payload" && ! -L "$1" ]]
 [[ $(stat -c %u "$payload") == 0 ]]
 [[ -z $(find "$payload" \( ! -user root -o -perm /022 -o -type l \) -print -quit) ]] || { printf 'payload must be protected and root-owned\n' >&2; exit 1; }
-for file in host_agent.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php config.json scan.pub apply.pub; do
+for file in host_agent.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php config.json scan.pub apply.pub; do
   [[ -f "$payload/$file" && ! -L "$payload/$file" ]] || { printf 'invalid payload\n' >&2; exit 1; }
 done
 scan_fingerprint=$(ssh-keygen -l -f "$payload/scan.pub" | awk '{print $2}')
@@ -57,7 +57,7 @@ exec 9<>/var/lib/sifto-maintenance/maintenance.lock
 flock -n 9 || { printf 'maintenance is running; install refused\n' >&2; exit 1; }
 install -d -o root -g root -m 0755 /opt/sifto-maintenance /opt/sifto-maintenance/maintenance
 install -o root -g root -m 0644 "$payload/host_agent.py" /opt/sifto-maintenance/host_agent.py
-for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
   install -o root -g root -m 0644 "$payload/maintenance/$file" "/opt/sifto-maintenance/maintenance/$file"
 done
 install -d -o root -g root -m 0700 /etc/sifto-maintenance /var/lib/sifto-maintenance /var/lib/sifto-maintenance/plans

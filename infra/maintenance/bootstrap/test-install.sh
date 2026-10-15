@@ -36,7 +36,7 @@ userdel sifto-maint-scan
 cp -p /root/payload/maintenance/__init__.py /root/package.saved
 printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /root/payload/maintenance/__init__.py
 payload_rejections=0
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
   for defect in missing group-writable other-writable nonroot symlink directory fifo; do
     resource="/root/payload/maintenance/$native"
     cp -p "$resource" /root/resource.saved
@@ -63,7 +63,7 @@ for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify
 done
 mv /root/package.saved /root/payload/maintenance/__init__.py
 bash /fixture/install-host.sh /root/payload
-for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
   cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
   [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
   [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
@@ -81,7 +81,7 @@ if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
 fi
 rm /etc/sudoers.d/extra-grant
 bash /fixture/install-host.sh /root/payload
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
   cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
   [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
   [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
@@ -138,7 +138,7 @@ cp -p /opt/sifto-maintenance/maintenance/__init__.py /root/package.saved
 printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /opt/sifto-maintenance/maintenance/__init__.py
 ssh_resource_rejections=0
 before_resources=$(find /var/lib/sifto-maintenance -type f -exec sha256sum {} + | sort)
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
   for defect in missing group-writable other-writable nonroot symlink directory fifo; do
     resource="/opt/sifto-maintenance/maintenance/$native"
     cp -p "$resource" /root/resource.saved

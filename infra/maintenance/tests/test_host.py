@@ -794,7 +794,7 @@ class HostTests(unittest.TestCase):
         marker = self.root / "unvalidated-package-imported"
         (package / "__init__.py").write_text(
             f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
-        resources = ("coolify_rehearsal.py", "coolify_evidence.py", "coolify_docker.py",
+        resources = ("coolify_rehearsal.py", "coolify_evidence.py", "coolify_docker.py", "coolify_rehearsal_engine.py",
                      "coolify-public-manifest.json", "coolify_probe.php")
         for name in resources:
             resource = package / name

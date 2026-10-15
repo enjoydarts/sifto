@@ -25,7 +25,7 @@ def validate_installed_sources():
     for source in ("host_agent.py", "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py",
                    "maintenance/coolify_host.py", "maintenance/coolify_plan.py",
                    "maintenance/coolify_rehearsal.py", "maintenance/coolify_evidence.py",
-                   "maintenance/coolify_docker.py",
+                   "maintenance/coolify_docker.py", "maintenance/coolify_rehearsal_engine.py",
                    "maintenance/coolify-public-manifest.json", "maintenance/coolify_probe.php"):
         path = installed / source
         for candidate in [path, *path.parents]:

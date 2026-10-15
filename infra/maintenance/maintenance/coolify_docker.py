@@ -15,6 +15,7 @@ import platform
 import re
 import secrets
 import stat
+import time
 
 from .coolify_rehearsal import FILES, FilePolicy, RootBinding
 from .coolify_plan import fixed_profile
@@ -30,9 +31,10 @@ _DIGEST = re.compile(r'sha256:[a-f0-9]{64}\Z')
 _SOURCE_NAMES = frozenset(('host_agent.py', 'maintenance/__init__.py', 'maintenance/plan.py',
     'maintenance/host.py', 'maintenance/coolify_host.py', 'maintenance/coolify_plan.py',
     'maintenance/coolify_rehearsal.py', 'maintenance/coolify_evidence.py',
-    'maintenance/coolify_docker.py', 'maintenance/coolify-public-manifest.json',
+    'maintenance/coolify_docker.py', 'maintenance/coolify_rehearsal_engine.py', 'maintenance/coolify-public-manifest.json',
     'maintenance/coolify_probe.php'))
 _ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LC_ALL': 'C'}
+_PROCESS_CLEANUP = object()
 _APP_FILES = ('runtime.env', 'probe.php', 'public-manifest.json', 'hmac.key')
 _APP_DIRS = ('storage', 'bootstrap-cache', 'runtime-ssh', 'runtime-ssl', 'runtime-proxy')
 _PURPOSE_LEAVES = {
@@ -112,10 +114,12 @@ def _closed(method):
         try:
             return method(*args, **kwargs)
         except DockerError as error:
-            raise DockerError(str(error)) from None
+            safe = DockerError(str(error))
+            safe.cleanup_complete = getattr(error, 'cleanup_complete', False) is True
+            raise safe from None
         except (KeyboardInterrupt, SystemExit):
             raise DockerError('interrupted') from None
-        except Exception:
+        except BaseException:
             raise DockerError('command_failed') from None
     bounded.__name__ = method.__name__
     # Preserve the deliberately closed public signature for review/introspection.
@@ -133,6 +137,23 @@ class NativeContext:
     cgroup_parent: Path
     source_sha256: tuple
     startup: 'ControlledStartup | None'
+    budget: 'BudgetPolicy | None' = None
+
+
+@dataclass(frozen=True, repr=False)
+class BudgetPolicy:
+    aggregate_memory: int = 1280 * 1024 * 1024
+    aggregate_millicpu: int = 1750
+    host_reserve: int = 1024 * 1024 * 1024
+    staging_free: int = 4 * 1024 * 1024 * 1024
+    whole_seconds: int = 2400
+    cleanup_seconds: int = 120
+
+
+def _budget(context):
+    _require(type(context.budget) is BudgetPolicy and context.budget == BudgetPolicy()
+             and all(type(value) is int for value in vars(context.budget).values()), 'context_policy')
+    return context.budget
 
 
 @dataclass(frozen=True, repr=False)
@@ -183,6 +204,7 @@ class DockerError(Exception):
     """Only an allowlisted static category survives construction."""
     def __init__(self, category='command_failed'):
         super().__init__(category if type(category) is str and category in _CATEGORIES else 'command_failed')
+        self.cleanup_complete = False
 
 
 class OwnedRun:
@@ -200,6 +222,18 @@ class PhaseResources:
 
 
 class OwnedDocker:
+    def _require_verified_startup(self):
+        # Deliberately empty Task4 registry; no caller record can fill it.
+        raise DockerError('startup_profile_unverified')
+
+    def _capacity_observations(self):
+        values = {}
+        for line in Path('/proc/meminfo').read_text().splitlines():
+            if line.startswith('MemAvailable:'):
+                values['available'] = int(line.split()[1]) * 1024
+        space = os.fstatvfs(self._stage_fd)
+        return values.get('available', 0), space.f_bavail * space.f_frsize
+
     @_closed
     def __init__(self, context, *, adapter):
         self.context = context
@@ -242,6 +276,9 @@ class OwnedDocker:
             self._anchor(context.input_path)
             self._anchor(context.docker_socket, socket=True)
             self._load_sources()
+            if isinstance(adapter, NativeProcess):
+                _budget(context)
+                adapter._bind_owner(self)
         except BaseException:
             self.close()
             raise
@@ -326,6 +363,32 @@ class OwnedDocker:
         self._write_all(fd, content)
         os.fsync(fd)
         return {'fd': fd, 'identity': _metadata(os.fstat(fd)), 'bytes': content}
+
+    def _exclusive_hashed_file(self, parent, name, content):
+        record = self._exclusive_file(parent, name, content)
+        record['sha256'] = _hash(record.pop('bytes'))
+        self._guard_hashed_file(parent, name, record, 'material_binding')
+        return record
+
+    def _guard_hashed_file(self, parent, name, record, category):
+        try:
+            before = os.fstat(record['fd'])
+            _require(_metadata(before) == record['identity']
+                     and _metadata(os.stat(name, dir_fd=parent, follow_symlinks=False)) == record['identity']
+                     and stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+                     and before.st_uid == 0 and stat.S_IMODE(before.st_mode) == 0o600
+                     and 0 <= before.st_size <= 64 * 1024 * 1024, category)
+            digest, offset = hashlib.sha256(), 0
+            while offset < before.st_size:
+                chunk = os.pread(record['fd'], min(1024 * 1024, before.st_size - offset), offset)
+                _require(bool(chunk), category)
+                digest.update(chunk)
+                offset += len(chunk)
+            _require(digest.hexdigest() == record['sha256']
+                     and _metadata(os.fstat(record['fd'])) == record['identity']
+                     and _metadata(os.stat(name, dir_fd=parent, follow_symlinks=False)) == record['identity'], category)
+        except OSError:
+            raise DockerError(category) from None
 
     @staticmethod
     def _write_all(fd, value):
@@ -491,6 +554,8 @@ class OwnedDocker:
     def _call(self, method, *args, **kwargs):
         try:
             return getattr(self._adapter, method)(*args, **kwargs)
+        except DockerError:
+            raise
         except TimeoutError:
             raise DockerError('command_timeout') from None
         except (KeyboardInterrupt, SystemExit):
@@ -617,7 +682,8 @@ class OwnedDocker:
             'Memory': memory * 1024 * 1024, 'MemorySwap': memory * 1024 * 1024, 'NanoCpus': cpu * 1000000,
             'PidsLimit': pids, 'CapDrop': ['ALL'], 'CapAdd': [], 'SecurityOpt': ['no-new-privileges'],
             'ReadonlyRootfs': True, 'NetworkMode': network, 'PidMode': '', 'IpcMode': 'private',
-            'CgroupnsMode': 'private', 'CgroupParent': str(self.context.cgroup_parent), 'Privileged': False,
+            'CgroupnsMode': 'private', 'CgroupParent': self._adapter._parent(run)
+                if isinstance(self._adapter, NativeProcess) else str(self.context.cgroup_parent), 'Privileged': False,
             'Ports': {}, 'ExtraHosts': [], 'Devices': [], 'Mounts': mounts, 'Tmpfs': tmpfs}, names
 
     @staticmethod
@@ -733,6 +799,8 @@ class OwnedDocker:
                 sealed = self._guard_resources(run, phase, resources, names)
                 env_fd = os.dup(sealed['leaves']['runtime.env']['fd'])
                 os.lseek(env_fd, 0, os.SEEK_SET)
+            if isinstance(self._adapter, NativeProcess):
+                self._adapter._authorize_create(record, env_fd)
             cid = self._call('create', self._argv(spec, env_fd), env=dict(_ENV),
                              pass_fds=() if env_fd is None else (env_fd,))
             _require(type(cid) is str and _HASH.fullmatch(cid), 'container_identity')
@@ -745,15 +813,17 @@ class OwnedDocker:
             return CreatedContainer(cid, intent, phase, operation, spec['Reference'], spec['Image'], record['hash'])
         except BaseException as error:
             owned['failed'] = True
+            failure = DockerError(str(error) if isinstance(error, DockerError) else
+                                  'interrupted' if isinstance(error, (KeyboardInterrupt, SystemExit))
+                                  else 'command_failed')
             if record['id'] is None:
                 try:
                     self._reconcile(record)
-                except DockerError:
-                    raise DockerError('ownership_unknown') from None
-            if isinstance(error, DockerError):
-                raise DockerError(str(error)) from None
-            raise DockerError('interrupted' if isinstance(error, (KeyboardInterrupt, SystemExit))
-                              else 'command_failed') from None
+                except BaseException:
+                    # Reconciliation grants ownership only through its exact spec
+                    # checks; failure leaves the intent unresolved and the cause intact.
+                    pass
+            raise failure from None
         finally:
             if env_fd is not None:
                 os.close(env_fd)
@@ -825,8 +895,112 @@ class OwnedDocker:
             record['cleaned'] = True
         return complete
 
+    def _purpose(self, container_id, operations):
+        # Purpose check must precede even metadata adapter calls.
+        _require(type(container_id) is str and container_id in self._containers, 'ownership_unknown')
+        record = self._containers[container_id]
+        _require(record['operation'] in operations, 'container_spec')
+        _require(record['state'] == 'started' and not self._runs[record['run']]['failed'], 'startup_state')
+        observed = self._authenticate_container(record)
+        return record, observed
+
+    def _finished(self, record, seconds):
+        result = self._call('wait_result', record['id'], seconds=seconds)
+        _require(type(result) is bytes and len(result) <= 512 * 1024, 'output_bound')
+        observed = self._authenticate_container(record)
+        state = observed['State']
+        _require(state['Status'] == 'exited' and not state['Running'] and state['ExitCode'] == 0,
+                 'startup_state')
+        return result
+
+    @_closed
+    def read_identity(self, container_id):
+        record, _ = self._purpose(container_id, {Operation.IDENTITY_OLD, Operation.IDENTITY_TARGET,
+            Operation.IDENTITY_POSTGRES, Operation.IDENTITY_REDIS})
+        value = self._finished(record, 30)
+        _require(len(value) <= 1024, 'output_bound')
+        # Fixed `id account` emits UID, primary GID and a bounded group list.
+        match = re.fullmatch(rb'uid=([0-9]{1,5})\(([a-z-]+)\) gid=([0-9]{1,5})\(([a-z-]+)\)'
+                             rb'(?: groups=[0-9a-z(), -]+)?\n?', value)
+        _require(match is not None, 'image_identity')
+        account = {'old': b'www-data', 'target': b'www-data', 'postgres': b'postgres', 'redis': b'redis'}[record['role']]
+        _require(match[2] == account and match[4] == account, 'image_identity')
+        identity = (int(match[1]), int(match[3]), record['spec']['Image'])
+        _require(all(0 < v < 65536 for v in identity[:2]), 'image_identity')
+        if record['role'] in ('old', 'target'):
+            _require(identity[:2] == (9999, 9999), 'hmac_identity')
+        self._runs[record['run']]['identities'][record['role']] = identity
+        return identity
+
+    @_closed
+    def postgres_ready(self, container_id):
+        record, observed = self._purpose(container_id, {Operation.POSTGRES})
+        _require(observed['State']['Running'], 'startup_state')
+        result = self._call('postgres_ready', record['id'])
+        _require(type(result) is bool, 'startup_state')
+        self._authenticate_container(record)
+        return result
+
+    @_closed
+    def restore_original(self, container_id, resources):
+        record, _ = self._purpose(container_id, {Operation.POSTGRES})
+        _require(record['resources'] is resources, 'material_binding')
+        sealed = self._guard_resources(record['run'], record['phase'], resources, ('coolify.dump',))
+        _require(not record.get('restore_attempted'), 'startup_state')
+        record['restore_attempted'] = True
+        fd = os.dup(sealed['leaves']['coolify.dump']['fd'])
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            self._call('restore_original', container_id, dump_fd=fd)
+            self._authenticate_container(record)
+        except BaseException:
+            self._runs[record['run']]['failed'] = True
+            raise
+        finally:
+            os.close(fd)
+
+    @_closed
+    def read_probe(self, container_id):
+        record, _ = self._purpose(container_id, {Operation.BASELINE_OLD, Operation.NETWORK_OLD,
+            Operation.NETWORK_TARGET, Operation.VERIFY_OLD, Operation.VERIFY_TARGET})
+        value = strict_json(self._finished(record, 30))
+        if record['operation'] in (Operation.NETWORK_OLD, Operation.NETWORK_TARGET):
+            _require(type(value) is dict and set(value) == {'ok', 'category', 'network'}
+                     and value['ok'] is True and value['network'] is True
+                     and value['category'] == 'network_verified', 'network_isolation')
+        else:
+            from .coolify_evidence import validate_evidence
+            try:
+                validate_evidence(value, '4.4.6' if record['role'] == 'target' else '4.4.2',
+                                  baseline=record['operation'] is Operation.BASELINE_OLD)
+            except Exception:
+                raise DockerError('evidence_invalid') from None
+        return value
+
+    @_closed
+    def read_migration(self, container_id):
+        record, _ = self._purpose(container_id, {Operation.MIGRATE_OLD, Operation.MIGRATE_TARGET})
+        _require(not record.get('result_consumed'), 'startup_state')
+        record['result_consumed'] = True
+        self._finished(record, 180)
+        # No parsing of localized artisan prose; VERIFY must prove no_pending.
+        return True
+
+    @_closed
+    def read_ssh_reconstruction(self, container_id):
+        record, _ = self._purpose(container_id, {Operation.SSH_OLD, Operation.SSH_TARGET})
+        # Empty reviewed Task4 registry. Never run a placeholder executable.
+        raise DockerError('startup_profile_unverified')
+
+    @_closed
+    def held_ready(self, container_id):
+        self._purpose(container_id, {Operation.HELD_OLD, Operation.HELD_TARGET})
+        raise DockerError('startup_profile_unverified')
+
     def close(self):
         # No Docker action and no recursive deletion of private stage content.
+        if isinstance(getattr(self, '_adapter', None), NativeProcess):
+            self._adapter._close()
         for fd in getattr(self, '_fds', ()):
             try:
                 info = os.fstat(fd)
@@ -840,3 +1014,888 @@ class OwnedDocker:
         self._resources = {}
         self._containers = {}
         self._closed = True
+
+
+def strict_json(raw):
+    _require(type(raw) is bytes and 0 < len(raw) <= 512 * 1024, 'output_bound')
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            _require(key not in value, 'evidence_invalid')
+            value[key] = item
+        return value
+    def constant(_):
+        raise DockerError('evidence_invalid')
+    try:
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=constant)
+        pending, nodes = [(value, 0)], 0
+        while pending:
+            item, depth = pending.pop()
+            nodes += 1
+            _require(nodes <= 20000 and depth <= 16, 'evidence_invalid')
+            if type(item) is dict:
+                _require(len(item) <= 2048 and all(len(k) <= 1024 for k in item), 'evidence_invalid')
+                pending.extend((v, depth + 1) for v in item.values())
+            elif type(item) is list:
+                _require(len(item) <= 4096, 'evidence_invalid')
+                pending.extend((v, depth + 1) for v in item)
+            elif type(item) is str:
+                _require(len(item) <= 4096, 'evidence_invalid')
+            else:
+                _require(type(item) in (int, bool, type(None)), 'evidence_invalid')
+        return value
+    except DockerError:
+        raise
+    except Exception:
+        raise DockerError('evidence_invalid') from None
+
+
+class NativeProcess:
+    """Closed local Docker transport. Only OwnedDocker can authorize creation.
+
+    Every command runs below a live session supervisor that reaps descendants.
+    The supervisor remains the process-group leader after an early CLI exit;
+    signalling is guarded by its pidfd and /proc start token, never a saved PGID.
+    """
+    def __init__(self, context):
+        _require(type(context) is NativeContext, 'context_policy')
+        _budget(context)
+        self.context = context
+        self._owner = None
+        self._run = None
+        self._authorization = None
+        self._output_total = 0
+        self._serial = 0
+        self._deadline = time.monotonic() + 2400
+        self._cgroup = None
+        self._transport_clean = True
+
+    def _bind_owner(self, owner):
+        _require(self._owner is None and type(owner) is OwnedDocker and owner.context is self.context,
+                 'context_policy')
+        self._owner = owner
+
+    def _bind_run(self, run):
+        _require(self._owner is not None and self._run is None, 'stage_identity')
+        record = self._owner._guard_run(run)
+        self._run = run
+        self._output_fd = record['fd']
+        self._cgroup = CgroupBudget(self.context.cgroup_parent, record['token'])
+        self._cgroup.preflight_entry()
+        # Even the first metadata CLI inherits the authenticated entry envelope.
+        info = strict_json(self._invoke(['info', '--format',
+            '{"driver":{{json .CgroupDriver}},"version":{{json .CgroupVersion}}}'], limit=65536))
+        self._cgroup.allocate(info)
+
+    def _parent(self, run):
+        _require(run is self._run and self._cgroup is not None, 'resource_isolation')
+        self._sync_cgroups()
+        self._cgroup.guard()
+        return self._cgroup.docker_parent
+
+    def _steady(self):
+        _require(self._cgroup is not None, 'resource_isolation')
+        self._sync_cgroups()
+        self._cgroup.steady()
+
+    def _preparation(self):
+        _require(self._owner is not None and self._run is not None
+                 and all(c['state'] == 'removed' for c in self._owner._runs[self._run]['intents'].values()),
+                 'resource_isolation')
+        self._sync_cgroups()
+        self._cgroup.preparation()
+
+    def _finish(self):
+        _require(self._transport_clean is True and self._owner is not None and self._run is not None
+                 and self._owner.cleanup(self._run), 'cleanup_incomplete')
+        if self._cgroup is not None:
+            self._sync_cgroups()
+            self._cgroup.release()
+
+    def _sync_cgroups(self):
+        if self._cgroup is not None:
+            self._cgroup._expect_containers(frozenset(cid for cid, record in self._owner._containers.items()
+                if record['run'] is self._run and record['state'] != 'removed'))
+
+    def _authorize_create(self, record, env_fd):
+        _require(self._owner is not None and record is
+                 self._owner._runs[record['run']]['intents'][record['intent']], 'container_spec')
+        _require(record['run'] is self._run, 'stage_identity')
+        self._parent(record['run'])
+        _require(self._cgroup._mode == 'steady', 'resource_isolation')
+        self._authorization = (tuple(self._owner._argv(record['spec'], env_fd)),
+            () if env_fd is None else (env_fd,))
+
+    def _close(self):
+        if self._cgroup is not None:
+            self._cgroup._close_pins()
+
+    @_closed
+    def create(self, argv, *, env, pass_fds):
+        _require(self._authorization is not None
+                 and (tuple(argv), tuple(pass_fds)) == self._authorization and env == _ENV, 'container_spec')
+        self._authorization = None
+        return self._invoke(argv, pass_fds=pass_fds, limit=65536).decode('ascii').strip()
+
+    @_closed
+    def lookup(self, *, name=None, intent=None, run=None):
+        _require(sum(v is not None for v in (name, intent, run)) == 1, 'ownership_unknown')
+        if name is not None:
+            _require(type(name) is str and re.fullmatch(r'sifto-native-[a-f0-9]{32}-[a-f0-9]{32}', name),
+                     'ownership_unknown')
+            selected = 'name=^/' + name + '$'
+        else:
+            value = intent if intent is not None else run
+            _require(type(value) is str and re.fullmatch(r'[a-f0-9]{32}', value), 'ownership_unknown')
+            selected = 'label=sifto.' + ('intent' if intent is not None else 'run') + '=' + value
+        raw = self._invoke(['container', 'ls', '--all', '--no-trunc', '--format={{.ID}}',
+                            '--filter=' + selected], limit=65536)
+        ids = raw.decode('ascii', 'strict').splitlines()
+        _require(len(ids) <= 64 and all(_HASH.fullmatch(v) for v in ids), 'ownership_unknown')
+        return ids
+
+    @_closed
+    def inspect_image(self, reference):
+        legal = {i['repository'] + '@' + i['platform_manifest']
+                 for side in ('rollback', 'target') for i in fixed_profile()['bundle'][side]['images'].values()}
+        _require(reference in legal, 'image_descriptor')
+        template = '{"engine_id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"descriptor":{{json .Descriptor}}}'
+        value = strict_json(self._invoke(['image', 'inspect', '--format=' + template, reference], limit=65536))
+        _require(type(value) is dict and type(value.get('descriptor')) is dict, 'image_descriptor')
+        descriptor = value['descriptor']
+        value['descriptor'] = {k: descriptor.get(k) for k in ('digest', 'mediaType')}
+        return value
+
+    def _id(self, cid, *, candidate=False):
+        _require(type(cid) is str and _HASH.fullmatch(cid), 'container_identity')
+        _require(self._owner is not None and self._run in self._owner._runs, 'ownership_unknown')
+        record = self._owner._containers.get(cid)
+        _require((record is not None and record['run'] is self._run)
+                 or (candidate and any(c['id'] is None
+                     for c in self._owner._runs[self._run]['intents'].values())), 'ownership_unknown')
+
+    @_closed
+    def inspect(self, cid):
+        self._id(cid, candidate=True)
+        # Selected keys only: never Config.Env, full config, health logs or logs stderr.
+        config = {'Image': '.Image', 'Reference': '.Config.Image', 'Labels': '.Config.Labels',
+            'User': '.Config.User', 'Entrypoint': '.Config.Entrypoint', 'Cmd': '.Config.Cmd',
+            'WorkingDir': '.Config.WorkingDir', 'Mounts': '.Mounts', 'Tmpfs': '.HostConfig.Tmpfs'}
+        for key in ('Memory', 'MemorySwap', 'NanoCpus', 'PidsLimit', 'CapDrop', 'CapAdd',
+                    'SecurityOpt', 'ReadonlyRootfs', 'NetworkMode', 'PidMode', 'IpcMode',
+                    'CgroupnsMode', 'CgroupParent', 'Privileged', 'ExtraHosts', 'Devices'):
+            config[key] = '.HostConfig.' + key
+        config.update(Id='.Id', Name='.Name', Ports='.HostConfig.PortBindings')
+        template = '{' + ','.join('"' + k + '":{{json ' + v + '}}' for k, v in config.items())
+        template += ',"State":{"Status":{{json .State.Status}},"Running":{{json .State.Running}},"ExitCode":{{json .State.ExitCode}},"OOMKilled":{{json .State.OOMKilled}}}}'
+        code, raw, error = self._invoke_status(['container', 'inspect', '--format=' + template, cid], limit=65536)
+        if code:
+            # Only a typed absent result is accepted; arbitrary errors are failures.
+            _require(error.strip() in (('Error: No such container: ' + cid).encode(),
+                     ('Error response from daemon: No such container: ' + cid).encode()), 'command_failed')
+            return None
+        value = strict_json(raw)
+        _require(type(value) is dict, 'container_spec')
+        value['Name'] = value['Name'].removeprefix('/')
+        for key in ('CapAdd', 'Devices', 'ExtraHosts'):
+            if value[key] is None:
+                value[key] = []
+        if value['Ports'] is None:
+            value['Ports'] = {}
+        value['Mounts'] = [{k: m[k] for k in ('Type', 'Source', 'Destination', 'RW', 'Propagation')}
+                           for m in value['Mounts']]
+        if value['State']['Running']:
+            self._verify_placement(cid, value)
+        return value
+
+    def _verify_placement(self, cid, value):
+        pid = self._invoke(['container', 'inspect', '--format={{.State.Pid}}', cid], limit=64)
+        _require(re.fullmatch(rb'[1-9][0-9]{0,9}\n?', pid) is not None, 'resource_isolation')
+        self._sync_cgroups()
+        self._cgroup.verify_container(int(pid), value)
+
+    @_closed
+    def start(self, cid):
+        self._id(cid)
+        self._invoke(['container', 'start', cid], limit=65536)
+
+    @_closed
+    def stop(self, cid):
+        self._id(cid)
+        self._invoke(['container', 'stop', '--time=5', cid], limit=65536)
+
+    @_closed
+    def remove(self, cid):
+        self._id(cid)
+        self._invoke(['container', 'rm', '--volumes', cid], limit=65536)
+
+    @_closed
+    def wait_result(self, cid, *, seconds):
+        self._id(cid)
+        _require(seconds in (30, 180, 900), 'context_policy')
+        result = self._invoke(['container', 'wait', cid], seconds=seconds, limit=64)
+        _require(result.strip() == b'0', 'startup_state')
+        # stdout only is a producer protocol. Never publish or read Docker stderr logs.
+        return self._invoke(['container', 'logs', cid], limit=512 * 1024)
+
+    @_closed
+    def postgres_ready(self, cid):
+        self._id(cid)
+        _require(self._owner._containers[cid]['operation'] is Operation.POSTGRES, 'container_spec')
+        code, value, error = self._invoke_status(['exec', '--user=postgres', cid, 'psql',
+            '--no-psqlrc', '--host=127.0.0.1', '--username=coolify', '--dbname=coolify',
+            '--no-password', '--tuples-only', '--no-align', '--command=SELECT 1'], limit=4096)
+        if code == 0:
+            _require(value == b'1\n' and error == b'', 'startup_state')
+            return True
+        # libpq's two fixed readiness failures only. Authentication/SQL errors fail closed.
+        _require(code == 2 and value == b'' and error.startswith(b'psql: error: connection to server at "127.0.0.1", port 5432 failed: ')
+                 and (b'Connection refused' in error or b'the database system is starting up' in error)
+                 and len(error) <= 2048, 'startup_state')
+        return False
+
+    @_closed
+    def restore_original(self, cid, *, dump_fd):
+        self._id(cid)
+        record = self._owner._containers[cid]
+        _require(record['operation'] is Operation.POSTGRES and record.get('restore_attempted'), 'container_spec')
+        sealed = self._owner._guard_resources(record['run'], record['phase'], record['resources'], ('coolify.dump',))
+        _require(_metadata(os.fstat(dump_fd)) == sealed['leaves']['coolify.dump']['identity'], 'material_binding')
+        self._invoke(['exec', '-i', '--user=postgres', cid, 'pg_restore', '--exit-on-error',
+            '--no-owner', '--no-privileges', '--host=127.0.0.1', '--username=coolify', '--dbname=coolify'],
+            seconds=180, stdin_fd=dump_fd, limit=65536)
+
+    def _invoke(self, argv, **kwargs):
+        code, value, _ = self._invoke_status(argv, **kwargs)
+        _require(code == 0, 'command_failed')
+        return value
+
+    def _invoke_status(self, argv, *, pass_fds=(), stdin_fd=None, seconds=30, limit=65536):
+        _require(self._owner is not None and self._run is not None, 'stage_identity')
+        self._owner._guard_run(self._run)
+        _require(self._cgroup is not None and self._cgroup.preflighted, 'resource_isolation')
+        self._sync_cgroups()
+        self._cgroup.guard()
+        _require(type(seconds) is int and 0 < seconds <= 900 and 0 < limit <= 1024 * 1024,
+                 'context_policy')
+        # Reserve process TERM/KILL/reap time inside both the operation and the
+        # shared whole/cleanup deadline; a last command cannot extend either.
+        deadline = min(self._deadline, time.monotonic() + seconds) - 3
+        _require(time.monotonic() < deadline, 'command_timeout')
+        remaining = 16 * 1024 * 1024 - self._output_total
+        _require(remaining >= 2, 'output_bound')
+        limit = min(limit, remaining // 2)
+        self._serial += 1
+        prefix = 'command-' + str(self._serial)
+        try:
+            result = _supervise(['/usr/bin/docker', '--host=unix://' + str(self.context.docker_socket), *argv],
+                output_fd=self._output_fd, prefix=prefix, pass_fds=tuple(pass_fds),
+                stdin_fd=stdin_fd, deadline=deadline, limit=limit,
+                attach=self._cgroup.attach)
+        except DockerError as error:
+            if getattr(error, '_process_cleanup', None) is not _PROCESS_CLEANUP:
+                self._transport_clean = False
+            raise
+        finally:
+            # Failed producers/timeouts also consume the private output budget.
+            for suffix in ('stdout', 'stderr'):
+                try:
+                    self._output_total += os.stat(prefix + '.' + suffix,
+                        dir_fd=self._output_fd, follow_symlinks=False).st_size
+                except FileNotFoundError:
+                    pass
+        _require(self._output_total <= 16 * 1024 * 1024, 'output_bound')
+        return result
+
+
+def _start_token(pid):
+    # comm may contain spaces or parentheses; field 22 follows the last ')'.
+    value = Path('/proc/' + str(pid) + '/stat').read_bytes()
+    return value[value.rfind(b')') + 2:].split()[19]
+
+
+def _supervise(argv, *, output_fd, prefix, pass_fds=(), stdin_fd=None,
+               deadline, limit, attach=None):
+    """Private transport primitive, exercised with synthetic exec children only.
+
+    argv never reaches a public adapter method; NativeProcess fixes the binary
+    and operation. The native session supervisor is Python fork code, not shell.
+    """
+    import ctypes
+    import errno
+    import select
+    import selectors
+    import signal
+    descriptors, files, pipes = [], [], []
+    pid = pidfd = None
+    reaped = False
+    failure = None
+    pending_error = None
+    released = False
+    process_clean = False
+    def fail(category):
+        nonlocal failure
+        if failure is None:
+            failure = DockerError(category)
+    streams = [bytearray(), bytearray()]
+    exit_bytes = bytearray()
+    try:
+        _require(type(argv) is list and all(type(v) is str and '\x00' not in v for v in argv), 'container_spec')
+        _require(type(prefix) is str and re.fullmatch(r'command-[0-9]{1,8}', prefix), 'stage_identity')
+        _require(type(limit) is int and 0 < limit <= 1024 * 1024, 'output_bound')
+        _require(type(pass_fds) is tuple and len(pass_fds) <= 1
+                 and all(type(fd) is int and fd > 2 for fd in pass_fds), 'container_spec')
+        for fd in pass_fds:
+            os.fstat(fd)
+        if stdin_fd is not None:
+            os.fstat(stdin_fd)
+        for suffix in ('stdout', 'stderr'):
+            fd = os.open(prefix + '.' + suffix, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         0o600, dir_fd=output_fd)
+            descriptors.append(fd)
+            info = os.fstat(fd)
+            _require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1
+                     and stat.S_IMODE(info.st_mode) == 0o600, 'stage_identity')
+            files.append(fd)
+        for _ in range(4):
+            pair = os.pipe2(os.O_CLOEXEC)
+            pipes.append(pair)
+            descriptors.extend(pair)
+        out, err, status, ready = pipes
+        pid = os.fork()
+        if pid == 0:
+            try:
+                os.setsid()
+                # Adopt orphaned grandchildren, so the live session leader owns
+                # the group until every inherited output writer has exited.
+                if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
+                    os._exit(125)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                force = [False]
+                signal.signal(signal.SIGUSR1, lambda *_: force.__setitem__(0, True))
+                for fd in (out[0], err[0], status[0], ready[1], *files):
+                    os.close(fd)
+                # Parent places and verifies this supervisor before the CLI fork.
+                if os.read(ready[0], 1) != b'1':
+                    os._exit(125)
+                os.close(ready[0])
+                child = os.fork()
+                if child == 0:
+                    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+                    signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+                    os.dup2(out[1], 1)
+                    os.dup2(err[1], 2)
+                    zero = os.open('/dev/null', os.O_RDONLY) if stdin_fd is None else stdin_fd
+                    os.dup2(zero, 0)
+                    retained = {0, 1, 2, *pass_fds}
+                    for fd in pass_fds:
+                        os.set_inheritable(fd, True)
+                    for name in os.listdir('/proc/self/fd'):
+                        fd = int(name)
+                        if fd not in retained:
+                            try:
+                                os.close(fd)
+                            except OSError:
+                                pass
+                    os.execve(argv[0], argv, dict(_ENV))
+                os.close(out[1]); os.close(err[1])
+                # No private FD is inherited by the supervisor unnecessarily.
+                for name in os.listdir('/proc/self/fd'):
+                    fd = int(name)
+                    if fd > 2 and fd != status[1]:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
+                code = 125
+                while True:
+                    if force[0]:
+                        # These are unreaped children: their PIDs cannot be reused.
+                        owned = Path('/proc/self/task/' + str(os.getpid()) + '/children').read_text().split()
+                        for selected in owned:
+                            try:
+                                os.kill(int(selected), signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                    try:
+                        selected, state = os.waitpid(-1, os.WNOHANG)
+                    except ChildProcessError:
+                        break
+                    if selected == child:
+                        code = os.waitstatus_to_exitcode(state)
+                    if selected == 0:
+                        select.select([], [], [], 0.01)
+                os.write(status[1], str(max(0, min(255, code if code >= 0 else 128 - code))).encode())
+                os._exit(0)
+            except BaseException:
+                os._exit(125)
+        pidfd = os.pidfd_open(pid)
+        descriptors.append(pidfd)
+        token = _start_token(pid)
+        for fd in (out[1], err[1], status[1], ready[0]):
+            os.close(fd); descriptors.remove(fd)
+        while os.getsid(pid) != pid:
+            _require(time.monotonic() < deadline, 'command_timeout')
+            select.select([], [], [], 0.001)
+        if attach is not None:
+            attach(pid, token)
+        released = True
+        os.write(ready[1], b'1')
+        os.close(ready[1]); descriptors.remove(ready[1])
+        selector = selectors.DefaultSelector()
+        try:
+            for index, fd in enumerate((out[0], err[0], status[0])):
+                os.set_blocking(fd, False)
+                selector.register(fd, selectors.EVENT_READ, index)
+            def live():
+                # A ready pidfd means dead; never signal a stale/reused process group.
+                return not select.select([pidfd], [], [], 0)[0] and _start_token(pid) == token
+            def signal_owned(sig, group=False):
+                if live():
+                    if group:
+                        _require(os.getpgid(pid) == pid and os.getsid(pid) == pid, 'ownership_unknown')
+                        os.killpg(pid, sig)
+                    else:
+                        signal.pidfd_send_signal(pidfd, sig)
+            terminate_at = kill_at = None
+            while selector.get_map() or live():
+                now = time.monotonic()
+                if failure is None and now >= deadline:
+                    fail('command_timeout')
+                if failure is not None and terminate_at is None:
+                    signal_owned(signal.SIGTERM, group=True)
+                    terminate_at = now
+                if terminate_at is not None and now - terminate_at >= 0.25 and kill_at is None:
+                    signal_owned(signal.SIGUSR1)
+                    kill_at = now
+                if kill_at is not None and now - kill_at > 2:
+                    fail('cleanup_incomplete')
+                    signal_owned(signal.SIGKILL)
+                    break
+                try:
+                    events = selector.select(0.02)
+                except (KeyboardInterrupt, SystemExit):
+                    fail('interrupted')
+                    continue
+                for key, _ in events:
+                    value = os.read(key.fd, 65536)
+                    if not value:
+                        selector.unregister(key.fd)
+                        continue
+                    if key.data == 2:
+                        exit_bytes.extend(value)
+                        if len(exit_bytes) > 3:
+                            fail('command_failed')
+                    else:
+                        index = key.data
+                        if len(streams[index]) + len(value) > limit:
+                            fail('output_bound')
+                        elif failure is None:
+                            streams[index].extend(value)
+                            OwnedDocker._write_all(files[index], value)
+            _, supervisor_state = os.waitpid(pid, 0)
+            reaped = True
+            process_clean = os.waitstatus_to_exitcode(supervisor_state) == 0
+            for fd in files:
+                os.fsync(fd)
+            if failure is not None:
+                raise failure
+            _require(process_clean, 'cleanup_incomplete')
+            _require(re.fullmatch(rb'[0-9]{1,3}', exit_bytes) is not None, 'command_failed')
+            return int(exit_bytes), bytes(streams[0]), bytes(streams[1])
+        finally:
+            selector.close()
+    except DockerError as error:
+        pending_error = failure if failure is not None else error
+        raise pending_error from None
+    except (KeyboardInterrupt, SystemExit):
+        pending_error = failure if failure is not None else DockerError('interrupted')
+        raise pending_error from None
+    except BaseException:
+        pending_error = failure if failure is not None else DockerError('command_failed')
+        raise pending_error from None
+    finally:
+        if pid is not None and pid > 0 and not reaped:
+            # Setup failure: handshake prevents exec. Keep exact supervisor identity.
+            try:
+                if pidfd is not None:
+                    signal.pidfd_send_signal(pidfd, signal.SIGUSR1)
+                for pair in pipes:
+                    if pair[1] in descriptors:
+                        os.close(pair[1]); descriptors.remove(pair[1])
+                end = time.monotonic() + 2
+                while True:
+                    observed, supervisor_state = os.waitpid(pid, os.WNOHANG)
+                    if observed == pid:
+                        reaped = True
+                        process_clean = not released or os.waitstatus_to_exitcode(supervisor_state) == 0
+                        break
+                    if time.monotonic() >= end:
+                        if pidfd is not None:
+                            signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                        os.waitpid(pid, 0)
+                        reaped = True
+                        process_clean = False
+                        break
+                    select.select([], [], [], 0.01)
+            except (OSError, ChildProcessError):
+                pass
+        for fd in reversed(descriptors):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if pending_error is not None:
+            pending_error.cleanup_complete = pid is None or process_clean
+            if pending_error.cleanup_complete:
+                pending_error._process_cleanup = _PROCESS_CLEANUP
+
+
+class CgroupBudget:
+    """Closed cgroupfs-v2 envelope; native processes never migrate.
+
+    A trusted launcher must start fresh Python inside native-entry BEFORE Python
+    initialization. Current membership cannot prove page-charge origin; N3 must
+    provide a real-kernel witness. Parent quota covers entry and container pages.
+    """
+    ROOT = Path('/sys/fs/cgroup')
+    PARENT = {'memory.max': '1342177280', 'memory.swap.max': '0',
+              'cpu.max': '175000 100000', 'pids.max': '576'}
+    PREPARATION = {**PARENT, 'pids.max': '64'}
+    STEADY = {'memory.max': '268435456', 'memory.swap.max': '0',
+              'cpu.max': '12500 100000', 'pids.max': '64'}
+    CONTAINERS = {'memory.max': '1073741824', 'memory.swap.max': '0',
+                  'cpu.max': '162500 100000', 'pids.max': '512'}
+
+    def __init__(self, parent, token):
+        _require(isinstance(parent, Path) and parent.is_relative_to(self.ROOT) and parent != self.ROOT
+                 and re.fullmatch(r'[a-f0-9]{32}', token), 'resource_isolation')
+        self.parent = parent
+        self.path = parent / ('sifto-' + token)
+        self.native = self._entry = parent / 'native-entry'
+        self.docker_parent = '/' + str(self.path.relative_to(self.ROOT))
+        self.allocated = self.preflighted = False
+        self._mode = 'preparation'
+        self._entry_limits = dict(self.PREPARATION)
+        self._limits_trusted = True
+        self._pins, self._identities, self._container_pins = {}, {}, {}
+        self._expected_ids = frozenset()
+        self._sessions, self._cpu_samples = {}, {}
+        self._created = []
+        self._engine_pid = os.getpid()
+        self._engine_token = _start_token(self._engine_pid)
+
+    def _mkdir(self, path):
+        path.mkdir(mode=0o700)
+
+    def _directories(self, path):
+        return [p for p in path.iterdir() if p.is_dir()]
+
+    def _rmdir(self, path):
+        path.rmdir()
+
+    def _read(self, path):
+        return path.read_text().strip()
+
+    def _write(self, path, value):
+        # Parent policy and membership are never mutated by this implementation.
+        _require(path.parent in (self.native, self.path)
+                 and path.name in self.PARENT, 'resource_isolation')
+        with path.open('w') as stream:
+            stream.write(value)
+
+    def _identity(self, path):
+        info = path.lstat()
+        _require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
+                 'resource_isolation')
+        return _metadata(info, True)
+
+    def _open_directory(self, path):
+        fd, _ = _protected_open(path, os.O_RDONLY | os.O_DIRECTORY, category='resource_isolation')
+        return fd
+
+    def _held_identity(self, fd):
+        return _metadata(os.fstat(fd), True)
+
+    def _close_directory(self, fd):
+        os.close(fd)
+
+    def _pin(self, path):
+        identity = self._identity(path)
+        fd = self._open_directory(path)
+        self._pins[path], self._identities[path] = fd, identity
+        _require(self._held_identity(fd) == identity, 'resource_isolation')
+
+    def _guard_pins(self):
+        _require(all(self._identity(path) == identity
+                 and self._held_identity(self._pins[path]) == identity
+                 for path, identity in self._identities.items()), 'resource_isolation')
+
+    def _limits(self, path):
+        return {key: self._read(path / key) for key in self.PARENT}
+
+    def _observe(self, path):
+        try:
+            events = dict(line.split() for line in self._read(path / 'memory.events').splitlines())
+            _require(events.get('oom') == events.get('oom_kill') == '0', 'resource_isolation')
+            values = dict(line.split() for line in self._read(path / 'cpu.stat').splitlines())
+            sample = {key: int(values[key]) for key in ('nr_periods', 'nr_throttled', 'throttled_usec')}
+            _require(all(value >= 0 for value in sample.values()), 'resource_isolation')
+            # Successful CPU throttling is normal; failed children stay failures.
+            self._cpu_samples[path] = sample
+        except (ValueError, KeyError):
+            raise DockerError('resource_isolation') from None
+
+    def _placement(self, pid):
+        raw = Path('/proc/' + str(pid) + '/cgroup').read_text().strip()
+        _require(raw.startswith('0::/') and '\n' not in raw, 'resource_isolation')
+        return self.ROOT / raw[4:]
+
+    def _process(self, pid):
+        value = Path('/proc/' + str(pid) + '/stat').read_bytes()
+        fields = value[value.rfind(b')') + 2:].split()
+        return {'token': fields[19], 'ppid': int(fields[1]),
+                'pgid': int(fields[2]), 'sid': int(fields[3])}
+
+    def _pids(self):
+        raw = self._read(self.native / 'cgroup.procs').split()
+        _require(len(raw) <= 64 and all(re.fullmatch(r'[1-9][0-9]{0,9}', pid) for pid in raw),
+                 'resource_isolation')
+        pids = set(map(int, raw))
+        _require(len(pids) == len(raw) and self._engine_pid in pids, 'resource_isolation')
+        return pids
+
+    def _native_members(self, candidate=None):
+        pids = self._pids()
+        main = self._process(self._engine_pid)
+        _require(main['token'] == self._engine_token
+                 and self._placement(self._engine_pid) == self.native, 'resource_isolation')
+        for pid in pids - {self._engine_pid}:
+            try:
+                info = self._process(pid)
+            except (ProcessLookupError, FileNotFoundError):
+                _require(pid not in self._pids(), 'resource_isolation')
+                continue
+            if candidate is not None and pid == candidate[0]:
+                _require(info['token'] == candidate[1] and info['ppid'] == self._engine_pid
+                         and info['sid'] == info['pgid'] == pid, 'resource_isolation')
+            else:
+                leader = info['sid']
+                _require(info['pgid'] == leader and leader in self._sessions, 'resource_isolation')
+                try:
+                    owned = self._process(leader)
+                except (ProcessLookupError, FileNotFoundError):
+                    raise DockerError('resource_isolation') from None
+                _require(owned['token'] == self._sessions[leader], 'resource_isolation')
+            _require(self._placement(pid) == self.native
+                     and self._process(pid)['token'] == info['token'], 'resource_isolation')
+        for leader, token in list(self._sessions.items()):
+            try:
+                _require(self._process(leader)['token'] == token, 'resource_isolation')
+            except (ProcessLookupError, FileNotFoundError):
+                _require(not any(self._process(pid)['sid'] == leader for pid in pids - {self._engine_pid}),
+                         'resource_isolation')
+                del self._sessions[leader]
+        return pids
+
+    def preflight_entry(self):
+        _require(not self.allocated, 'resource_isolation')
+        if self.preflighted:
+            self.guard()
+            return
+        _require({'memory', 'cpu', 'pids'} <= set(self._read(self.parent / 'cgroup.controllers').split())
+                 and {'memory', 'cpu', 'pids'} <= set(self._read(self.parent / 'cgroup.subtree_control').split())
+                 and self._read(self.parent / 'cgroup.type') == 'domain', 'resource_isolation')
+        path = self.ROOT
+        self._pin(path)
+        for name in self.parent.relative_to(self.ROOT).parts:
+            path /= name
+            self._pin(path)
+        self._pin(self.native)
+        _require(self._limits(self.parent) == self.PARENT
+                 and self._limits(self.native) == self.PREPARATION
+                 and self._read(self.parent / 'cgroup.procs') == ''
+                 and set(self._directories(self.parent)) == {self.native}
+                 and not self._directories(self.native)
+                 and self._pids() == {self._engine_pid}, 'resource_isolation')
+        self._native_members()
+        self._observe(self.parent)
+        self._observe(self.native)
+        self.preflighted = True
+        self.guard()
+
+    def _expect_containers(self, ids):
+        _require(type(ids) is frozenset and all(type(cid) is str and _HASH.fullmatch(cid) for cid in ids),
+                 'resource_isolation')
+        self._expected_ids = ids
+
+    def guard(self, candidate=None):
+        _require(self.preflighted and self._limits_trusted, 'resource_isolation')
+        self._guard_pins()
+        _require(self._limits(self.parent) == self.PARENT
+                 and self._limits(self.native) == self._entry_limits
+                 and self._read(self.parent / 'cgroup.procs') == ''
+                 and not self._directories(self.native)
+                 and set(self._directories(self.parent)) ==
+                     ({self.native, self.path} if self.allocated or self._created else {self.native}),
+                 'resource_isolation')
+        self._native_members(candidate)
+        self._observe(self.parent)
+        self._observe(self.native)
+        if self.allocated:
+            _require(self._limits(self.path) == self.CONTAINERS
+                     and self._read(self.path / 'cgroup.procs') == '', 'resource_isolation')
+            children = self._directories(self.path)
+            _require(all(path.name in self._expected_ids and path.parent == self.path for path in children),
+                     'resource_isolation')
+            self._observe(self.path)
+            for path, (fd, identity) in self._container_pins.items():
+                _require(self._held_identity(fd) == identity, 'resource_isolation')
+                try:
+                    if path in children:
+                        _require(self._identity(path) == identity, 'resource_isolation')
+                except FileNotFoundError:
+                    pass  # A removed daemon cgroup is never adopted if recreated.
+
+    def allocate(self, info):
+        _require(info == {'driver': 'cgroupfs', 'version': '2'} and not self.allocated,
+                 'resource_isolation')
+        if not self.preflighted:
+            self.preflight_entry()
+        self.guard()
+        try:
+            self._mkdir(self.path)
+            self._created.append(self.path)
+            self._pin(self.path)
+            for key, value in self.CONTAINERS.items():
+                self._write(self.path / key, value)
+                _require(self._read(self.path / key) == value, 'resource_isolation')
+            self.allocated = True
+            self.guard()
+        except BaseException as error:
+            first = self._first_failure(error)
+            try:
+                self._remove_empty_run()
+                self.guard()
+            except BaseException:
+                pass
+            else:
+                first.cleanup_complete = True
+            raise first from None
+
+    @staticmethod
+    def _first_failure(error):
+        if isinstance(error, DockerError):
+            return DockerError(str(error))
+        return DockerError('interrupted' if isinstance(error, (KeyboardInterrupt, SystemExit))
+                           else 'resource_isolation')
+
+    def attach(self, pid, token):
+        # _supervise supplies an exact forked session leader before the CLI fork.
+        # Verify inherited placement; NEVER write cgroup.procs or move any PID.
+        self.guard(candidate=(pid, token))
+        info = self._process(pid)
+        _require(info['token'] == token and info['ppid'] == self._engine_pid
+                 and info['sid'] == info['pgid'] == pid and self._placement(pid) == self.native,
+                 'resource_isolation')
+        self._sessions[pid] = token
+
+    def _transition(self, target, mode):
+        self.guard()
+        if target == self.STEADY:
+            current = self._read(self.native / 'memory.current')
+            _require(current.isdigit() and int(current) < 256 * 1024 * 1024, 'resource_capacity')
+        for key, value in target.items():
+            if self._entry_limits[key] == value:
+                continue
+            previous = self._entry_limits[key]
+            try:
+                self._write(self.native / key, value)
+            except BaseException as error:
+                first = self._first_failure(error)
+                try:
+                    observed = self._read(self.native / key)
+                    if observed == value:
+                        self._entry_limits[key] = value
+                    elif observed != previous:
+                        self._limits_trusted = False
+                except BaseException:
+                    self._limits_trusted = False
+                raise first from None
+            if self._read(self.native / key) != value:
+                self._limits_trusted = False
+                raise DockerError('resource_isolation')
+            self._entry_limits[key] = value
+        self._mode = mode
+        self.guard()
+
+    def preparation(self):
+        self.guard()
+        _require(self.allocated and not self._expected_ids and not self._directories(self.path)
+                 and self._read(self.path / 'cgroup.procs') == ''
+                 and self._native_members() == {self._engine_pid}, 'resource_isolation')
+        self._transition(self.PREPARATION, 'preparation')
+
+    def steady(self):
+        self._transition(self.STEADY, 'steady')
+
+    def verify_container(self, pid, value):
+        self.guard()
+        cid = value.get('Id')
+        _require(cid in self._expected_ids and self._mode == 'steady', 'resource_isolation')
+        token = self._process(pid)['token']
+        path = self._placement(pid)
+        _require(path == self.path / cid, 'resource_isolation')
+        identity = self._identity(path)
+        if path not in self._container_pins:
+            fd = self._open_directory(path)
+            self._container_pins[path] = (fd, identity)
+        fd, expected = self._container_pins[path]
+        _require(identity == self._held_identity(fd) == expected
+                 and self._limits(path) == {'memory.max': str(value['Memory']), 'memory.swap.max': '0',
+                     'cpu.max': str(value['NanoCpus'] // 10000) + ' 100000', 'pids.max': str(value['PidsLimit'])}
+                 and self._placement(pid) == path and self._process(pid)['token'] == token,
+                 'resource_isolation')
+        self._observe(path)
+
+    def _remove_empty_run(self):
+        self._guard_pins()
+        _require(not self._expected_ids and self._native_members() == {self._engine_pid},
+                 'cleanup_incomplete')
+        for path in reversed(self._created):
+            _require(not self._directories(path) and self._read(path / 'cgroup.procs') == '',
+                     'cleanup_incomplete')
+            self._rmdir(path)
+            self._close_directory(self._pins.pop(path))
+            del self._identities[path]
+        self._created = []
+        self.allocated = False
+
+    def release(self):
+        if not self.preflighted:
+            _require(not self._created, 'cleanup_incomplete')
+            self._close_pins()
+            return
+        self.guard()
+        _require(not self._expected_ids and self._native_members() == {self._engine_pid},
+                 'cleanup_incomplete')
+        self._remove_empty_run()
+        # All containers and CLI helpers are gone before restoring the entry cap.
+        self.guard()
+        self._transition(self.PREPARATION, 'preparation')
+
+    def _close_pins(self):
+        for path, fd in list(self._pins.items()):
+            try:
+                if self._held_identity(fd) == self._identities[path]:
+                    self._close_directory(fd)
+            except OSError:
+                pass
+        for fd, identity in self._container_pins.values():
+            try:
+                if self._held_identity(fd) == identity:
+                    self._close_directory(fd)
+            except OSError:
+                pass
+        self._pins, self._identities, self._container_pins = {}, {}, {}

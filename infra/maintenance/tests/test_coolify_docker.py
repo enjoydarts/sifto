@@ -24,6 +24,7 @@ SOURCES = ('host_agent.py', 'maintenance/__init__.py', 'maintenance/plan.py',
            'maintenance/host.py', 'maintenance/coolify_host.py',
            'maintenance/coolify_plan.py', 'maintenance/coolify_rehearsal.py',
            'maintenance/coolify_evidence.py', 'maintenance/coolify_docker.py',
+           'maintenance/coolify_rehearsal_engine.py',
            'maintenance/coolify-public-manifest.json', 'maintenance/coolify_probe.php')
 
 
@@ -746,11 +747,63 @@ class OwnedDockerTests(unittest.TestCase):
     def test_ambiguous_late_create_is_unowned_and_never_cleaned(self):
         self.daemon.create_fault = 'ambiguous'
         run = self.owned.allocate_run()
-        self.assert_category('ownership_unknown', lambda: self.owned.create(
+        self.assert_category('command_timeout', lambda: self.owned.create(
             run, operation=d.Operation.IDENTITY_OLD, phase=d.Phase.RUN, resources=None))
         self.assertFalse(self.owned.cleanup(run))
         self.assertEqual(len(self.daemon.containers), 2)
         self.assertFalse(any(c[0] in ('start', 'stop', 'rm') for c in self.daemon.calls))
+
+    def test_native_create_failure_keeps_first_cause_and_unresolved_intent(self):
+        for observation in ('absent', 'ambiguous'):
+            for category in ('command_timeout', 'interrupted', 'output_bound'):
+                with self.subTest(observation=observation, category=category):
+                    daemon = FakeDaemon()
+                    owned = SyntheticOwned(self.context, adapter=daemon)
+                    self.addCleanup(owned.close)
+                    run = owned.allocate_run()
+                    original = daemon.create
+
+                    def failed_create(*args, **kwargs):
+                        cid = original(*args, **kwargs)
+                        if observation == 'absent':
+                            daemon.containers.pop(cid)
+                        else:
+                            daemon.containers['c' * 64] = {
+                                **copy.deepcopy(daemon.containers[cid]), 'Id': 'c' * 64}
+                        error = d.DockerError(category)
+                        error.cleanup_complete = True  # Incoming claims grant no cleanup authority.
+                        raise error
+
+                    with patch.object(daemon, 'create', side_effect=failed_create):
+                        with self.assertRaises(d.DockerError) as caught:
+                            owned.create(run, operation=d.Operation.IDENTITY_OLD,
+                                         phase=d.Phase.RUN, resources=None)
+                    self.assertEqual(str(caught.exception), category)
+                    self.assertFalse(caught.exception.cleanup_complete)
+                    intent, = owned._runs[run]['intents'].values()
+                    self.assertIsNone(intent['id'])
+                    self.assertEqual(intent['state'], 'intent')
+                    self.assertEqual(owned._containers, {})
+                    strangers = copy.deepcopy(daemon.containers)
+                    self.assertFalse(owned.cleanup(run))
+                    self.assertEqual(daemon.containers, strangers)
+                    self.assertFalse(any(c[0] in ('start', 'stop', 'rm') for c in daemon.calls))
+
+    def test_failed_create_cleanup_removes_only_previously_verified_id(self):
+        run, _, resources, container = self.postgres()
+        self.owned.start(container.container_id)
+        self.daemon.create_fault = 'ambiguous'
+        with self.assertRaises(d.DockerError) as caught:
+            self.owned.create(run, operation=d.Operation.REDIS,
+                              phase=d.Phase.OLD, resources=resources)
+        self.assertEqual(str(caught.exception), 'command_timeout')
+        self.assertFalse(caught.exception.cleanup_complete)
+        strangers = set(self.daemon.containers) - {container.container_id}
+        self.assertEqual(len(strangers), 2)
+        self.assertFalse(self.owned.cleanup(run))
+        self.assertEqual(set(self.daemon.containers), strangers)
+        self.assertEqual({c[1] for c in self.daemon.calls if c[0] in ('stop', 'rm')},
+                         {container.container_id})
 
     def test_planted_same_label_container_is_preserved_and_blocks_clean_success(self):
         run, _, _, container = self.postgres()
@@ -761,6 +814,66 @@ class OwnedDockerTests(unittest.TestCase):
         self.assertNotIn(ID, self.daemon.containers)
         self.assertIn('f' * 64, self.daemon.containers)
         self.assertEqual(self.owned.journal_state(container.container_id), 'removed')
+
+    def test_native_unresolved_intent_authorizes_inspection_only(self):
+        for observation in ('absent', 'ambiguous'):
+            with self.subTest(observation=observation):
+                owned = SyntheticOwned(self.context, adapter=self.daemon)
+                self.addCleanup(owned.close)
+                run = owned.allocate_run()
+                if observation == 'absent':
+                    failed = patch.object(self.daemon, 'create',
+                                          side_effect=d.DockerError('command_timeout'))
+                else:
+                    self.daemon.create_fault = 'ambiguous'
+                    failed = patch.object(self.daemon, 'create', wraps=self.daemon.create)
+                with failed:
+                    self.assert_category('command_timeout', lambda: owned.create(
+                        run, operation=d.Operation.IDENTITY_OLD, phase=d.Phase.RUN, resources=None))
+                native = d.NativeProcess(replace(self.context, budget=d.BudgetPolicy()))
+                # Unit-only wiring; real native owner binding refuses SyntheticOwned.
+                native._owner, native._run = owned, run
+                foreign = 'f' * 64
+                with patch.object(native, '_invoke', return_value=b'0') as invoke:
+                    for operation in ('start', 'stop', 'remove', 'wait_result'):
+                        with self.subTest(operation=operation):
+                            action = getattr(native, operation)
+                            self.assert_category('ownership_unknown', lambda: action(
+                                foreign, **({'seconds': 30} if operation == 'wait_result' else {})))
+                    invoke.assert_not_called()
+                if observation == 'absent':
+                    response = (1, b'', ('Error: No such container: ' + foreign).encode())
+                    expected = None
+                else:
+                    expected = copy.deepcopy(self.daemon.containers['c' * 64])
+                    response = (0, json.dumps(expected).encode(), b'')
+                    foreign = 'c' * 64
+                with patch.object(native, '_invoke_status', return_value=response) as inspect_call:
+                    self.assertEqual(native.inspect(foreign), expected)
+                    self.assertEqual(inspect_call.call_args.args[0][-1], foreign)
+                self.daemon.create_fault = None
+
+    def test_native_mutations_and_results_require_registered_bound_run_id(self):
+        run, _, _, container = self.postgres()
+        native = d.NativeProcess(replace(self.context, budget=d.BudgetPolicy()))
+        native._owner, native._run = self.owned, run
+        def invoke(argv, **kwargs):
+            return b'PUBLIC result' if argv[:2] == ['container', 'logs'] else b'0'
+        with patch.object(native, '_invoke', side_effect=invoke) as calls:
+            native.start(container.container_id)
+            self.assertEqual(native.wait_result(container.container_id, seconds=30), b'PUBLIC result')
+            native.stop(container.container_id)
+            native.remove(container.container_id)
+            self.assertEqual([c.args[0][1] for c in calls.call_args_list],
+                             ['start', 'wait', 'logs', 'stop', 'rm'])
+            self.assertTrue(all(c.args[0][-1] == container.container_id for c in calls.call_args_list))
+        native._run = self.owned.allocate_run()
+        with patch.object(native, '_invoke') as calls:
+            for operation in ('start', 'stop', 'remove', 'wait_result'):
+                with self.subTest(operation=operation):
+                    self.assert_category('ownership_unknown', lambda: getattr(native, operation)(
+                        container.container_id, **({'seconds': 30} if operation == 'wait_result' else {})))
+            calls.assert_not_called()
 
     def test_cleanup_failure_sanitizes_exception_and_retains_journal(self):
         run, _, _, _ = self.postgres()

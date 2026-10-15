@@ -765,6 +765,9 @@ class HostTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, installed)
         source = Path(__file__).parents[1]
         shutil.copyfile(source / "host_agent.py", installed / "host_agent.py")
+        for name in ("coolify_native_controller.py", "coolify_native_engine.py"):
+            shutil.copyfile(source / name, installed / name)
+        shutil.copytree(source / "systemd", installed / "systemd")
         shutil.copytree(source / "maintenance", installed / "maintenance", ignore=shutil.ignore_patterns("__pycache__"))
         state = Path("/var/lib/sifto-maintenance")
         (state / "plans").mkdir(mode=0o700, exist_ok=True)
@@ -795,6 +798,7 @@ class HostTests(unittest.TestCase):
         (package / "__init__.py").write_text(
             f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
         resources = ("coolify_rehearsal.py", "coolify_evidence.py", "coolify_docker.py", "coolify_rehearsal_engine.py",
+                     "coolify_systemd.py", "coolify_native_protocol.py", "coolify_cleanup.py", "coolify_native_owner.py",
                      "coolify-public-manifest.json", "coolify_probe.php")
         for name in resources:
             resource = package / name

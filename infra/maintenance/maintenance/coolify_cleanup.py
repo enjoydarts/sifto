@@ -145,6 +145,14 @@ class ContainerCleanupObservation:
     first_failure: str | None
 
 
+@dataclass(frozen=True, repr=False)
+class PermitProjection:
+    intent: str
+    operation: Operation
+    phase: Phase
+    spec_sha256: str
+
+
 def _dispatch(capability, expected, action, *args):
     _require(type(capability) is expected, 'ownership_unknown')
     try:
@@ -164,6 +172,9 @@ class _Capability:
 
 class AdmissionTicket(_Capability):
     __slots__ = ()
+
+    def guard(self):
+        return _dispatch(self, AdmissionTicket, 'admission_guard')
 
 
 class CleanupLease(_Capability):
@@ -207,6 +218,9 @@ class CreateAuthority(_Capability):
 
     def create_once(self, permit, runtime_env):
         return _dispatch(self, CreateAuthority, 'create', permit, runtime_env)
+
+    def permit_projection(self, permit):
+        return _dispatch(self, CreateAuthority, 'permit_projection', permit)
 
 
 class CleanupAuthority(_Capability):
@@ -671,6 +685,11 @@ class _DockerCommands:
         code, out, _ = self._run(['container', 'rm', '--force', '--volumes', cid], budget=_CLEANUP_COMMAND)
         _require(code == 0 and out.strip() == cid.encode(), 'command_failed')
 
+    def remove_main(self, cid):
+        _require(type(cid) is str and _ID.fullmatch(cid), 'container_identity')
+        code, out, _ = self._run(['container', 'rm', '--force', '--volumes', cid], budget=_MAIN_COMMAND)
+        _require(code == 0 and out.strip() == cid.encode(), 'command_failed')
+
     def close(self):
         if self.output is None:
             return
@@ -1052,6 +1071,32 @@ class _CleanupCore:
         _require(state['Running'] and state['Status'] == 'running' and not state['OOMKilled'], 'network_isolation')
         record['running'].add(value['id'])
 
+    def _remove_receipt(self, receipt):
+        """Normal one-container lifecycle; never borrows final cleanup budget."""
+        value = self._cap(receipt, CreatedReceipt)
+        record = value['record']
+        self._guard_record(record)
+        self._main_bound(record)
+        transaction = next(t for t in record['transactions'] if t['id'] == value['id'])
+        _require(transaction['state'] == 'RECEIPT' and value['id'] in record['verified'], 'ownership_unknown')
+        observed = record['commands'].inspect(value['id'])
+        _require(observed is not None, 'container_identity')
+        _owned_projection(transaction['spec'], value['id'], observed)
+        record['commands'].remove_main(value['id'])
+        _require(record['commands'].inspect(value['id']) is None, 'cleanup_incomplete')
+        self._append(record, 'REMOVED', {'intent': transaction['intent']})
+        record['running'].discard(value['id'])
+        self._main_bound(record)
+        return True
+
+    def _permit_projection(self, permit):
+        value = self._cap(permit, CreatePermit)
+        _require(not value['used'], 'ownership_unknown')
+        self._guard_record(value['record'])
+        self._main_bound(value['record'])
+        return PermitProjection(value['intent'], value['operation'], value['phase'],
+                                d._hash(_json(value['spec'])))
+
     def _register_runtime_env(self, lease, phase):
         record = self._lease_record(lease)
         self._guard_record(record)
@@ -1268,11 +1313,17 @@ class _CleanupCore:
                 return ContainerCleanupObservation(complete, record['first_failure'])
             if action == 'admission':
                 return self._admission()
+            if action == 'admission_guard':
+                self._cap(capability, AdmissionTicket)
+                self._lock()
+                return None
             if action == 'begin':
                 return self._begin(*args)
             if action == 'authorize':
                 record = self._lease_record(args[0])
                 return self._authorize(*args)
+            if action == 'permit_projection':
+                return self._permit_projection(*args)
             if action == 'register_phase':
                 record = self._lease_record(args[0])
                 return self._register_phase(*args)

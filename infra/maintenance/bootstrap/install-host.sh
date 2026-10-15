@@ -8,8 +8,8 @@ payload=$(realpath -- "$1")
 [[ -d "$payload" && ! -L "$1" ]]
 [[ $(stat -c %u "$payload") == 0 ]]
 [[ -z $(find "$payload" \( ! -user root -o -perm /022 -o -type l \) -print -quit) ]] || { printf 'payload must be protected and root-owned\n' >&2; exit 1; }
-for file in host_agent.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php config.json scan.pub apply.pub; do
-  [[ -f "$payload/$file" && ! -L "$payload/$file" ]] || { printf 'invalid payload\n' >&2; exit 1; }
+for file in host_agent.py coolify_native_controller.py coolify_native_engine.py systemd/sifto-coolify-native-controller.service maintenance/coolify_systemd.py maintenance/coolify_native_protocol.py maintenance/coolify_cleanup.py maintenance/coolify_native_owner.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php config.json scan.pub apply.pub; do
+  [[ -f "$payload/$file" && ! -L "$payload/$file" && $(stat -c %h "$payload/$file") == 1 ]] || { printf 'invalid payload\n' >&2; exit 1; }
 done
 scan_fingerprint=$(ssh-keygen -l -f "$payload/scan.pub" | awk '{print $2}')
 apply_fingerprint=$(ssh-keygen -l -f "$payload/apply.pub" | awk '{print $2}')
@@ -42,7 +42,7 @@ for name in scan apply; do
   ssh-keygen -l -f "$payload/$name.pub" >/dev/null
   [[ $(wc -l < "$payload/$name.pub") == 1 ]]
 done
-for path in /opt/sifto-maintenance /opt/sifto-maintenance/maintenance /etc/sifto-maintenance /var/lib/sifto-maintenance /var/lib/sifto-maintenance/plans /var/lib/sifto-maintenance-ssh; do
+for path in /opt/sifto-maintenance /opt/sifto-maintenance/maintenance /opt/sifto-maintenance/systemd /etc/sifto-maintenance /var/lib/sifto-maintenance /var/lib/sifto-maintenance/plans /var/lib/sifto-maintenance-ssh /var/lib/sifto-maintenance/coolify-native-request /var/lib/sifto-maintenance/coolify-native-state /var/lib/sifto-maintenance/coolify-native-runs /var/lib/sifto-maintenance/native-systemd-controller; do
   [[ ! -L "$path" ]] || { printf 'unexpected destination symlink\n' >&2; exit 1; }
   if [[ -e "$path" ]]; then
     [[ -d "$path" && $(stat -c %u "$path") == 0 ]] || { printf 'unexpected destination ownership\n' >&2; exit 1; }
@@ -55,12 +55,47 @@ fi
 [[ ! -L /var/lib/sifto-maintenance/maintenance.lock && $(stat -c %u /var/lib/sifto-maintenance/maintenance.lock) == 0 ]]
 exec 9<>/var/lib/sifto-maintenance/maintenance.lock
 flock -n 9 || { printf 'maintenance is running; install refused\n' >&2; exit 1; }
-install -d -o root -g root -m 0755 /opt/sifto-maintenance /opt/sifto-maintenance/maintenance
+install -d -o root -g root -m 0755 /opt/sifto-maintenance /opt/sifto-maintenance/maintenance /opt/sifto-maintenance/systemd
 install -o root -g root -m 0644 "$payload/host_agent.py" /opt/sifto-maintenance/host_agent.py
-for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
+for file in coolify_native_controller.py coolify_native_engine.py; do
+  install -o root -g root -m 0644 "$payload/$file" "/opt/sifto-maintenance/$file"
+done
+install -o root -g root -m 0644 "$payload/systemd/sifto-coolify-native-controller.service" /opt/sifto-maintenance/systemd/sifto-coolify-native-controller.service
+for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php; do
   install -o root -g root -m 0644 "$payload/maintenance/$file" "/opt/sifto-maintenance/maintenance/$file"
 done
 install -d -o root -g root -m 0700 /etc/sifto-maintenance /var/lib/sifto-maintenance /var/lib/sifto-maintenance/plans
+install -d -o root -g root -m 0700 /var/lib/sifto-maintenance/coolify-native-request /var/lib/sifto-maintenance/coolify-native-state /var/lib/sifto-maintenance/coolify-native-runs /var/lib/sifto-maintenance/native-systemd-controller
+# Hash the trusted installer payload, never a restored archive or adjacent manifest.
+/usr/bin/python3 -I -B - "$payload" <<'PY'
+import hashlib, json, os, pathlib, stat, sys
+root = pathlib.Path(sys.argv[1])
+names = ('host_agent.py', 'coolify_native_controller.py', 'coolify_native_engine.py',
+    'maintenance/__init__.py', 'maintenance/plan.py', 'maintenance/host.py',
+    'maintenance/coolify_host.py', 'maintenance/coolify_plan.py',
+    'maintenance/coolify_rehearsal.py', 'maintenance/coolify_evidence.py',
+    'maintenance/coolify_docker.py', 'maintenance/coolify_rehearsal_engine.py',
+    'maintenance/coolify_systemd.py', 'maintenance/coolify_native_protocol.py',
+    'maintenance/coolify_cleanup.py', 'maintenance/coolify_native_owner.py',
+    'maintenance/coolify-public-manifest.json', 'maintenance/coolify_probe.php',
+    'systemd/sifto-coolify-native-controller.service')
+document = {'version': 1, 'sources': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}}
+directory = os.open('/etc/sifto-maintenance', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+fd = os.open('coolify-native-sources.json', os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+             0o600, dir_fd=directory)
+try:
+    info = os.fstat(fd)
+    assert stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0 and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600
+    os.ftruncate(fd, 0)
+    raw = json.dumps(document, sort_keys=True, separators=(',', ':')).encode()
+    while raw:
+        raw = raw[os.write(fd, raw):]
+    os.fsync(fd)
+    os.fsync(directory)
+finally:
+    os.close(fd)
+    os.close(directory)
+PY
 config_temp=$(mktemp /etc/sifto-maintenance/config.XXXXXXXX)
 trap 'rm -f -- "$config_temp"' EXIT
 install -o root -g root -m 0600 "$payload/config.json" "$config_temp"

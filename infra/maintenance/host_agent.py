@@ -22,7 +22,11 @@ def validate_installed_sources():
     installed = Path("/opt/sifto-maintenance")
     if Path(__file__).absolute() != installed / "host_agent.py" or os.geteuid() != 0:
         raise ValueError("agent must run as root from trusted installation")
-    for source in ("host_agent.py", "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py",
+    for source in ("host_agent.py", "coolify_native_controller.py", "coolify_native_engine.py",
+                   "maintenance/coolify_systemd.py", "maintenance/coolify_native_protocol.py",
+                   "maintenance/coolify_cleanup.py", "maintenance/coolify_native_owner.py",
+                   "systemd/sifto-coolify-native-controller.service",
+                   "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py",
                    "maintenance/coolify_host.py", "maintenance/coolify_plan.py",
                    "maintenance/coolify_rehearsal.py", "maintenance/coolify_evidence.py",
                    "maintenance/coolify_docker.py", "maintenance/coolify_rehearsal_engine.py",
@@ -32,7 +36,7 @@ def validate_installed_sources():
             info = candidate.lstat()
             if stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
                 raise ValueError("agent sources must be root-owned with protected ancestors")
-        if not stat.S_ISREG(path.lstat().st_mode):
+        if not stat.S_ISREG(path.lstat().st_mode) or path.lstat().st_nlink != 1:
             raise ValueError("invalid agent source type")
 
 

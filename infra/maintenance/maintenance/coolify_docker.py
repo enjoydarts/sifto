@@ -28,7 +28,10 @@ _CATEGORIES = frozenset('context_policy source_closure image_descriptor image_id
     'synthetic_verified'.split())
 _HASH = re.compile(r'[a-f0-9]{64}\Z')
 _DIGEST = re.compile(r'sha256:[a-f0-9]{64}\Z')
-_SOURCE_NAMES = frozenset(('host_agent.py', 'maintenance/__init__.py', 'maintenance/plan.py',
+_SOURCE_NAMES = frozenset(('host_agent.py', 'coolify_native_controller.py', 'coolify_native_engine.py',
+    'maintenance/coolify_systemd.py', 'maintenance/coolify_native_protocol.py',
+    'maintenance/coolify_cleanup.py', 'maintenance/coolify_native_owner.py',
+    'systemd/sifto-coolify-native-controller.service', 'maintenance/__init__.py', 'maintenance/plan.py',
     'maintenance/host.py', 'maintenance/coolify_host.py', 'maintenance/coolify_plan.py',
     'maintenance/coolify_rehearsal.py', 'maintenance/coolify_evidence.py',
     'maintenance/coolify_docker.py', 'maintenance/coolify_rehearsal_engine.py', 'maintenance/coolify-public-manifest.json',

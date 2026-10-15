@@ -46,9 +46,17 @@ class PublicOwner:
         for name in ('old', 'fresh'):
             (self.run_path / name).mkdir(mode=0o700)
         (self.run_path / 'journal').touch(mode=0o600)
+        self.input_path = path / 'input'
+        self.input_path.mkdir(mode=0o700)
+        for name in ('request.json', 'material.tar'):
+            (self.input_path / name).write_bytes(b'PUBLIC synthetic input')
+            (self.input_path / name).chmod(0o600)
         self.allocation = tuple(self.open(self.run_path / name, directory=True)
                                 for name in ('.', 'old', 'fresh')) + (
-                                    self.open(self.run_path / 'journal', writable=True),)
+                                    self.open(self.run_path / 'journal', writable=True),
+                                    self.open(self.input_path / 'request.json'),
+                                    self.open(self.input_path / 'material.tar'))
+        self.registered_phases = []
 
     def open(self, path, *, directory=False, writable=False):
         fd = os.open(path, (os.O_RDWR if writable else os.O_RDONLY) | os.O_CLOEXEC
@@ -71,6 +79,31 @@ class PublicOwner:
 
     def issued_allocation_bundle(self):
         return self.allocation
+
+    def guard_allocation_bundle(self, fds):
+        n._require(len(fds) == 6 and all(n._id(os.fstat(fd)) == n._id(os.fstat(expected))
+                   for fd, expected in zip(fds, self.allocation)), 'descriptor_invalid')
+
+    def register_received_allocation(self, fds):
+        self.guard_allocation_bundle(fds)
+
+    def transfer_engine_journal(self):
+        (self.path / 'journal-transfer').write_bytes(b'PUBLIC durable transfer')
+
+    def register_received_material(self, registration):
+        core = registration._core
+        n._require(core.io_deadline is not None
+                   and core.io_deadline <= time.monotonic() + 30, 'deadline')
+        processing_deadline = core.io_deadline
+        fds = registration.borrowed_fds()
+        n._require(core.io_deadline == processing_deadline, 'deadline')
+        phase = (n.Phase.OLD, n.Phase.FRESH)[len(self.registered_phases)]
+        self.registered_phases.append(phase)
+        target = self.path / ('material-' + phase.value)
+        with target.open('wb') as stream:
+            stream.write(str(tuple(os.fstat(fd).st_ino for fd in fds)).encode())
+            stream.flush()
+            os.fsync(stream.fileno())
 
     def guard_issued_material_bundle(self, phase, bundle):
         n._require(type(phase) is n.Phase and bundle in self.materials
@@ -519,7 +552,7 @@ class NativeProtocolTests(unittest.TestCase):
                 peer.sendmsg([self.packet(owner, 'HELLO_ACK', 1, ack=1)])
                 fds = owner.allocation
                 roles = []
-                for fd, role in zip(fds, ('run', 'old', 'fresh', 'engine-journal')):
+                for fd, role in zip(fds, ('run', 'old', 'fresh', 'engine-journal', 'request', 'material')):
                     info = os.fstat(fd)
                     roles.append({'role': role, 'device': info.st_dev, 'inode': info.st_ino,
                                   'mode': info.st_mode, 'uid': info.st_uid, 'gid': info.st_gid,
@@ -658,7 +691,8 @@ class NativeProtocolTests(unittest.TestCase):
             session = synthetic_engine(o).connect(o.bootstrap, self.envelope(o))
             allocation = session.receive_allocation()
             fds = allocation.borrowed_fds()
-            assert len(fds) == 4
+            assert len(fds) == 6
+            assert (o.path / 'journal-transfer').read_bytes() == b'PUBLIC durable transfer'
             assert all(fcntl.fcntl(fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC for fd in fds)
             assert all(fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY
                        for fd in fds[:3])
@@ -667,6 +701,7 @@ class NativeProtocolTests(unittest.TestCase):
             for phase, bundle in ((n.Phase.OLD, old), (n.Phase.FRESH, fresh)):
                 receipt = session.register_material(phase, bundle)
                 assert type(receipt) is n.MaterialReceipt
+                assert (o.path / ('material-' + phase.value)).is_file()
             os.read(trigger_r, 1)
             session.close()
             try:
@@ -680,10 +715,22 @@ class NativeProtocolTests(unittest.TestCase):
         self.addCleanup(session.close)
         receipt = session.send_allocation()
         self.assertIs(type(receipt), n.AllocationReceipt)
-        for phase in (n.Phase.OLD, n.Phase.FRESH):
-            material = session.receive_material(phase)
-            self.assertIs(type(material), n.RegisteredMaterial)
-            self.assertEqual(len(material.borrowed_fds()), 12)
+        original_recvmsg, original_clock = socket.socket.recvmsg, time.monotonic
+        offset = [0]
+        def prepared_packet(sock, *args, **kwargs):
+            result = original_recvmsg(sock, *args, **kwargs)
+            if json.loads(result[0])['kind'] == 'MATERIAL':
+                # Model 31 seconds of legitimate prep while waiting on the
+                # actual Unix socket. Packet processing must then get its own
+                # bounded interval inside the unchanged whole-main deadline.
+                offset[0] += 31
+            return result
+        with patch.object(socket.socket, 'recvmsg', prepared_packet), \
+                patch.object(n.time, 'monotonic', lambda: original_clock() + offset[0]):
+            for phase in (n.Phase.OLD, n.Phase.FRESH):
+                material = session.receive_material(phase)
+                self.assertIs(type(material), n.RegisteredMaterial)
+                self.assertEqual(len(material.borrowed_fds()), 12)
         os.write(trigger_w, b'!')
         self.assertTrue(finish())
         self.assertEqual(os.pread(owner.allocation[3], 64, 0), b'PUBLIC journal')

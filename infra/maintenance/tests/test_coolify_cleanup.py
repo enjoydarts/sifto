@@ -350,6 +350,63 @@ class CleanupAuthorityTests(unittest.TestCase):
         lease = self.begin()
         return lease, self.create.create_once(self.permit(lease), None)
 
+    def test_permit_projection_is_guarded_frozen_and_not_caller_spec_authority(self):
+        lease = self.begin()
+        permit = self.permit(lease)
+        self.assertTrue(hasattr(self.create, 'permit_projection'), 'guarded create permit projection missing')
+        view = self.create.permit_projection(permit)
+        self.assertEqual(view.operation, d.Operation.IDENTITY_OLD)
+        self.assertEqual(view.phase, d.Phase.RUN)
+        self.assertRegex(view.intent, '^[a-f0-9]{32}$')
+        self.assertRegex(view.spec_sha256, '^[a-f0-9]{64}$')
+        with self.assertRaises(Exception):
+            view.intent = 'f' * 32
+        self.create.create_once(permit, None)
+        self.assert_category('ownership_unknown', lambda: self.create.permit_projection(permit))
+
+    def test_original_admission_ticket_retains_same_cloexec_flock_after_begin(self):
+        ticket = self.create.require_clear_admission()
+        fd = self.core.lock_fd
+        self.assertTrue(hasattr(ticket, 'guard'), 'retained admission lifetime guard missing')
+        ticket.guard()
+        self.install_run()
+        self.create.begin(ticket, self.reservation)
+        ticket.guard()
+        self.assertEqual(self.core.lock_fd, fd)
+        self.assertFalse(os.get_inheritable(fd))
+        other = os.open('container-controller-lock', os.O_RDWR | os.O_CLOEXEC, dir_fd=self.stage_fd)
+        try:
+            with self.assertRaises(BlockingIOError):
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(other)
+        self.core.close()
+        self.assert_category('ownership_unknown', ticket.guard)
+
+    def test_normal_receipt_removal_preserves_running_postgres_and_is_main_bounded(self):
+        lease = self.begin()
+        pg = self.create.create_once(self.permit(lease, d.Operation.POSTGRES, d.Phase.OLD), None)
+        pg_id = self.core._cap(pg, c.CreatedReceipt)['id']
+        fixture_request(self.daemon_socket, 'mutate', pg_id, 'State',
+                        json.dumps({'Status': 'running', 'Running': True}))
+        self.core._register_running(pg)
+        probe = self.create.create_once(self.permit(lease, d.Operation.NETWORK_OLD, d.Phase.OLD, (pg,)), None)
+        probe_id = self.core._cap(probe, c.CreatedReceipt)['id']
+        self.assertTrue(hasattr(self.core, '_remove_receipt'), 'normal typed lifecycle hook missing')
+        self.assertTrue(self.core._remove_receipt(probe))
+        state = self.state()['containers']
+        self.assertIn(pg_id, state)
+        self.assertNotIn(probe_id, state)
+        rows = [json.loads(row) for row in (self.run_path / 'container-ledger').read_bytes().splitlines()]
+        self.assertEqual(rows[-1]['kind'], 'REMOVED')
+        self.assert_category('ownership_unknown', lambda: self.core._remove_receipt(probe))
+        self.source = c._SourceView(self.source.root_fd, self.source.root_path,
+            self.source.source_sha256, self.source.profile_sha256, self.source.controller_invocation,
+            self.source.docker_socket, self.source.socket_identity, time.monotonic() + 119)
+        self.core.source = self.source
+        self.assert_category('command_timeout', lambda: self.core._remove_receipt(pg))
+        self.assertIn(pg_id, self.state()['containers'])
+
     def reopen(self):
         self.core.close()
         end = time.monotonic() + 3

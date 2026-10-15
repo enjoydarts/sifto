@@ -100,6 +100,57 @@ class SystemdContracts(unittest.TestCase):
         self.assertEqual((foreign / 'foreign').read_bytes(), b'PUBLIC preserved')
         self.assertFalse(resources._manager.calls)
 
+    def test_source_owner_views_and_durable_journal_writer_transfer(self):
+        resources, controller = self.subject()
+        run = resources.reserve_run(controller)
+        view = resources.protocol_reservation_view(run)
+        record = resources._runs[run]
+        self.assertEqual(view.run, record['token'])
+        self.assertEqual(view.rendezvous, record['rendezvous'])
+        fds = resources.issued_allocation(run)
+        self.assertEqual(len(fds), 4)
+        self.assertEqual(tuple(os.fstat(fd).st_ino for fd in fds),
+                         (os.fstat(record['fd']).st_ino,
+                          os.fstat(record['phases']['old']['fd']).st_ino,
+                          os.fstat(record['phases']['fresh']['fd']).st_ino,
+                          os.fstat(record['journal']['fd']).st_ino))
+        resources.transfer_engine_journal(run)
+        self.assertIn(b'ENGINE_JOURNAL_TRANSFER', (self.stage / view.run / 'controller-ledger').read_bytes())
+        os.write(fds[-1], b'PUBLIC-engine-owned-journal\n')
+        os.fsync(fds[-1])
+        resources.protocol_reservation_view(run)
+        self.rejected('ownership_unknown', lambda: resources.transfer_engine_journal(run))
+
+    def test_transferred_journal_mode_drift_still_rejected(self):
+        resources, controller = self.subject()
+        run = resources.reserve_run(controller)
+        view = resources.protocol_reservation_view(run)
+        resources.transfer_engine_journal(run)
+        (self.stage / view.run / 'journal').chmod(0o640)
+        self.rejected('stage_identity', lambda: resources.protocol_reservation_view(run))
+
+    def test_narrow_peer_views_are_bound_to_manager_invocation_and_cgroup_identity(self):
+        resources, controller = self.subject()
+        # Fake manager facts exercise only the projection port; they confer no
+        # real process/systemd placement proof or installed source authority.
+        identity = (os.getpid(), b'1234', 1, 'e' * 32, s.CONTROLLER_GROUP)
+        resources._controller_identity = identity
+        resources._controllers[controller] = identity
+        resources._controller_cgroup = {'identity': (21, 22)}
+        peer = resources.controller_peer_view(controller)
+        self.assertEqual((peer.pid, peer.start, peer.invocation, peer.cgroup),
+                         (os.getpid(), 1234, 'e' * 32, (s.CONTROLLER_GROUP, 21, 22)))
+        resources._engine_process_identity = lambda observation: '5678'
+        run = resources.reserve_run(controller)
+        engine = resources.launch_engine(run)
+        peer = resources.engine_peer_view(engine)
+        unit = resources._runs[run]['units']['engine']
+        self.assertEqual((peer.pid, peer.start, peer.invocation), (123, 5678, '1' * 32))
+        self.assertEqual(peer.cgroup, (unit['identity'][1], *unit['cgroup']['identity'][:2]))
+        observed = resources._manager.units[unit['name']]
+        resources._manager.units[unit['name']] = replace(observed, invocation='f' * 32)
+        self.rejected('unit_identity', lambda: resources.engine_peer_view(engine))
+
     def test_stale_and_forged_handles_fail_before_manager(self):
         resources, controller = self.subject()
         other, other_controller = self.subject()

@@ -2,10 +2,21 @@
 # Real sudo/sshd boundaries inside an ARM Ubuntu24 disposable container.
 set -euo pipefail
 umask 077
-install -d -m 0700 /root/payload /root/payload/maintenance
+install -d -m 0700 /root/payload /root/payload/maintenance /root/payload/systemd
 cp /fixture/host_agent.py /root/payload/
+cp /fixture/coolify_native_controller.py /fixture/coolify_native_engine.py /root/payload/
+cp /fixture/systemd/sifto-coolify-native-controller.service /root/payload/systemd/
 cp /fixture/maintenance/*.py /root/payload/maintenance/
 cp /fixture/maintenance/coolify-public-manifest.json /fixture/maintenance/coolify_probe.php /root/payload/maintenance/
+native_resources=(host_agent.py coolify_native_controller.py coolify_native_engine.py
+  maintenance/__init__.py maintenance/plan.py maintenance/host.py
+  maintenance/coolify_host.py maintenance/coolify_plan.py
+  maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py
+  maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py
+  maintenance/coolify_systemd.py maintenance/coolify_native_protocol.py
+  maintenance/coolify_cleanup.py maintenance/coolify_native_owner.py
+  maintenance/coolify-public-manifest.json maintenance/coolify_probe.php
+  systemd/sifto-coolify-native-controller.service)
 ssh-keygen -q -t ed25519 -N '' -f /root/payload/scan
 ssh-keygen -q -t ed25519 -N '' -f /root/payload/apply
 cat > /root/payload/config.json <<'JSON'
@@ -36,9 +47,9 @@ userdel sifto-maint-scan
 cp -p /root/payload/maintenance/__init__.py /root/package.saved
 printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /root/payload/maintenance/__init__.py
 payload_rejections=0
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
+for native in "${native_resources[@]}"; do
   for defect in missing group-writable other-writable nonroot symlink directory fifo; do
-    resource="/root/payload/maintenance/$native"
+    resource="/root/payload/$native"
     cp -p "$resource" /root/resource.saved
     case "$defect" in
       missing) rm "$resource" ;;
@@ -63,7 +74,27 @@ for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify
 done
 mv /root/package.saved /root/payload/maintenance/__init__.py
 bash /fixture/install-host.sh /root/payload
-for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
+for native in "${native_resources[@]}"; do
+  cmp "/root/payload/$native" "/opt/sifto-maintenance/$native"
+  [[ $(stat -c %u "/opt/sifto-maintenance/$native") == 0 ]]
+  [[ $(stat -c %a "/opt/sifto-maintenance/$native") == 644 ]]
+done
+/usr/bin/python3 -I -B - "${native_resources[@]}" <<'PY'
+import hashlib, json, pathlib, stat, sys
+path = pathlib.Path('/etc/sifto-maintenance/coolify-native-sources.json')
+assert path.stat().st_uid == 0 and stat.S_IMODE(path.stat().st_mode) == 0o600
+manifest = json.loads(path.read_bytes())
+assert type(manifest['version']) is int and manifest['version'] == 1
+assert set(manifest['sources']) == set(sys.argv[1:])
+for name, digest in manifest['sources'].items():
+    assert digest == hashlib.sha256((pathlib.Path('/root/payload') / name).read_bytes()).hexdigest()
+for name in ('coolify-native-request', 'coolify-native-state', 'coolify-native-runs', 'native-systemd-controller'):
+    info = (pathlib.Path('/var/lib/sifto-maintenance') / name).stat()
+    assert stat.S_ISDIR(info.st_mode) and info.st_uid == info.st_gid == 0 and stat.S_IMODE(info.st_mode) == 0o700
+# The reviewed resource is installed as source only; no service activation.
+assert not pathlib.Path('/etc/systemd/system/sifto-coolify-native-controller.service').exists()
+PY
+for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php; do
   cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
   [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
   [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
@@ -81,10 +112,10 @@ if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
 fi
 rm /etc/sudoers.d/extra-grant
 bash /fixture/install-host.sh /root/payload
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
-  cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
-  [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
-  [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
+for native in "${native_resources[@]}"; do
+  cmp "/root/payload/$native" "/opt/sifto-maintenance/$native"
+  [[ $(stat -c %u "/opt/sifto-maintenance/$native") == 0 ]]
+  [[ $(stat -c %a "/opt/sifto-maintenance/$native") == 644 ]]
 done
 [[ $(stat -c %a /etc/sifto-maintenance/config.json) == 600 ]]
 [[ $(stat -c %a /var/lib/sifto-maintenance/plans) == 700 ]]
@@ -138,9 +169,11 @@ cp -p /opt/sifto-maintenance/maintenance/__init__.py /root/package.saved
 printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /opt/sifto-maintenance/maintenance/__init__.py
 ssh_resource_rejections=0
 before_resources=$(find /var/lib/sifto-maintenance -type f -exec sha256sum {} + | sort)
-for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify-public-manifest.json coolify_probe.php; do
+for native in "${native_resources[@]}"; do
+  # The forced gateway itself must exist for its own static rejection path.
+  [[ "$native" == host_agent.py ]] && continue
   for defect in missing group-writable other-writable nonroot symlink directory fifo; do
-    resource="/opt/sifto-maintenance/maintenance/$native"
+    resource="/opt/sifto-maintenance/$native"
     cp -p "$resource" /root/resource.saved
     case "$defect" in
       missing) rm "$resource" ;;

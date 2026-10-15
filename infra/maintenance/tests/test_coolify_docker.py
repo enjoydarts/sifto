@@ -20,7 +20,11 @@ from maintenance.coolify_rehearsal import FilePolicy, RootBinding
 
 MARKER = 'PUBLIC-SECRET-MARKER-DO-NOT-EMIT'
 ID = 'a' * 64
-SOURCES = ('host_agent.py', 'maintenance/__init__.py', 'maintenance/plan.py',
+SOURCES = ('host_agent.py', 'coolify_native_controller.py', 'coolify_native_engine.py',
+           'maintenance/coolify_systemd.py', 'maintenance/coolify_native_protocol.py',
+           'maintenance/coolify_cleanup.py', 'maintenance/coolify_native_owner.py',
+           'systemd/sifto-coolify-native-controller.service',
+           'maintenance/__init__.py', 'maintenance/plan.py',
            'maintenance/host.py', 'maintenance/coolify_host.py',
            'maintenance/coolify_plan.py', 'maintenance/coolify_rehearsal.py',
            'maintenance/coolify_evidence.py', 'maintenance/coolify_docker.py',

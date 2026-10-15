@@ -138,6 +138,23 @@ class ResourceCleanupObservation:
     first_failure: str | None
 
 
+@dataclass(frozen=True, repr=False)
+class ProtocolReservationView:
+    root_fd: int
+    run: str
+    rendezvous: str
+    started: float
+    deadline: float
+
+
+@dataclass(frozen=True, repr=False)
+class PeerView:
+    pid: int
+    start: int
+    invocation: str
+    cgroup: tuple
+
+
 def _json(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
 
@@ -791,6 +808,15 @@ class SystemdResources:
             raise SystemdError('stage_identity') from None
 
     def _guard_file(self, parent, name, record):
+        if record.get('transferred') is True:
+            # The engine owns append bytes after durable transfer. The
+            # controller continues to authenticate the actual file object.
+            current = os.fstat(record['fd'])
+            observed = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            stable = lambda info: (info.st_dev, info.st_ino, info.st_uid, info.st_gid,
+                                    info.st_mode, info.st_nlink)
+            _require(stable(current) == stable(observed) == record['stable'], 'stage_identity')
+            return
         _require(_identity(record['fd']) == record['identity']
                  and d._metadata(os.stat(name, dir_fd=parent, follow_symlinks=False)) == record['identity']
                  and d._read(record['fd'], 16 * 1024**2) == record['bytes'], 'stage_identity')
@@ -819,6 +845,53 @@ class SystemdResources:
         if not cleanup:
             _require(record['failure'] is None and not self._cleaning, 'ownership_unknown')
         return record
+
+    @_closed
+    def protocol_reservation_view(self, reservation):
+        record = self._guard_run(reservation)
+        return ProtocolReservationView(record['fd'], record['token'], record['rendezvous'],
+                                       self._started, self._started + 2400)
+
+    @_closed
+    def issued_allocation(self, reservation):
+        record = self._guard_run(reservation)
+        return (record['fd'], record['phases']['old']['fd'], record['phases']['fresh']['fd'],
+                record['journal']['fd'])
+
+    @_closed
+    def controller_peer_view(self, controller):
+        self._guard_controller(controller)
+        pid, start, _, invocation, group = self._controller_identity
+        return PeerView(pid, int(start), invocation,
+                        (group, *self._controller_cgroup['identity'][:2]))
+
+    @_closed
+    def engine_peer_view(self, engine):
+        record = self._engine_record(engine)
+        self._guard_units(record)
+        unit = record['units']['engine']
+        invocation, group, pid, start = unit['identity']
+        return PeerView(pid, int(unit['process_token']), invocation,
+                        (group, *unit['cgroup']['identity'][:2]))
+
+    @_closed
+    def transfer_engine_journal(self, reservation):
+        record = self._guard_run(reservation)
+        journal = record['journal']
+        _require(not journal.get('transferred'), 'ownership_unknown')
+        info = os.fstat(journal['fd'])
+        stable = (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode, info.st_nlink)
+        ledger = record['ledger']
+        data = _json({'kind': 'ENGINE_JOURNAL_TRANSFER', 'run': record['token'],
+                      'identity': stable}) + b'\n'
+        self._guard_file(record['fd'], 'controller-ledger', ledger)
+        os.lseek(ledger['fd'], 0, os.SEEK_END)
+        self._write(ledger['fd'], data)
+        ledger['bytes'] += data
+        ledger['identity'] = _identity(ledger['fd'])
+        os.fsync(record['fd'])
+        os.fsync(self._stage_fd)
+        journal.update(transferred=True, stable=stable)
 
     def _deadline(self, *, cleanup=False):
         _require(time.monotonic() < self._started + (2400 if cleanup else 2280), 'command_timeout')

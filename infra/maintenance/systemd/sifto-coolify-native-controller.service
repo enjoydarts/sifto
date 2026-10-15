@@ -1,0 +1,31 @@
+[Unit]
+Description=Sifto synthetic Coolify native controller
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=exec
+User=root
+Group=root
+ExecStart=/usr/bin/python3 -I -B /opt/sifto-maintenance/coolify_native_controller.py
+StandardInput=null
+StandardOutput=null
+StandardError=null
+Environment=PATH=/usr/bin:/bin HOME=/nonexistent LC_ALL=C
+UMask=0077
+MemoryAccounting=yes
+CPUAccounting=yes
+TasksAccounting=yes
+MemoryMax=64M
+MemorySwapMax=0
+CPUQuota=2.5%
+CPUQuotaPeriodSec=100ms
+TasksMax=16
+KillMode=control-group
+SendSIGKILL=yes
+Restart=no
+RuntimeDirectory=sifto-maintenance/coolify-native
+RuntimeDirectoryMode=0700
+TimeoutStopSec=120
+NoNewPrivileges=yes
+Delegate=no

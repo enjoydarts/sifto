@@ -25,7 +25,7 @@ _PACKET = 16384
 _FD_LIMIT = 16
 _RECORD_LIMIT = 256
 _CRED = struct.Struct('3i')
-_ALLOCATION = ('run', 'old', 'fresh', 'engine-journal')
+_ALLOCATION = ('run', 'old', 'fresh', 'engine-journal', 'request', 'material')
 _CAUSES = frozenset(('source_closure', 'ownership_unknown', 'endpoint_collision',
     'endpoint_identity', 'peer_identity', 'bootstrap_invalid', 'packet_invalid',
     'sequence_invalid', 'descriptor_invalid', 'deadline', 'disconnected',
@@ -384,7 +384,7 @@ class _ProtocolCore:
 
     def bounded(self, sock):
         self.guard()
-        remaining = min(self.deadline, self.io_deadline) - time.monotonic()
+        remaining = min(self.deadline, self.io_deadline or self.deadline) - time.monotonic()
         _require(remaining > 0, 'deadline')
         sock.settimeout(remaining)
 
@@ -460,6 +460,11 @@ class _ProtocolCore:
             raw, ancillary, flags, _ = self.sock.recvmsg(_PACKET,
                 socket.CMSG_SPACE(_CRED.size) + socket.CMSG_SPACE(_FD_LIMIT * array.array('i').itemsize),
                 socket.MSG_CMSG_CLOEXEC)
+            if self.io_deadline is None:
+                # Idle phase preparation may consume the remaining main
+                # budget. Once a packet arrives, its processing and ACK have
+                # one bounded budget that nested descriptor guards preserve.
+                self.io_deadline = min(self.deadline, time.monotonic() + 30)
             # Inventory every delivered rights descriptor before parsing anything.
             malformed = False
             for level, typ, data in ancillary:
@@ -572,17 +577,15 @@ class _ProtocolCore:
 
     def validate_source(self, fds, roles, phase):
         if roles == _ALLOCATION:
-            expected = self.owner.issued_allocation_bundle()
-            _require(type(expected) is tuple and len(expected) == 4, 'descriptor_invalid')
-            _require(all(_id(os.fstat(fd)) == _id(os.fstat(original))
-                         for fd, original in zip(fds, expected)), 'descriptor_invalid')
-            for fd, name in zip(fds[1:], ('old', 'fresh', 'journal')):
+            _require(len(fds) == 6, 'descriptor_invalid')
+            self.owner.guard_allocation_bundle(tuple(fds))
+            for fd, name in zip(fds[1:4], ('old', 'fresh', 'journal')):
                 _require(_id(os.fstat(fd)) == _id(os.stat(name, dir_fd=fds[0], follow_symlinks=False)),
                          'descriptor_invalid')
         else:
             _require(type(phase) is Phase and roles == d._LEAVES, 'descriptor_invalid')
             allocation = self.owner.issued_allocation_bundle()
-            _require(type(allocation) is tuple and len(allocation) == 4, 'descriptor_invalid')
+            _require(type(allocation) is tuple and len(allocation) == 6, 'descriptor_invalid')
             parent = allocation[1 if phase is Phase.OLD else 2]
             for fd, name in zip(fds, roles):
                 _require(_id(os.fstat(fd)) == _id(os.stat(name, dir_fd=parent, follow_symlinks=False)),
@@ -595,6 +598,7 @@ class _ProtocolCore:
     def allocation_send(self):
         _require(self.state == 'authenticated', 'state_invalid')
         fds = self.allocation()
+        self.owner.transfer_engine_journal()
         self.send('ALLOCATION', fds=fds, metadata=self.metadata(fds, _ALLOCATION))
         self.receive('ALLOCATION_ACK', ack=self.tx)
         self.state = 'allocated'
@@ -603,6 +607,7 @@ class _ProtocolCore:
     def allocation_receive(self):
         _require(self.state == 'authenticated', 'state_invalid')
         packet, fds = self.receive('ALLOCATION', roles=_ALLOCATION)
+        self.owner.register_received_allocation(fds)
         self.send('ALLOCATION_ACK', ack=packet['seq'])
         self.state = 'allocated'
         return self.issue(ReceivedAllocation, fds)
@@ -625,18 +630,26 @@ class _ProtocolCore:
     def material_receive(self, phase):
         self.check_phase(phase)
         packet, fds = self.receive('MATERIAL', phase=phase, roles=d._LEAVES)
+        registration = self.issue(RegisteredMaterial, fds, phase)
+        # Descriptor/path/account verification has already completed. The
+        # source owner must durably register the first received material before
+        # acknowledgement; no pre-existing sealed-FD registry is required.
+        self.owner.register_received_material(registration)
+        self.guard()
         self.send('MATERIAL_ACK', ack=packet['seq'], phase=phase)
         self.phase += 1
-        return self.issue(RegisteredMaterial, fds, phase)
+        return registration
 
     def invoke(self, cap, action, *args):
         _require(cap in self.caps, 'ownership_unknown')
         if action == 'close':
             self.close()
             return None
+        previous_deadline = self.io_deadline
         try:
-            self.io_deadline = (None if action == 'borrow' else
-                                min(self.deadline, time.monotonic() + 30))
+            if action != 'borrow':
+                self.io_deadline = (None if action == 'material_receive' else
+                                    min(self.deadline, time.monotonic() + 30))
             self.guard()
             if action == 'borrow':
                 fds, phase = self.caps[cap]
@@ -655,7 +668,7 @@ class _ProtocolCore:
             self.close(cause)
             raise ProtocolError(cause) from None
         finally:
-            self.io_deadline = None
+            self.io_deadline = previous_deadline
 
     def close(self, cause=None):
         if self.first_failure is None and cause is not None:

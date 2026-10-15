@@ -1,0 +1,32 @@
+# PUBLIC synthetic clone only. Existing Task4A inputs are reused unchanged.
+services:
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup/compose.yml, service: old}
+    volumes:
+      - ./fixture.php:/startup/barrier-fixture.php:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  probe-old: &probe
+    extends: {file: ../startup/compose.yml, service: probe}
+    entrypoint: [php, /startup/barrier-fixture.php]
+    volumes:
+      - ./fixture.php:/startup/barrier-fixture.php:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  probe-target:
+    <<: *probe
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+volumes:
+  storage:
+    labels: {sifto.owner: startup-barrier-public-fixture-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: startup-barrier-public-fixture-v1}

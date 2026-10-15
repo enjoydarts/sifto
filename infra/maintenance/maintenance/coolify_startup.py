@@ -1,4 +1,4 @@
-"""Fixed PUBLIC Task4A startup candidate; no execution registration or authority.
+"""Fixed clone startup primitives; no execution registration or authority.
 
 The unchanged ARM images have been inspected independently. These exact guard
 resources suppress app:init, automatic configuration and the webhook maintenance
@@ -14,6 +14,12 @@ The SSH producer requires preexisting UID/GID 9999 keys and mux directories at
 0700 with no other application writer. The PUBLIC fixture supplies them. Native
 prepare_phase still starts with empty runtime SSH storage: future Task4B4 staging
 must create these parents before any producer integration can be accepted.
+
+Barrier observations expose only closed categories and identity HMACs. The
+clone-only producer snapshots raw Redis expiry and recognized filesystem state
+at one fixed private storage leaf, and can restore PRETARGET state. Recorded
+file stages may resume; an unrecorded or truncated stage fails closed. Trusted
+post-target lifecycle admission and final success release remain unavailable.
 """
 import copy
 from dataclasses import dataclass
@@ -24,7 +30,7 @@ from .coolify_plan import OLD_ARM, NEW_ARM, profile_sha256
 
 
 RESOURCE_SHA256 = (
-    ('coolify_startup.php', '367507a800a0d8f053e295b457dca73377473011d1b2849b87eb0a9b825b2165'),
+    ('coolify_startup.php', '2a563c60bddea003c4d230a0c1084910265617420559cbf6c993158ebc9bc356'),
     ('coolify_startup_init', 'afe14f036a705b057afcd8346b61c3ba06b34cff02199ef6b2dc663bf7196522'),
     ('coolify_startup_middleware.php', 'fe5cb12552e94585d1fa9b831b4e4bac7caf4bbbe657cb0a3cd62b80ac67186d'),
     ('coolify_startup_nginx.conf', '11b1a85b104ec8bd848d2688da694ad8f64cdc9fe88bc67c02fe01583a305284'),
@@ -111,3 +117,79 @@ def parse_ssh_result(raw, *, selected_version):
         return SshObservation(**value)
     except (ValueError, UnicodeError, TypeError, RecursionError):
         raise ValueError('startup_ssh_result') from None
+
+
+@dataclass(frozen=True, repr=False)
+class BarrierObservation:
+    """Closed clone observation. Has no lifecycle or execution capability."""
+    version: int
+    operation: str
+    selected_version: str
+    driver: str
+    store: str
+    connection: str
+    database: int
+    redis_identity_hmac: str
+    cache_prefix_hmac: str
+    redis_prefix_hmac: str
+    logical_key: str
+    key_state: str
+    ttl_state: str
+    payload_profile: str
+    maintenance_file_state: str
+    down_file_state: str
+    snapshot_state: str
+    original_state_hmac: str
+    current_state_hmac: str
+
+
+def parse_barrier_result(raw, *, selected_version, operation):
+    """Exact bounded data only; PRETARGET restore never proves final release."""
+    def reject():
+        raise ValueError('startup_barrier_result')
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                reject()
+            result[key] = value
+        return result
+
+    try:
+        if (type(raw) is not bytes or not 0 < len(raw) <= 8192
+                or selected_version not in ('4.4.2', '4.4.6')
+                or operation not in ('barrier-observe', 'barrier-enter', 'barrier-restore')):
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(BarrierObservation.__dataclass_fields__):
+            reject()
+        for name, expected in dict(version=1, operation=operation, selected_version=selected_version,
+                driver='cache', store='redis', connection='cache', database=1,
+                logical_key='illuminate:foundation:down').items():
+            if type(value[name]) is not type(expected) or value[name] != expected:
+                reject()
+        for name, allowed in dict(key_state=('absent', 'persistent', 'expiring', 'unknown'),
+                ttl_state=('absent', 'persistent', 'expiring', 'unknown'),
+                payload_profile=('absent', 'plain503', 'original', 'unexpected'),
+                maintenance_file_state=('absent', 'stock'), down_file_state=('absent', 'original'),
+                snapshot_state=('absent', 'preparing', 'held', 'restoring', 'restored')).items():
+            if type(value[name]) is not str or value[name] not in allowed:
+                reject()
+        if (value['key_state'] != value['ttl_state']
+                or (value['key_state'] == 'absent') != (value['payload_profile'] == 'absent')
+                or (value['key_state'] == 'unknown') != (value['payload_profile'] == 'unexpected')):
+            reject()
+        if operation == 'barrier-enter' and any(value[name] != expected for name, expected in dict(
+                key_state='persistent', payload_profile='plain503', maintenance_file_state='absent',
+                down_file_state='absent', snapshot_state='held').items()):
+            reject()
+        if operation == 'barrier-restore' and value['snapshot_state'] != 'restored':
+            reject()
+        for name in (key for key in value if 'hmac' in key):
+            if type(value[name]) is not str or re.fullmatch('[a-f0-9]{64}', value[name]) is None:
+                reject()
+        return BarrierObservation(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError):
+        raise ValueError('startup_barrier_result') from None

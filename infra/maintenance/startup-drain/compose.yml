@@ -1,0 +1,29 @@
+services:
+  unit:
+    extends: {file: ../startup-inspect/compose.yml, service: unit}
+  source-old:
+    extends: {file: ../startup-inspect/compose.yml, service: source-old}
+    entrypoint: [php, /startup/drain-source.php]
+    volumes: [./source.php:/startup/drain-source.php:ro, ../maintenance:/fixed:ro, ./fixture.php:/startup/drain-fixture.php:ro, ./SyntheticJob.php:/startup/SyntheticJob.php:ro, ./faults.php:/startup/drain-faults.php:ro, ./expiry.php:/startup/drain-expiry.php:ro]
+  source-target:
+    extends: {file: ../startup-inspect/compose.yml, service: source-target}
+    entrypoint: [php, /startup/drain-source.php]
+    volumes: [./source.php:/startup/drain-source.php:ro, ../maintenance:/fixed:ro, ./fixture.php:/startup/drain-fixture.php:ro, ./SyntheticJob.php:/startup/SyntheticJob.php:ro, ./faults.php:/startup/drain-faults.php:ro]
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup-inspect/compose.yml, service: old}
+    volumes:
+      - ./fixture.php:/startup/drain-fixture.php:ro
+      - ./SyntheticJob.php:/startup/SyntheticJob.php:ro
+      - ./faults.php:/startup/drain-faults.php:ro
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+volumes:
+  storage:
+    labels: {sifto.owner: horizon-graceful-drain-public-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: horizon-graceful-drain-public-v1}

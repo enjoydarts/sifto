@@ -198,6 +198,14 @@ maintenance-coolify-startup-barrier-test:
 maintenance-coolify-startup-runtime-test:
 	sh infra/maintenance/startup-runtime/test.sh
 
+.PHONY: maintenance-coolify-startup-drain-test
+maintenance-coolify-startup-drain-test:
+	sh infra/maintenance/startup-drain/test.sh
+
+.PHONY: maintenance-coolify-startup-drain-expiry-test
+maintenance-coolify-startup-drain-expiry-test:
+	SIFTO_STARTUP_PUBLIC_INIT="$(CURDIR)/infra/maintenance/maintenance/coolify_startup_init" docker compose --env-file /dev/null -p sifto-horizon-graceful-drain-source -f infra/maintenance/startup-drain/compose.yml run --rm -T --no-deps --entrypoint php source-old /startup/drain-expiry.php
+
 .PHONY: maintenance-backup-test
 maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test

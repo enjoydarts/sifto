@@ -52,3 +52,9 @@ class SupervisorInspectionContract(unittest.TestCase):
             value[field] = bad
             with self.subTest(field=field, bad=bad), self.assertRaisesRegex(ValueError, '^startup_horizon_inspection$'):
                 self.parse(value)
+
+    def test_pool_bound_matches_receiver(self):
+        value = receipt()
+        value.update(pool_count=33, live_worker_count=33, worker_object_count=33)
+        with self.assertRaisesRegex(ValueError, '^startup_horizon_inspection$'):
+            self.parse(value)

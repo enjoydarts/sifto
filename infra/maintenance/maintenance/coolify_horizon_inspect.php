@@ -1,5 +1,5 @@
 <?php
-// Fixed PSR-4 receiver. Inspection only; no worker/control mutation capability.
+// Fixed PSR-4 receiver. Clone-only bounded inspection and parent-owned graceful drain.
 declare(strict_types=1);
 namespace App\SiftoMaintenance;
 
@@ -14,6 +14,8 @@ final class InspectSupervisor
     private const ROOT = '/var/www/html/';
     private const LEAF = '/var/www/html/storage/app/startup-horizon-inspect.state';
     private const LOCK = '/var/www/html/storage/app/startup-horizon-inspect.lock';
+    private const DRAIN = '/var/www/html/storage/app/startup-horizon-drain.state';
+    private const DRAIN_LOCK = '/var/www/html/storage/app/startup-horizon-drain.lock';
     private const CLASS_FILE = '/var/www/html/app/SiftoMaintenance/InspectSupervisor.php';
     private const SOURCES = [
         'composer.json' => '84acb6071121ac9a8843f960c500ae3ed469287fdb9f4b7164975d37ae979593',
@@ -22,6 +24,10 @@ final class InspectSupervisor
         'vendor/composer/autoload_psr4.php' => '391ba6f01907760bb4564cfb1dc33b42d984c359f8589183639bb4475d3fb5fa',
         'vendor/symfony/process/Process.php' => '73c4e31230f9602768b73cda3451ed7ec0dddc20ddef6cc0d6795ea879600c39',
         'vendor/laravel/horizon/src/WorkerProcess.php' => 'b03707bb4eb455ce8b01b3dc744820d1bfd843ca86b481be94aa081b02299abc',
+        'vendor/laravel/horizon/src/SupervisorProcess.php' => '864b7b1677d0749ddadee63278cec4ae87232461dc032fc501f38c42ee1089c8',
+        'vendor/laravel/framework/src/Illuminate/Queue/Worker.php' => '2fe2c748bf807b89d779856f106e41156fdcee90706a9c3fc8fe1a1190d41615',
+        'vendor/laravel/horizon/src/Events/MasterSupervisorLooped.php' => '15b66a2238154eb8dd12982bf6f83c3d561347a991e4c9bcc069d4c3121c705e',
+        'vendor/laravel/horizon/src/Events/SupervisorLooped.php' => '92a53968bf4a14636035c510f5738e48692f35de7f534c0ea6b509576d923af3',
         'vendor/laravel/horizon/src/Supervisor.php' => 'c35978f84178552423d6ca0b0573743ebe81d81c1c9fd3df0f214b501c269130',
         'vendor/laravel/horizon/src/ProcessPool.php' => 'c21a1ad2c1be9bc4164c4693e5c0ea25f416c6d1a609382dd53a63bd0637b001',
         'vendor/laravel/horizon/src/RedisHorizonCommandQueue.php' => '11d13043fafc4b95314b890e1d68f02d2f601b72c9287ef119ef812e664345b7',
@@ -134,7 +140,7 @@ final class InspectSupervisor
         foreach ($sources as $file => $hash) {
             self::gate(realpath(self::ROOT.$file) === self::ROOT.$file && hash_file('sha256', self::ROOT.$file) === $hash);
         }
-        $sources['helper'] = hash('sha256', self::read(self::CLASS_FILE, 32768));
+        $sources['helper'] = hash('sha256', self::read(self::CLASS_FILE, 65536));
         $sources['startup'] = hash('sha256', self::read('/probe/startup.php', 131072, false));
         self::gate(config('app.maintenance.driver') === 'cache' && config('app.maintenance.store') === 'redis'
             && config('database.redis.client') === 'phpredis' && config('cache.stores.redis.connection') === 'cache');
@@ -188,17 +194,18 @@ final class InspectSupervisor
             'options' => $row->options, 'supervisor_status' => $row->status, 'master_status' => $master->status];
     }
 
-    private static function locked(bool $create): mixed
+    private static function locked(bool $create, bool $drain = false): mixed
     {
-        self::parents(self::LOCK);
+        $path = $drain ? self::DRAIN_LOCK : self::LOCK;
+        self::parents($path);
         $mask = umask(0077);
-        try { $lock = fopen(self::LOCK, $create ? 'x+b' : 'r+b'); } finally { umask($mask); }
+        try { $lock = fopen($path, $create ? 'x+b' : 'r+b'); } finally { umask($mask); }
         self::gate(is_resource($lock));
         try {
-            $s = fstat($lock); clearstatcache(true, self::LOCK);
+            $s = fstat($lock); clearstatcache(true, $path);
             self::gate(is_array($s) && ($s['mode'] & 0177777) === 0100600 && $s['nlink'] === 1
                 && $s['uid'] === 9999 && $s['gid'] === 9999 && $s['size'] === 0
-                && lstat(self::LOCK) === $s && flock($lock, LOCK_EX | LOCK_NB));
+                && lstat($path) === $s && flock($lock, LOCK_EX | LOCK_NB));
             return $lock;
         } catch (Throwable $failure) { fclose($lock); throw $failure; }
     }
@@ -222,24 +229,25 @@ final class InspectSupervisor
         return $s;
     }
 
-    private static function write(array $state, string $key, bool $create = false): void
+    private static function write(array $state, string $key, bool $create = false, bool $drain = false): void
     {
-        $bytes = self::json(['data' => $state, 'hmac' => self::mac('inspect-state', $state, $key)])."\n";
-        self::gate(strlen($bytes) <= 32768); $parents = self::parents(self::LEAF);
-        $before = $create ? null : lstat(self::LEAF);
-        if (!$create) { self::read(self::LEAF, 32768); }
+        $path = $drain ? self::DRAIN : self::LEAF; $limit = $drain ? 131072 : 32768;
+        $bytes = self::json(['data' => $state, 'hmac' => self::mac($drain ? 'drain-state' : 'inspect-state', $state, $key)])."\n";
+        self::gate(strlen($bytes) <= $limit); $parents = self::parents($path);
+        $before = $create ? null : lstat($path);
+        if (!$create) { self::read($path, $limit); }
         $mask = umask(0077);
-        try { $out = fopen(self::LEAF, $create ? 'x+b' : 'r+b'); } finally { umask($mask); }
+        try { $out = fopen($path, $create ? 'x+b' : 'r+b'); } finally { umask($mask); }
         self::gate(is_resource($out));
         try {
             $opened = fstat($out);
             self::gate($create || self::identity($opened) === self::identity($before));
             self::gate(ftruncate($out, 0) && fwrite($out, $bytes) === strlen($bytes) && fflush($out) && fsync($out)
-                && self::parents(self::LEAF) === $parents);
+                && self::parents($path) === $parents);
         } finally { fclose($out); }
-        $dir = fopen(dirname(self::LEAF), 'r'); self::gate(is_resource($dir));
+        $dir = fopen(dirname($path), 'r'); self::gate(is_resource($dir));
         try { self::gate(fsync($dir)); } finally { fclose($dir); }
-        self::gate(self::read(self::LEAF, 32768) === $bytes);
+        self::gate(self::read($path, $limit) === $bytes);
     }
 
     public static function request(int $producerDeadline): array
@@ -292,8 +300,337 @@ final class InspectSupervisor
         } finally { fclose($lock); }
     }
 
+    private static function drainState(string $key): array
+    {
+        $bytes = self::read(self::DRAIN, 131072);
+        $record = json_decode($bytes, true, 64, JSON_THROW_ON_ERROR);
+        self::gate(is_array($record) && array_keys($record) === ['data', 'hmac'] && is_array($record['data'])
+            && is_string($record['hmac']) && hash_equals(self::mac('drain-state', $record['data'], $key), $record['hmac'])
+            && self::json($record)."\n" === $bytes);
+        $s = $record['data'];
+        self::gate(array_keys($s) === ['request', 'phase', 'original', 'intents', 'receipt', 'view']
+            && is_array($s['request']) && array_keys($s['request']) === ['run', 'expires', 'context', 'identities']
+            && is_string($s['request']['run']) && preg_match('/\A[a-f0-9]{64}\z/', $s['request']['run']) === 1
+            && is_int($s['request']['expires']) && $s['request']['expires'] > 0
+            && is_array($s['request']['context']) && is_array($s['request']['identities'])
+            && in_array($s['phase'], ['prepared', 'master-queued', 'master-armed', 'supervisor-queued',
+                'supervisor-armed', 'waiting', 'workers-exited', 'quiescent', 'observing', 'held'], true)
+            && is_array($s['original']) && array_keys($s['original']) === ['master', 'supervisor']
+            && is_array($s['intents']) && count($s['intents']) <= 100
+            && ($s['receipt'] === null || is_array($s['receipt']))
+            && ($s['view'] === null || is_array($s['view']) && array_keys($s['view']) === ['sequence', 'requested', 'expires', 'master', 'supervisor']
+                && is_int($s['view']['sequence']) && $s['view']['sequence'] >= 1 && $s['view']['sequence'] <= 8
+                && is_int($s['view']['expires']) && $s['view']['expires'] <= $s['request']['expires']
+                && is_int($s['view']['requested']) && is_int($s['view']['master']) && is_int($s['view']['supervisor'])));
+        return $s;
+    }
+
+    private static function children(int $pid): array
+    {
+        // This finite profile supports one task per PHP owner/worker. Otherwise
+        // leader-only children would miss children created by another task.
+        $dir = opendir('/proc/'.$pid.'/task'); self::gate(is_resource($dir)); $tasks = [];
+        try {
+            for ($i = 0; $i < 4 && ($task = readdir($dir)) !== false; ++$i) { $tasks[] = $task; }
+        } finally { closedir($dir); }
+        sort($tasks, SORT_STRING);
+        self::gate($tasks === ['.', '..', (string)$pid]);
+        $bytes = file_get_contents('/proc/'.$pid.'/task/'.$pid.'/children', false, null, 0, 4097);
+        self::gate(is_string($bytes) && strlen($bytes) <= 4096 && preg_match('/\A(?:[0-9]+ ?)*\z/', $bytes) === 1);
+        $children = $bytes === '' ? [] : array_map('intval', explode(' ', trim($bytes)));
+        self::gate(count($children) <= 64 && count(array_unique($children)) === count($children));
+        sort($children); return $children;
+    }
+
+    private static function drainAuth(array $s, string $key): void
+    {
+        $r = $s['request']; $ids = $r['identities'];
+        self::gate(hrtime(true) < $r['expires'] && self::context($key) === $r['context']
+            && self::proc($ids['master']['pid']) === $ids['master']
+            && self::proc($ids['supervisor']['pid']) === $ids['supervisor']
+            && self::children($ids['master']['pid']) === [$ids['supervisor']['pid']]);
+        self::gate($s['phase'] !== 'observing' || hrtime(true) < $s['view']['expires']);
+        $redis = app('redis')->connection('horizon');
+        self::gate($redis->llen('commands:master:'.$ids['master_name']) === 0
+            && $redis->llen('commands:'.$ids['name']) === 0);
+        // Authentication I/O may cross either original deadline. Recheck after
+        // the final read before returning to an owner mutation or observation.
+        $now = hrtime(true);
+        self::gate($now < $r['expires'] && ($s['phase'] !== 'observing' || $now < $s['view']['expires']));
+    }
+
+    private static function drainPush(array $s, string $role, string $key): void
+    {
+        self::gate(in_array($role, ['master', 'supervisor'], true));
+        $r = $s['request']; $ids = $r['identities'];
+        $options = ['drain_role' => $role, 'run' => $r['run'], 'request_hmac' => self::mac('drain-'.$role, $r, $key)];
+        $command = self::json(['command' => self::class, 'options' => $options]);
+        $client = app('redis')->connection('horizon')->client();
+        self::gate(get_class($client) === \Redis::class && $client->getOption(\Redis::OPT_SERIALIZER) === \Redis::SERIALIZER_NONE
+            && hrtime(true) < $r['expires']);
+        $queue = $role === 'master' ? 'master:'.$ids['master_name'] : $ids['name'];
+        $physical = $client->getOption(\Redis::OPT_PREFIX).'commands:'.$queue;
+        self::gate($client->rawCommand('EVAL', "if redis.call('LLEN',KEYS[1])~=0 then return 0 end redis.call('RPUSH',KEYS[1],ARGV[1]); return 1", '1', $physical, $command) === 1);
+    }
+
+    private static function drainHold(?array $s, ?string $key): void
+    {
+        if (is_array($s) && is_string($key)) {
+            try { $s['phase'] = 'held'; $s['receipt'] = null; self::write($s, $key, false, true); }
+            catch (Throwable $ignored) {}
+        }
+    }
+
+    public static function drainEnter(int $producerDeadline): array
+    {
+        self::gate(hrtime(true) < $producerDeadline);
+        $key = self::key(); $lock = self::locked(true, true); $s = null;
+        try {
+            self::gate(@lstat(self::DRAIN) === false);
+            $r = ['run' => bin2hex(random_bytes(32)), 'expires' => min($producerDeadline - 500000000, hrtime(true) + 20000000000),
+                'context' => self::context($key), 'identities' => self::identities($key)];
+            $s = ['request' => $r, 'phase' => 'prepared', 'original' => ['master' => null, 'supervisor' => null],
+                'intents' => [], 'receipt' => null, 'view' => null];
+            self::drainAuth($s, $key); self::write($s, $key, true, true);
+            $s['phase'] = 'master-queued'; self::write($s, $key, false, true);
+            self::drainPush($s, 'master', $key);
+        } catch (Throwable $failure) { self::drainHold($s, $key); throw $failure; }
+        finally { fclose($lock); }
+        // No requeue: a missing ACK expires into durable held state.
+        for ($poll = 0; $poll < 250 && hrtime(true) < $producerDeadline; ++$poll) {
+            usleep(100000); $lock = null; $ready = false;
+            try { $lock = self::locked(false, true); } catch (Throwable $busy) { continue; }
+            try {
+                $s = self::drainState($key);
+                if ($s['phase'] === 'held' || hrtime(true) >= $r['expires']) {
+                    self::drainHold($s, $key); self::gate(false);
+                }
+                if ($s['phase'] === 'quiescent') {
+                    self::drainAuth($s, $key);
+                    self::gate(self::children($r['identities']['supervisor']['pid']) === []);
+                    $ready = true;
+                }
+            } catch (Throwable $failure) { self::drainHold($s, $key); throw $failure; }
+            finally { fclose($lock); }
+            if ($ready) { return self::drainObserve($producerDeadline); }
+        }
+        // Receivers independently enforce the same expiry even if the producer
+        // cannot reacquire the nonblocking lock. They never restore or force-stop.
+        self::gate(false);
+    }
+
+    public static function drainObserve(int $producerDeadline): array
+    {
+        self::gate(hrtime(true) < $producerDeadline);
+        $key = self::key(); $lock = self::locked(false, true); $s = null;
+        try {
+            $s = self::drainState($key);
+            self::gate($s['phase'] === 'quiescent');
+            self::drainAuth($s, $key);
+            self::gate(self::children($s['request']['identities']['supervisor']['pid']) === []);
+            $sequence = ($s['view']['sequence'] ?? 0) + 1; self::gate($sequence <= 8);
+            $s['view'] = ['sequence' => $sequence, 'requested' => hrtime(true),
+                'expires' => min($s['request']['expires'], $producerDeadline - 500000000), 'master' => 0, 'supervisor' => 0];
+            self::gate($s['view']['requested'] < $s['view']['expires']);
+            $s['phase'] = 'observing'; self::write($s, $key, false, true);
+        } catch (Throwable $failure) {
+            // Empty stock command queues cannot repair a lost acknowledgement.
+            self::drainHold($s, $key); throw $failure;
+        } finally { fclose($lock); }
+        // Existing loop-end listeners ACK actual objects after this generation.
+        // No control command, extra queue push, requeue or renewed run expiry.
+        for ($poll = 0; $poll < 250 && hrtime(true) < $producerDeadline; ++$poll) {
+            usleep(100000); $lock = null;
+            try { $lock = self::locked(false, true); } catch (Throwable $busy) { continue; }
+            try {
+                $s = self::drainState($key); self::drainAuth($s, $key);
+                self::gate(in_array($s['phase'], ['observing', 'quiescent'], true)
+                    && $s['view']['sequence'] === $sequence && hrtime(true) < $s['view']['expires']);
+                if ($s['phase'] === 'quiescent') {
+                    self::gate($s['view']['master'] >= $s['view']['requested']
+                        && $s['view']['supervisor'] >= $s['view']['requested']);
+                    return $s['receipt'];
+                }
+            } catch (Throwable $failure) { self::drainHold($s, $key); throw $failure; }
+            finally { fclose($lock); }
+        }
+        self::gate(false);
+    }
+
+    private static function drainSeen(array &$s, string $key, string $role): void
+    {
+        if ($s['phase'] !== 'observing' || $s['view'][$role] !== 0) { return; }
+        $s['view'][$role] = hrtime(true);
+        if ($s['view']['master'] >= $s['view']['requested'] && $s['view']['supervisor'] >= $s['view']['requested']) {
+            $s['phase'] = 'quiescent';
+        }
+        self::write($s, $key, false, true);
+    }
+
+    private static function drainArm(object $actor, array $options): void
+    {
+        $lock = null; $s = null; $key = null;
+        try {
+            $key = self::key(); $lock = self::locked(false, true); $s = self::drainState($key);
+            $role = $options['drain_role']; $r = $s['request']; $ids = $r['identities'];
+            self::gate(in_array($role, ['master', 'supervisor'], true)
+                && $options === ['drain_role' => $role, 'run' => $r['run'], 'request_hmac' => self::mac('drain-'.$role, $r, $key)]
+                && $s['phase'] === $role.'-queued'
+                && get_class($actor) === ($role === 'master' ? \Laravel\Horizon\MasterSupervisor::class : Supervisor::class)
+                && getmypid() === $ids[$role]['pid']
+                && $actor->name === ($role === 'master' ? $ids['master_name'] : $ids['name']));
+            self::drainAuth($s, $key);
+            $s['phase'] = $role.'-armed'; self::write($s, $key, false, true);
+            $retained = [];
+            $event = $role === 'master' ? \Laravel\Horizon\Events\MasterSupervisorLooped::class : \Laravel\Horizon\Events\SupervisorLooped::class;
+            // Invoke after stock pending() has finished its entire local batch.
+            // A duplicate changes phase to held before any control is executed.
+            app('events')->listen($event, static function ($event) use ($actor, $role, $r, &$retained): void {
+                $actual = $role === 'master' ? $event->master : $event->supervisor;
+                if ($actual === $actor) { self::drainStep($actor, $role, $r['run'], $retained); }
+            });
+        } catch (Throwable $failure) { if (is_resource($lock)) { self::drainHold($s, $key); } }
+        finally { if (is_resource($lock)) { fclose($lock); } }
+    }
+
+    private static function drainIntent(array &$s, string $key, array $intent): void
+    {
+        self::drainAuth($s, $key);
+        $s['intents'][] = $intent; self::write($s, $key, false, true);
+        self::drainAuth($s, $key);
+    }
+
+    private static function drainStep(object $actor, string $role, string $run, array &$retained): void
+    {
+        $lock = null; $s = null; $key = null;
+        try {
+            $key = self::key(); $lock = self::locked(false, true); $s = self::drainState($key);
+            if ($s['request']['run'] !== $run || $s['phase'] === 'held') { return; }
+            self::drainAuth($s, $key); $ids = $s['request']['identities'];
+            if ($role === 'master') {
+                self::gate(count($actor->supervisors) === 1);
+                $child = $actor->supervisors->first();
+                self::gate(get_class($child) === \Laravel\Horizon\SupervisorProcess::class
+                    && get_class($child->process) === \Symfony\Component\Process\Process::class
+                    && $child->name === $ids['name'] && $child->process->isRunning()
+                    && $child->process->getPid() === $ids['supervisor']['pid'] && !$child->dead);
+                if ($s['phase'] === 'master-armed') {
+                    self::gate(is_bool($actor->working) && ($actor->working ? 'running' : 'paused') === $ids['master_status']);
+                    $retained = [$child, $child->process];
+                    $s['original']['master'] = ['working' => $actor->working, 'object' => spl_object_id($actor),
+                        'supervisor_object' => spl_object_id($child), 'process_object' => spl_object_id($child->process),
+                        'options' => $child->options->toArray(), 'count' => count($actor->supervisors)];
+                    self::drainIntent($s, $key, ['master-monitor-pause']);
+                    $actor->working = false;
+                    $s['phase'] = 'supervisor-queued'; self::write($s, $key, false, true);
+                    self::drainPush($s, 'supervisor', $key);
+                } else {
+                    self::gate($actor->working === false && $retained === [$child, $child->process]
+                        && $child->options->toArray() === $s['original']['master']['options']);
+                    if ($s['phase'] === 'workers-exited') {
+                        self::gate(self::children($ids['supervisor']['pid']) === []);
+                        $row = app(SupervisorRepository::class)->find($ids['name']);
+                        self::gate($row !== null && $row->status === 'paused' && $row->options === $ids['options']);
+                        $s['phase'] = 'quiescent'; self::write($s, $key, false, true);
+                    }
+                    self::drainSeen($s, $key, 'master');
+                }
+                return;
+            }
+            self::gate($actor->options->toArray() === $ids['options'] && $actor->options->force === false);
+            if ($s['phase'] === 'supervisor-armed') {
+                self::gate(is_bool($actor->working) && ($actor->working ? 'running' : 'paused') === $ids['supervisor_status']
+                    && count($actor->processPools) >= 1 && count($actor->processPools) <= 32);
+                $original = ['working' => $actor->working, 'object' => spl_object_id($actor),
+                    'options' => $actor->options->toArray(), 'pools' => []];
+                $pids = []; $count = 0;
+                foreach ($actor->processPools as $poolIndex => $pool) {
+                    self::gate(is_int($poolIndex) && get_class($pool) === \Laravel\Horizon\ProcessPool::class
+                        && is_bool($pool->working) && $pool->terminatingProcesses === [] && $pool->options->force === false
+                        && count($pool->processes) >= 1 && count($pool->processes) <= 64);
+                    $entry = ['working' => $pool->working, 'object' => spl_object_id($pool),
+                        'options' => $pool->options->toArray(), 'workers' => []];
+                    $retained[$poolIndex] = ['pool' => $pool, 'workers' => []];
+                    foreach ($pool->processes as $slot => $worker) {
+                        self::gate(is_int($slot) && ++$count <= 64 && get_class($worker) === \Laravel\Horizon\WorkerProcess::class
+                            && get_class($worker->process) === \Symfony\Component\Process\Process::class && $worker->process->isRunning());
+                        $pid = $worker->process->getPid(); self::gate(is_int($pid)); $proc = self::proc($pid);
+                        self::gate($proc['parent'] === getmypid() && $proc['cgroup'] === $ids['supervisor']['cgroup']
+                            && str_contains($proc['argv'], "\0horizon:work\0")
+                            && !in_array('--force', explode("\0", $proc['argv']), true)
+                            && str_contains($proc['argv'], "\0--supervisor=".$ids['name']."\0")
+                            && self::children($pid) === []);
+                        $status = file_get_contents('/proc/'.$pid.'/status', false, null, 0, 8193);
+                        self::gate(is_string($status) && strlen($status) <= 8192
+                            && preg_match('/^SigCgt:\s+([0-9a-f]{16})$/m', $status, $mask) === 1
+                            && (hexdec(substr($mask[1], -8)) & (1 << (SIGTERM - 1))) !== 0);
+                        $entry['workers'][$slot] = ['object' => spl_object_id($worker),
+                            'process_object' => spl_object_id($worker->process), 'identity' => $proc];
+                        $retained[$poolIndex]['workers'][$slot] = [$worker, $worker->process]; $pids[] = $pid;
+                    }
+                    $original['pools'][$poolIndex] = $entry;
+                }
+                sort($pids); self::gate(self::children(getmypid()) === $pids);
+                $s['original']['supervisor'] = $original;
+                self::drainIntent($s, $key, ['supervisor-monitor-pause']); $actor->working = false;
+                foreach ($actor->processPools as $poolIndex => $pool) {
+                    self::drainIntent($s, $key, ['pool-monitor-pause', $poolIndex]); $pool->working = false;
+                    foreach ($pool->processes as $slot => $worker) {
+                        $proc = $original['pools'][$poolIndex]['workers'][$slot]['identity'];
+                        self::gate($worker->process->isRunning() && $worker->process->getPid() === $proc['pid']
+                            && self::proc($proc['pid']) === $proc);
+                        self::drainIntent($s, $key, ['worker-term', $poolIndex, $slot]);
+                        // Parent-owned live handle only. Never scale, markForTermination,
+                        // restart, stop, prune or remove a process from the pool.
+                        $worker->terminate();
+                    }
+                }
+                $s['phase'] = 'waiting'; self::write($s, $key, false, true);
+            }
+            if (!in_array($s['phase'], ['waiting', 'workers-exited', 'quiescent', 'observing'], true)) { return; }
+            self::gate($actor->working === false && count($actor->processPools) === count($retained));
+            $live = []; $exited = 0;
+            foreach ($actor->processPools as $poolIndex => $pool) {
+                self::gate(isset($retained[$poolIndex]) && $retained[$poolIndex]['pool'] === $pool
+                    && $pool->working === false && $pool->terminatingProcesses === []
+                    && $pool->options->toArray() === $s['original']['supervisor']['pools'][$poolIndex]['options']
+                    && array_keys($pool->processes) === array_keys($retained[$poolIndex]['workers']));
+                foreach ($pool->processes as $slot => $worker) {
+                    self::gate($retained[$poolIndex]['workers'][$slot] === [$worker, $worker->process]);
+                    $proc = $s['original']['supervisor']['pools'][$poolIndex]['workers'][$slot]['identity'];
+                    if ($worker->process->isRunning()) {
+                        self::gate($worker->process->getPid() === $proc['pid'] && self::proc($proc['pid']) === $proc
+                            && self::children($proc['pid']) === []); $live[] = $proc['pid'];
+                    } else {
+                        self::gate($worker->process->getExitCode() === 0 && !$worker->process->hasBeenSignaled()
+                            && !is_dir('/proc/'.$proc['pid'])); ++$exited;
+                    }
+                }
+            }
+            sort($live); self::gate(self::children(getmypid()) === $live);
+            if ($live === []) {
+                self::drainAuth($s, $key);
+                if (in_array($s['phase'], ['quiescent', 'observing'], true)) {
+                    self::drainSeen($s, $key, 'supervisor'); return;
+                }
+                $s['receipt'] = ['version' => 1, 'operation' => 'horizon-drain', 'selected_version' => $s['request']['context']['version'],
+                    'phase' => 'quiescent', 'maintenance' => 'held', 'force' => false, 'restoration' => 'required',
+                    'pool_count' => count($retained), 'worker_object_count' => $exited, 'exited_worker_count' => $exited,
+                    'live_worker_count' => 0, 'terminating_count' => 0, 'master_status' => 'paused', 'supervisor_status' => 'paused',
+                    'run_hmac' => self::mac('drain-run', [$run], $key), 'original_hmac' => self::mac('drain-original', $s['original'], $key),
+                    'membership_hmac' => self::mac('drain-membership', [$ids['master'], $ids['supervisor'], []], $key),
+                    'source_hmac' => $s['request']['context']['source'], 'config_hmac' => $s['request']['context']['config']];
+                $s['phase'] = 'workers-exited'; self::write($s, $key, false, true);
+            }
+        } catch (Throwable $failure) { if (is_resource($lock)) { self::drainHold($s, $key); } }
+        finally { if (is_resource($lock)) { fclose($lock); } }
+    }
+
     public function process($supervisor, $options): void
     {
+        if (is_array($options) && array_key_exists('drain_role', $options)) {
+            self::drainArm($supervisor, $options); return;
+        }
         // Do not throw to Horizon's raw exception logger or reveal private names.
         $lock = null; $state = null; $key = null; $stage = 'authentication';
         try {

@@ -828,7 +828,7 @@ function startupRuntime(string $version, string $key): never {
 $startupCategory = 'ssh_input_invalid';
 $startupDb = null;
 try {
-    startupGate(PHP_SAPI === 'cli' && $argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe'], true)
+    startupGate(PHP_SAPI === 'cli' && $argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe'], true)
         && realpath(__FILE__) === '/probe/startup.php'
         && posix_geteuid() === 9999 && posix_getegid() === 9999);
     $startupCategory = 'ssh_hmac_invalid';
@@ -845,7 +845,7 @@ try {
         && config('app.debug') === false && is_string(getenv('APP_KEY'))
         && hash_equals(getenv('APP_KEY'), (string)config('app.key')));
     foreach (['HORIZON_ENABLED', 'SCHEDULER_ENABLED', 'MIGRATION_ENABLED', 'SEEDER_ENABLED', 'AUTOUPDATE'] as $flag) {
-        if (($argv[1] === 'runtime-observe' || str_starts_with($argv[1], 'horizon-inspect-')) && in_array($flag, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) {
+        if (($argv[1] === 'runtime-observe' || str_starts_with($argv[1], 'horizon-')) && in_array($flag, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) {
             startupGate(in_array(getenv($flag), ['true', 'false'], true));
         } else { startupGate(getenv($flag) === 'false'); }
     }
@@ -854,12 +854,18 @@ try {
         && (string)$startupConnection['port'] === '5432' && $startupConnection['database'] === 'coolify'
         && $startupConnection['username'] === 'coolify' && $startupConnection['password'] === 'rehearsal-only-password'
         && empty($startupConnection['url']) && empty($startupConnection['read']) && empty($startupConnection['write']));
-    if (str_starts_with($argv[1], 'horizon-inspect-')) {
+    if (str_starts_with($argv[1], 'horizon-')) {
         $startupCategory = 'horizon_inspection_held';
         startupRuntimeEnvironment();
         $startupHelper = '/var/www/html/app/SiftoMaintenance/InspectSupervisor.php';
-        [, $startupHelperBytes] = startupRead($startupHelper, 32768);
-        startupGate(hash('sha256', $startupHelperBytes) === '0c706c0b06225917b5d88dcdad49b29381a5e62d2e77f95f2f695f45d158e939');
+        [, $startupHelperBytes] = startupRead($startupHelper, 65536);
+        startupGate(hash('sha256', $startupHelperBytes) === '2c1e314fcc66a3a030f03be93b857663b81d5c9212431954d3e01e10e5ce5620');
+        if ($argv[1] === 'horizon-drain-enter') {
+            startupResult(App\SiftoMaintenance\InspectSupervisor::drainEnter($startupDeadline), 0);
+        }
+        if ($argv[1] === 'horizon-drain-observe') {
+            startupResult(App\SiftoMaintenance\InspectSupervisor::drainObserve($startupDeadline), 0);
+        }
         $startupResult = $argv[1] === 'horizon-inspect-request'
             ? App\SiftoMaintenance\InspectSupervisor::request($startupDeadline) : App\SiftoMaintenance\InspectSupervisor::observe();
         startupGate(true);
@@ -953,6 +959,6 @@ try {
     if ($startupDb !== null) { try { $startupDb->rollBack(); } catch (Throwable $ignored) {} }
     // A failed exclusive create can leave ONLY its own partial leaf. Existing
     // files are never removed/repaired; a subsequent invocation rejects it.
-    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe'], true) ? $argv[1] : 'ssh-reconstruct';
+    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe'], true) ? $argv[1] : 'ssh-reconstruct';
     startupResult(['version' => 1, 'operation' => $startupOperation, 'category' => $startupCategory], 1);
 }

@@ -33,7 +33,7 @@ def validate_installed_sources():
                    "maintenance/coolify-public-manifest.json", "maintenance/coolify_probe.php",
                    "maintenance/coolify_startup.php", "maintenance/coolify_startup.py", "maintenance/coolify_startup_init",
                    "maintenance/coolify_startup_middleware.php", "maintenance/coolify_startup_nginx.conf",
-                   "maintenance/coolify_startup_site.conf"):
+                   "maintenance/coolify_horizon_inspect.php", "maintenance/coolify_startup_site.conf"):
         path = installed / source
         for candidate in [path, *path.parents]:
             info = candidate.lstat()

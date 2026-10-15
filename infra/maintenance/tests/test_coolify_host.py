@@ -250,7 +250,7 @@ class SelectedReportTests(unittest.TestCase):
                      'coolify_systemd.py', 'coolify_native_protocol.py', 'coolify_cleanup.py',
                      'coolify_native_owner.py', 'coolify-public-manifest.json', 'coolify_probe.php',
                      'coolify_startup.php', 'coolify_startup.py', 'coolify_startup_init', 'coolify_startup_middleware.php',
-                     'coolify_startup_nginx.conf', 'coolify_startup_site.conf']:
+                     'coolify_startup_nginx.conf', 'coolify_startup_site.conf', 'coolify_horizon_inspect.php']:
             self.assertIn('maintenance/' + name, entrypoint.split('try:\n    validate_installed_sources()')[0])
             self.assertIn(name, installer)
             self.assertIn('maintenance/' + name, fixture_image)

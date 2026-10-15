@@ -21,7 +21,7 @@ _SOURCES = ("host_agent.py", "coolify_native_controller.py", "coolify_native_eng
     "maintenance/coolify-public-manifest.json", "maintenance/coolify_probe.php",
     "maintenance/coolify_startup.php", "maintenance/coolify_startup.py", "maintenance/coolify_startup_init",
     "maintenance/coolify_startup_middleware.php", "maintenance/coolify_startup_nginx.conf",
-    "maintenance/coolify_startup_site.conf",
+    "maintenance/coolify_horizon_inspect.php", "maintenance/coolify_startup_site.conf",
     "systemd/sifto-coolify-native-controller.service")
 _ROOT = Path("/opt/sifto-maintenance")
 _MANIFEST = Path("/etc/sifto-maintenance/coolify-native-sources.json")

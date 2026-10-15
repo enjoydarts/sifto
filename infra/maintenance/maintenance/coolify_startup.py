@@ -20,6 +20,13 @@ clone-only producer snapshots raw Redis expiry and recognized filesystem state
 at one fixed private storage leaf, and can restore PRETARGET state. Recorded
 file stages may resume; an unrecorded or truncated stage fails closed. Trusted
 post-target lifecycle admission and final success release remain unavailable.
+
+The fixed Horizon PSR-4 receiver authenticates its own command and live owned
+handles, without worker controls. Its receipt is non-authorizing: stock pending()
+can remove foreign commands in the same batch before this receiver can see them.
+The PUBLIC fixture installs into an empty narrow App tmpfs after the original
+supervisor starts. Installation into an original production app remains undefined;
+the root-installed source catalog alone supplies no App mount or native gate.
 """
 import copy
 from dataclasses import dataclass
@@ -30,7 +37,8 @@ from .coolify_plan import OLD_ARM, NEW_ARM, profile_sha256
 
 
 RESOURCE_SHA256 = (
-    ('coolify_startup.php', 'd92d043730def425842d47cc2ac32bfc85e7175065aeea4fecd84e35a7b6e953'),
+    ('coolify_startup.php', 'efcd7fdbec97aaacfbed5992ee9702c74aab03dd5e10aac9093daa4ef4f48151'),
+    ('coolify_horizon_inspect.php', '0c706c0b06225917b5d88dcdad49b29381a5e62d2e77f95f2f695f45d158e939'),
     ('coolify_startup_init', 'afe14f036a705b057afcd8346b61c3ba06b34cff02199ef6b2dc663bf7196522'),
     ('coolify_startup_middleware.php', 'fe5cb12552e94585d1fa9b831b4e4bac7caf4bbbe657cb0a3cd62b80ac67186d'),
     ('coolify_startup_nginx.conf', '11b1a85b104ec8bd848d2688da694ad8f64cdc9fe88bc67c02fe01583a305284'),
@@ -330,3 +338,66 @@ def parse_runtime_result(raw, *, selected_version):
         return RuntimeObservation(**value)
     except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
         raise ValueError('startup_runtime_result') from None
+
+
+@dataclass(frozen=True, repr=False)
+class HorizonInspection:
+    """Execution acknowledgement and inventory only. Never idle/drain authority."""
+    version: int
+    operation: str
+    selected_version: str
+    phase: str
+    supervisor_status: str
+    master_status: str
+    pool_count: int
+    worker_object_count: int
+    live_worker_count: int
+    terminating_count: int
+    maintenance: str
+    force: bool
+    run_hmac: str
+    supervisor_hmac: str
+    master_hmac: str
+    source_hmac: str
+    config_hmac: str
+    membership_hmac: str
+
+
+def parse_horizon_inspection(raw, *, selected_version):
+    def reject():
+        raise ValueError('startup_horizon_inspection')
+
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                reject()
+            value[key] = item
+        return value
+
+    try:
+        if (type(raw) is not bytes or not 0 < len(raw) <= 8192
+                or type(selected_version) is not str or selected_version not in ('4.4.2', '4.4.6')):
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(HorizonInspection.__dataclass_fields__):
+            reject()
+        for field, expected in dict(version=1, operation='horizon-inspect', selected_version=selected_version,
+                phase='complete', maintenance='held', force=False, terminating_count=0).items():
+            if type(value[field]) is not type(expected) or value[field] != expected:
+                reject()
+        for field in ('master_status', 'supervisor_status'):
+            if type(value[field]) is not str or value[field] not in ('running', 'paused'):
+                reject()
+        for field in ('pool_count', 'worker_object_count', 'live_worker_count'):
+            if type(value[field]) is not int or not 1 <= value[field] <= 64:
+                reject()
+        if not value['pool_count'] <= value['live_worker_count'] == value['worker_object_count']:
+            reject()
+        for field in (field for field in value if field.endswith('_hmac')):
+            if type(value[field]) is not str or re.fullmatch('[a-f0-9]{64}', value[field]) is None:
+                reject()
+        return HorizonInspection(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
+        raise ValueError('startup_horizon_inspection') from None

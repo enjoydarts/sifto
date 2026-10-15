@@ -37,7 +37,7 @@ _SOURCE_NAMES = frozenset(('host_agent.py', 'coolify_native_controller.py', 'coo
     'maintenance/coolify_docker.py', 'maintenance/coolify_rehearsal_engine.py', 'maintenance/coolify-public-manifest.json',
     'maintenance/coolify_probe.php', 'maintenance/coolify_startup.php', 'maintenance/coolify_startup.py',
     'maintenance/coolify_startup_init', 'maintenance/coolify_startup_middleware.php',
-    'maintenance/coolify_startup_nginx.conf', 'maintenance/coolify_startup_site.conf'))
+    'maintenance/coolify_startup_nginx.conf', 'maintenance/coolify_horizon_inspect.php', 'maintenance/coolify_startup_site.conf'))
 _ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LC_ALL': 'C'}
 _PROCESS_CLEANUP = object()
 _APP_FILES = ('runtime.env', 'probe.php', 'public-manifest.json', 'hmac.key')

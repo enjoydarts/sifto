@@ -801,7 +801,7 @@ class HostTests(unittest.TestCase):
                      "coolify_systemd.py", "coolify_native_protocol.py", "coolify_cleanup.py", "coolify_native_owner.py",
                      "coolify-public-manifest.json", "coolify_probe.php", "coolify_startup.php", "coolify_startup.py",
                      "coolify_startup_init", "coolify_startup_middleware.php",
-                     "coolify_startup_nginx.conf", "coolify_startup_site.conf")
+                     "coolify_startup_nginx.conf", "coolify_startup_site.conf", "coolify_horizon_inspect.php")
         for name in resources:
             resource = package / name
             original = resource.read_bytes()

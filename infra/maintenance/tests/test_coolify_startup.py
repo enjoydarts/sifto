@@ -40,7 +40,7 @@ class ControlledStartupResources(unittest.TestCase):
         from maintenance import coolify_docker
         expected = ('coolify_startup.php', 'coolify_startup.py', 'coolify_startup_init',
                     'coolify_startup_middleware.php', 'coolify_startup_nginx.conf',
-                    'coolify_startup_site.conf')
+                    'coolify_startup_site.conf', 'coolify_horizon_inspect.php')
         root = PACKAGE.parent
         for name in expected:
             with self.subTest(name=name):
@@ -53,7 +53,7 @@ class ControlledStartupResources(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec('maintenance.coolify_startup'),
                              'fixed startup catalog is missing')
         from maintenance import coolify_startup
-        self.assertEqual(len(coolify_startup.RESOURCE_SHA256), 5)
+        self.assertEqual(len(coolify_startup.RESOURCE_SHA256), 6)
         for name, digest in coolify_startup.RESOURCE_SHA256:
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((PACKAGE / name).read_bytes()).hexdigest(), digest)

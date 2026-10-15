@@ -1,0 +1,45 @@
+services:
+  source-old: &source
+    extends: {file: ../startup/compose.yml, service: source-old}
+    entrypoint: [php, /startup/inspect-source.php]
+    volumes: [./source.php:/startup/inspect-source.php:ro]
+  source-target:
+    <<: *source
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  unit:
+    extends: {file: ../compose.yml, service: test}
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 1
+    pids_limit: 48
+  bootstrap:
+    extends: {file: ../bootstrap/compose.yml, service: test}
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 1
+    pids_limit: 48
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup/compose.yml, service: old}
+    env_file: ${SIFTO_INSPECT_ENV:-../startup/public.env}
+    volumes:
+      - ${SIFTO_INSPECT_ENV:-../startup/public.env}:/var/www/html/.env:ro
+      - ../maintenance:/fixed:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+      - ./fixture.php:/startup/inspect-fixture.php:ro
+      - ./diagnose.php:/startup/inspect-diagnose.php:ro
+      - ../startup-runtime/wait-ready.sh:/startup/runtime-wait-ready.sh:ro
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+      - /var/www/html/app/SiftoMaintenance:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+volumes:
+  storage:
+    labels: {sifto.owner: horizon-supervisor-inspection-public-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: horizon-supervisor-inspection-public-v1}

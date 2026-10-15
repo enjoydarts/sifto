@@ -248,7 +248,9 @@ class SelectedReportTests(unittest.TestCase):
         for name in ['coolify_host.py', 'coolify_plan.py', 'coolify_rehearsal.py',
                      'coolify_evidence.py', 'coolify_docker.py', 'coolify_rehearsal_engine.py',
                      'coolify_systemd.py', 'coolify_native_protocol.py', 'coolify_cleanup.py',
-                     'coolify_native_owner.py', 'coolify-public-manifest.json', 'coolify_probe.php']:
+                     'coolify_native_owner.py', 'coolify-public-manifest.json', 'coolify_probe.php',
+                     'coolify_startup.py', 'coolify_startup_init', 'coolify_startup_middleware.php',
+                     'coolify_startup_nginx.conf', 'coolify_startup_site.conf']:
             self.assertIn('maintenance/' + name, entrypoint.split('try:\n    validate_installed_sources()')[0])
             self.assertIn(name, installer)
             self.assertIn('maintenance/' + name, fixture_image)

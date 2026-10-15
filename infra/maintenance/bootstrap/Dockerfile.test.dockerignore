@@ -17,6 +17,11 @@
 !maintenance/coolify_native_owner.py
 !maintenance/coolify-public-manifest.json
 !maintenance/coolify_probe.php
+!maintenance/coolify_startup.py
+!maintenance/coolify_startup_init
+!maintenance/coolify_startup_middleware.php
+!maintenance/coolify_startup_nginx.conf
+!maintenance/coolify_startup_site.conf
 !systemd/sifto-coolify-native-controller.service
 !bootstrap/install-host.sh
 !bootstrap/test-install.sh

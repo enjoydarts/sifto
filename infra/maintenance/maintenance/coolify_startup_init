@@ -1,0 +1,3 @@
+#!/bin/sh
+# Controlled rehearsal boot: app:init is deliberately never invoked.
+exit 0

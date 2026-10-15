@@ -1,0 +1,116 @@
+# Exact PUBLIC resources and SYNTHETIC named volumes only. No host application input.
+x-app: &app
+  platform: linux/arm64
+  pull_policy: never
+  user: '9999:9999'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  network_mode: service:postgres
+  mem_limit: 512m
+  memswap_limit: 512m
+  cpus: 1.0
+  pids_limit: 256
+  env_file: public.env
+  volumes:
+    - ./public.env:/var/www/html/.env:ro
+    - ${SIFTO_STARTUP_PUBLIC_INIT:?fixed public init staging required}:/etc/s6-overlay/s6-rc.d/init-script/up:ro
+    - ../maintenance/coolify_startup_middleware.php:/var/www/html/app/Http/Middleware/PreventRequestsDuringMaintenance.php:ro
+    - ../maintenance/coolify_startup_nginx.conf:/etc/nginx/nginx.conf:ro
+    - ../maintenance/coolify_startup_site.conf:/etc/nginx/conf.d/default.conf:ro
+    - ./fixture.php:/startup/fixture.php:ro
+    - ./public-ssl.txt:/data/coolify/ssl/public-fixture.txt:ro
+    - ./public-proxy.txt:/data/coolify/proxy/public-fixture.txt:ro
+    - storage:/var/www/html/storage
+    - bootstrap-cache:/var/www/html/bootstrap/cache
+  tmpfs:
+    - /run:rw,nosuid,nodev,exec,uid=9999,gid=9999,mode=0755,size=33554432
+    - /tmp:rw,nosuid,nodev,noexec,mode=1777,size=16777216
+  labels:
+    sifto.owner: controlled-startup-public-fixture-v1
+  logging:
+    driver: json-file
+    options: {max-size: 1m, max-file: '1'}
+services:
+  source-old: &source
+    image: docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960
+    platform: linux/arm64
+    pull_policy: never
+    user: '9999:9999'
+    entrypoint: [php, /startup/fixture.php]
+    command: [source]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    volumes: [./fixture.php:/startup/fixture.php:ro]
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}
+  source-target:
+    <<: *source
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  postgres:
+    image: docker.io/library/postgres@sha256:91a22c143801df42c2e4a8f9926eab5e48f39f40beb5220b7c29d4478263c341
+    platform: linux/arm64
+    pull_policy: never
+    user: postgres
+    entrypoint: [/usr/local/bin/docker-entrypoint.sh]
+    command: [postgres, -c, listen_addresses=127.0.0.1, -c, unix_socket_directories=/var/run/postgresql]
+    environment:
+      POSTGRES_USER: coolify
+      POSTGRES_DB: coolify
+      POSTGRES_PASSWORD: rehearsal-only-password
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.25
+    pids_limit: 128
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,nodev,noexec,uid=70,gid=70,mode=0700,size=268435456
+      - /var/run/postgresql:rw,nosuid,nodev,noexec,uid=70,gid=70,mode=0777,size=16777216
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777,size=16777216
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}
+  redis:
+    image: docker.io/library/redis@sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85
+    platform: linux/arm64
+    pull_policy: never
+    user: redis
+    entrypoint: [/usr/local/bin/redis-server]
+    command: [--bind, 127.0.0.1, --requirepass, rehearsal-only-password, --save, '', --appendonly, 'no']
+    network_mode: service:postgres
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.125
+    pids_limit: 64
+    tmpfs:
+      - /data:rw,nosuid,nodev,noexec,uid=999,gid=999,mode=0700,size=16777216
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}
+  old:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  probe:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960
+    entrypoint: [php, /startup/fixture.php]
+    command: [observe]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+volumes:
+  storage:
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}

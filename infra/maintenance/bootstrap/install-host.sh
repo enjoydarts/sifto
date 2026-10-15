@@ -8,7 +8,7 @@ payload=$(realpath -- "$1")
 [[ -d "$payload" && ! -L "$1" ]]
 [[ $(stat -c %u "$payload") == 0 ]]
 [[ -z $(find "$payload" \( ! -user root -o -perm /022 -o -type l \) -print -quit) ]] || { printf 'payload must be protected and root-owned\n' >&2; exit 1; }
-for file in host_agent.py coolify_native_controller.py coolify_native_engine.py systemd/sifto-coolify-native-controller.service maintenance/coolify_systemd.py maintenance/coolify_native_protocol.py maintenance/coolify_cleanup.py maintenance/coolify_native_owner.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php config.json scan.pub apply.pub; do
+for file in host_agent.py coolify_native_controller.py coolify_native_engine.py systemd/sifto-coolify-native-controller.service maintenance/coolify_systemd.py maintenance/coolify_native_protocol.py maintenance/coolify_cleanup.py maintenance/coolify_native_owner.py maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify_rehearsal_engine.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php maintenance/coolify_startup.py maintenance/coolify_startup_init maintenance/coolify_startup_middleware.php maintenance/coolify_startup_nginx.conf maintenance/coolify_startup_site.conf config.json scan.pub apply.pub; do
   [[ -f "$payload/$file" && ! -L "$payload/$file" && $(stat -c %h "$payload/$file") == 1 ]] || { printf 'invalid payload\n' >&2; exit 1; }
 done
 scan_fingerprint=$(ssh-keygen -l -f "$payload/scan.pub" | awk '{print $2}')
@@ -61,7 +61,7 @@ for file in coolify_native_controller.py coolify_native_engine.py; do
   install -o root -g root -m 0644 "$payload/$file" "/opt/sifto-maintenance/$file"
 done
 install -o root -g root -m 0644 "$payload/systemd/sifto-coolify-native-controller.service" /opt/sifto-maintenance/systemd/sifto-coolify-native-controller.service
-for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php; do
+for file in __init__.py plan.py host.py coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php coolify_startup.py coolify_startup_init coolify_startup_middleware.php coolify_startup_nginx.conf coolify_startup_site.conf; do
   install -o root -g root -m 0644 "$payload/maintenance/$file" "/opt/sifto-maintenance/maintenance/$file"
 done
 install -d -o root -g root -m 0700 /etc/sifto-maintenance /var/lib/sifto-maintenance /var/lib/sifto-maintenance/plans
@@ -78,6 +78,9 @@ names = ('host_agent.py', 'coolify_native_controller.py', 'coolify_native_engine
     'maintenance/coolify_systemd.py', 'maintenance/coolify_native_protocol.py',
     'maintenance/coolify_cleanup.py', 'maintenance/coolify_native_owner.py',
     'maintenance/coolify-public-manifest.json', 'maintenance/coolify_probe.php',
+    'maintenance/coolify_startup.py', 'maintenance/coolify_startup_init',
+    'maintenance/coolify_startup_middleware.php', 'maintenance/coolify_startup_nginx.conf',
+    'maintenance/coolify_startup_site.conf',
     'systemd/sifto-coolify-native-controller.service')
 document = {'version': 1, 'sources': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}}
 directory = os.open('/etc/sifto-maintenance', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

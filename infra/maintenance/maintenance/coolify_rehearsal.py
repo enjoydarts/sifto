@@ -421,7 +421,7 @@ _IDENTITY = ('APP_KEY', 'APP_ID', 'APP_NAME', 'PUSHER_APP_ID', 'PUSHER_APP_KEY',
 _OVERRIDES = {
     'APP_ENV': 'production', 'APP_DEBUG': 'false', 'APP_URL': 'http://127.0.0.1:8080',
     'ASSET_URL': '', 'SELF_HOSTED': 'true', 'AUTOUPDATE': 'false',
-    'MIGRATION_ENABLED': 'true', 'SEEDER_ENABLED': 'true', 'HORIZON_ENABLED': 'false',
+    'MIGRATION_ENABLED': 'false', 'SEEDER_ENABLED': 'false', 'HORIZON_ENABLED': 'false',
     'SCHEDULER_ENABLED': 'false', 'QUEUE_CONNECTION': 'redis', 'QUEUE_FAILED_DRIVER': 'database-uuids',
     'DB_CONNECTION': 'pgsql', 'DATABASE_URL': '', 'DB_HOST': '127.0.0.1', 'DB_PORT': '5432',
     'DB_DATABASE': 'coolify', 'DB_USERNAME': 'coolify', 'DB_PASSWORD': 'rehearsal-only-password',
@@ -431,6 +431,8 @@ _OVERRIDES = {
     'SESSION_DOMAIN': '', 'SENTRY_DSN': '', 'PUSHER_BACKEND_HOST': '127.0.0.1',
     'PUSHER_BACKEND_PORT': '6001', 'SSH_COMMAND_TIMEOUT': '5', 'SSH_MAX_RETRIES': '1',
     'PHP_MEMORY_LIMIT': '512M', 'ROOT_USER_EMAIL': '', 'ROOT_USER_PASSWORD': '',
+    'DISABLE_DEFAULT_CONFIG': 'true', 'AUTORUN_ENABLED': 'false', 'SSL_MODE': 'off',
+    'APP_MAINTENANCE_DRIVER': 'cache', 'APP_MAINTENANCE_STORE': 'redis',
     **{f'DB_{side}_{column}': '' for side in ('READ', 'WRITE')
        for column in ('HOST', 'PORT', 'USERNAME', 'PASSWORD')},
 }

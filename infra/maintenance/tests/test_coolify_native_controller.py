@@ -18,6 +18,9 @@ SOURCES = ('host_agent.py', 'coolify_native_controller.py', 'coolify_native_engi
     'maintenance/coolify_systemd.py', 'maintenance/coolify_native_protocol.py',
     'maintenance/coolify_cleanup.py', 'maintenance/coolify_native_owner.py',
     'maintenance/coolify-public-manifest.json', 'maintenance/coolify_probe.php',
+    'maintenance/coolify_startup.py', 'maintenance/coolify_startup_init',
+    'maintenance/coolify_startup_middleware.php', 'maintenance/coolify_startup_nginx.conf',
+    'maintenance/coolify_startup_site.conf',
     'systemd/sifto-coolify-native-controller.service')
 
 

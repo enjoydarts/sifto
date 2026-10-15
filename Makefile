@@ -182,6 +182,10 @@ maintenance-syntax:
 maintenance-bootstrap-test:
 	docker compose --env-file /dev/null --project-name sifto-maintenance-bootstrap-fixture -f infra/maintenance/bootstrap/compose.yml run --build --rm -T --no-deps test
 
+.PHONY: maintenance-coolify-startup-test
+maintenance-coolify-startup-test:
+	sh infra/maintenance/startup/test.sh
+
 .PHONY: maintenance-backup-test
 maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test

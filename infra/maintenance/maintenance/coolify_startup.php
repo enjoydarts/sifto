@@ -531,10 +531,304 @@ function startupBarrier(string $operation, string $version, string $hmacKey): ne
         'current_state_hmac' => startupHmac('barrier-state', $state, $hmacKey)], 0);
 }
 
+// Passive S1 only. No pause, signal, queue access, HTTP session inspection or
+// lifecycle authority. The S6 commands below are literal read-only commands.
+const STARTUP_RUNTIME_LONGRUNS = ['php-fpm', 'nginx', 'reverb', 'terminal-server', 'horizon', 'scheduler-worker'];
+const STARTUP_RUNTIME_ONESHOTS = ['fix-attrs', 'legacy-cont-init', 'db-migration', 'init-seeder', 'init-script', 'legacy-services'];
+
+function startupRuntimeFile(string $path, int $limit): array {
+    clearstatcache(true, $path); $before = lstat($path);
+    startupGate(is_array($before) && ($before['mode'] & 0170000) === 0100000
+        && $before['nlink'] === 1 && $before['size'] >= 0 && $before['size'] <= $limit);
+    $identity = startupIdentity($before);
+    $stream = fopen($path, 'rb'); startupGate(is_resource($stream));
+    try {
+        startupGate(startupIdentity(fstat($stream)) === $identity);
+        $bytes = stream_get_contents($stream, $limit + 1);
+        clearstatcache(true, $path); $after = lstat($path);
+        startupGate(is_string($bytes) && strlen($bytes) === $before['size'] && is_array($after)
+            && startupIdentity($after) === $identity && startupIdentity(fstat($stream)) === $identity);
+        return [$identity, $bytes];
+    } finally { fclose($stream); }
+}
+
+function startupRuntimeEnvironment(): array {
+    startupParents('/var/www/html/.env');
+    [$identity, $bytes] = startupRuntimeFile('/var/www/html/.env', 65536);
+    // Same narrow assignment/quote grammar as canonical clone_env/parse_env.
+    // Worker switches additionally retain the exact unquoted S6 grep literals.
+    startupGate(strpbrk($bytes, "\0\r\\$`") === false);
+    $values = []; $literals = []; $lines = explode("\n", $bytes); startupGate(count($lines) <= 4096);
+    foreach ($lines as $line) {
+        if (trim($line) === '' || str_starts_with(ltrim($line), '#')) { continue; }
+        startupGate(preg_match('/\A([A-Z][A-Z0-9_]*)=(.*)\z/D', $line, $match) === 1);
+        startupGate(!array_key_exists($match[1], $values)); $value = $match[2]; $literals[$match[1]] = $value;
+        if (str_starts_with($value, "'") || str_starts_with($value, '"')) {
+            startupGate(strlen($value) >= 2 && substr($value, -1) === $value[0]); $value = substr($value, 1, -1);
+        }
+        startupGate(strpbrk($value, "'\"") === false && preg_match('/[\x00-\x1f\x7f]/', $value) === 0);
+        $values[$match[1]] = $value;
+    }
+    foreach (['HORIZON_ENABLED', 'SCHEDULER_ENABLED'] as $name) {
+        startupGate(isset($literals[$name]) && in_array($literals[$name], ['true', 'false'], true));
+    }
+    $configKeys = ['HORIZON_ENABLED' => 'constants.horizon.is_horizon_enabled',
+        'SCHEDULER_ENABLED' => 'constants.horizon.is_scheduler_enabled',
+        'MIGRATION_ENABLED' => 'constants.migration.is_migration_enabled',
+        'SEEDER_ENABLED' => 'constants.seeder.is_seeder_enabled', 'AUTOUPDATE' => 'constants.coolify.autoupdate'];
+    $flags = [];
+    foreach ($configKeys as $name => $configKey) {
+        startupGate(isset($values[$name]) && in_array($values[$name], ['true', 'false'], true)
+            && getenv($name) === $values[$name] && config($configKey) === ($values[$name] === 'true'));
+        if (!in_array($name, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) { startupGate($values[$name] === 'false'); }
+        $flags[$name] = $values[$name] === 'true';
+    }
+    foreach (['APP_DEBUG' => 'false', 'AUTORUN_ENABLED' => 'false', 'DISABLE_DEFAULT_CONFIG' => 'true',
+            'APP_MAINTENANCE_DRIVER' => 'cache', 'APP_MAINTENANCE_STORE' => 'redis', 'SSL_MODE' => 'off'] as $name => $expected) {
+        startupGate(($values[$name] ?? null) === $expected && getenv($name) === $expected);
+    }
+    startupGate(config('app.maintenance.driver') === 'cache' && config('app.maintenance.store') === 'redis');
+    $horizon = config('horizon.environments.production');
+    startupGate(is_array($horizon) && count($horizon) <= 32
+        && strlen(json_encode($horizon, JSON_THROW_ON_ERROR)) <= 32768);
+    // Snapshot effective options, without claiming queue idleness or consulting
+    // heartbeat/job/session data. No force=true configuration is adopted.
+    foreach ($horizon as $options) {
+        startupGate(is_array($options) && ($options['force'] ?? false) === false);
+    }
+    return [$flags, [$identity, hash('sha256', $bytes), $flags, $horizon]];
+}
+
+function startupRuntimeSource(): array {
+    // Stock S6 intentionally uses these two symlinks. Authenticate their exact
+    // targets here; startupParents/SSH/barrier strictness is never relaxed.
+    startupGate(is_link('/run/s6-rc') && preg_match('/\As6-rc:s6-rc-init:[A-Za-z0-9]{6}\z/D', readlink('/run/s6-rc')) === 1);
+    $live = '/run/'.readlink('/run/s6-rc');
+    startupParents($live.'/servicedirs/fixed-leaf');
+    $hashes = ['php-fpm' => 'be640dfc6586b1fac2e070fc559f96eb7a39f6de756762eb86066b277a99d074',
+        'nginx' => '3c65b0ec5af86d534dc7ac5f17da83ab8b91edfaacee220ec129a1310e460df1',
+        'reverb' => 'dca10063b2d8b43e6c691d5da37d65d1bbf161cc1ea5fa4b853ee9ae819df174',
+        'terminal-server' => '8af137efcd342f2002e74a33c67feadea39ca795be706ad68c71d70826a1ec0b',
+        'horizon' => '296dfda050b4d25c32fd9a858216a9a492148fd6ef9960644e08f32f7caf5e31',
+        'scheduler-worker' => '9034571c9f328e694720f9c66c461016e96a3d932ade29f5d2498754677d906c'];
+    $source = [];
+    foreach ($hashes as $name => $expected) {
+        $definition = '/etc/s6-overlay/s6-rc.d/'.$name;
+        startupParents($definition.'/run');
+        [$original, $bytes] = startupRuntimeFile($definition.'/run', 4096);
+        startupGate(hash('sha256', $bytes) === $expected);
+        [, $type] = startupRuntimeFile($definition.'/type', 16); startupGate(trim($type) === 'longrun');
+        $link = '/run/service/'.$name;
+        startupGate(is_link($link) && readlink($link) === '/run/s6-rc/servicedirs/'.$name
+            && realpath($link) === $live.'/servicedirs/'.$name);
+        $compiled = $live.'/servicedirs/'.$name;
+        startupParents($compiled.'/run');
+        [$copied, $run] = startupRuntimeFile($compiled.'/run', 4096);
+        startupGate($run === $bytes && $copied['uid'] === 9999 && $copied['gid'] === 9999
+            && ($copied['mode'] & 0022) === 0);
+        $notify = [];
+        foreach ([$definition, $compiled] as $root) {
+            clearstatcache(true, $root.'/notification-fd');
+            if (in_array($name, ['php-fpm', 'nginx'], true)) {
+                [$info, $fd] = startupRuntimeFile($root.'/notification-fd', 8);
+                startupGate($fd === ($root === $definition ? '3' : "3\n")); $notify[] = $info;
+            } else { startupGate(@lstat($root.'/notification-fd') === false); }
+        }
+        $source[$name] = [$original, $copied, $expected, $notify];
+    }
+    return [$live, $source];
+}
+
+function startupRuntimeProcesses(): array {
+    $paths = glob('/proc/[0-9]*/stat'); startupGate(is_array($paths) && count($paths) <= 256);
+    $rows = [];
+    foreach ($paths as $path) {
+        $pid = (int)basename(dirname($path));
+        if ($pid === getmypid()) { continue; }
+        $before = @file_get_contents($path, false, null, 0, 4097);
+        if ($before === false) { continue; }
+        startupGate(strlen($before) <= 4096
+            && preg_match('/\A([0-9]+) \((.*)\) (.*)\n?\z/sD', $before, $match) === 1 && (int)$match[1] === $pid);
+        $fields = explode(' ', trim($match[3]));
+        startupGate(count($fields) >= 20 && ctype_digit($fields[1]) && ctype_digit($fields[19]));
+        $status = @file_get_contents('/proc/'.$pid.'/status', false, null, 0, 8193);
+        if ($status === false) { continue; }
+        startupGate(strlen($status) <= 8192 && preg_match('/^Uid:\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)$/m', $status, $uids) === 1);
+        if ((int)$uids[2] !== 9999) { continue; }
+        startupGate(array_slice($uids, 1) === ['9999', '9999', '9999', '9999']);
+        $argv = @file_get_contents('/proc/'.$pid.'/cmdline', false, null, 0, 8193);
+        $exe = @readlink('/proc/'.$pid.'/exe'); $info = @stat('/proc/'.$pid.'/exe');
+        $after = @file_get_contents($path, false, null, 0, 4097);
+        if ($after === false) { continue; }
+        // A persistent zombie/unreadable application executable remains owned
+        // and unclassified. Never silently drop it from a "stable" snapshot.
+        startupGate(($argv === false || strlen($argv) <= 8192) && ($exe === false || strlen($exe) <= 512));
+        // state/CPU counters can change while reading; starttime/parent/argv/exe
+        // form identity. Whole membership is captured again after S6 reads.
+        startupGate(preg_match('/\A[0-9]+ \((.*)\) (.*)\n?\z/sD', $after, $second) === 1);
+        $afterFields = explode(' ', trim($second[2]));
+        startupGate(($afterFields[1] ?? null) === $fields[1] && ($afterFields[19] ?? null) === $fields[19]);
+        $rows[$pid] = ['pid' => $pid, 'parent' => (int)$fields[1], 'start' => (int)$fields[19],
+            'exe' => $exe === false ? '' : $exe, 'argv' => $argv === false ? '' : $argv,
+            'executable' => $info === false ? null : startupIdentity($info)];
+    }
+    ksort($rows, SORT_NUMERIC); return $rows;
+}
+
+function startupRuntime(string $version, string $key): never {
+    global $startupCategory, $startupDeadline;
+    $startupCategory = 'runtime_environment_invalid';
+    [$flags, $configBefore] = startupRuntimeEnvironment();
+    $startupCategory = 'runtime_source_invalid'; $sourceBefore = startupRuntimeSource();
+    $startupCategory = 'runtime_process_invalid'; $before = startupRuntimeProcesses();
+    $startupCategory = 'runtime_s6_invalid';
+    // No caller-controlled command, path, service name or option is accepted.
+    $commands = [
+        'active' => ['/command/s6-rc', '-a', 'list'],
+        'php-fpm' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/php-fpm'],
+        'nginx' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/nginx'],
+        'reverb' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/reverb'],
+        'terminal-server' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/terminal-server'],
+        'horizon' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/horizon'],
+        'scheduler-worker' => ['/command/s6-svstat', '-o', 'up,wantedup,ready,paused,pid', '/run/service/scheduler-worker'],
+    ];
+    $outputs = [];
+    foreach ($commands as $name => $command) {
+        startupGate(true);
+        $process = proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        if (!is_resource($process)) { startupGate(false); }
+        try {
+            startupGate(true);
+            stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
+            $out = ''; $err = ''; $exit = -1;
+            do {
+                $out .= stream_get_contents($pipes[1], 4097); $err .= stream_get_contents($pipes[2], 4097);
+                startupGate(strlen($out) <= 4096 && strlen($err) <= 4096);
+                $state = proc_get_status($process);
+                if (!$state['running']) { $exit = $state['exitcode']; break; }
+                // Only the observer's own read-only tool may be terminated on
+                // budget expiry. No application process is ever signalled.
+                if (hrtime(true) > $startupDeadline) { proc_terminate($process, 9); startupGate(false); }
+                usleep(1000);
+            } while (true);
+            $out .= stream_get_contents($pipes[1], 4097); $err .= stream_get_contents($pipes[2], 4097);
+            startupGate(strlen($out) <= 4096 && strlen($err) <= 4096);
+            $outputs[$name] = [$exit, $out, $err];
+        } finally {
+            // Reap only this proc_open-owned read-only tool. Deadline/output
+            // gates can throw before the loop's explicit timeout branch.
+            $state = proc_get_status($process);
+            if ($state['running']) { proc_terminate($process, 9); }
+            fclose($pipes[1]); fclose($pipes[2]); proc_close($process);
+        }
+    }
+    $startupCategory = 'runtime_process_invalid'; $after = startupRuntimeProcesses();
+    $startupCategory = 'runtime_source_invalid'; startupGate(startupRuntimeSource() === $sourceBefore);
+    $startupCategory = 'runtime_environment_invalid'; startupGate(startupRuntimeEnvironment() === [$flags, $configBefore]);
+    $startupCategory = 'runtime_s6_invalid';
+    [$exit, $out, $err] = $outputs['active']; $active = null;
+    $known = array_merge(STARTUP_RUNTIME_ONESHOTS, STARTUP_RUNTIME_LONGRUNS, ['s6rc-fdholder', 's6rc-oneshot-runner']);
+    if ($exit === 0) {
+        startupGate($err === '' && $out !== '' && str_ends_with($out, "\n"));
+        $active = explode("\n", substr($out, 0, -1));
+        startupGate(count(array_unique($active)) === count($active));
+        foreach ($active as $name) { startupGate(in_array($name, $known, true)); }
+    } else {
+        startupGate($out === '' && $exit === 111 && $err === "s6-rc: fatal: unable to take locks: Resource busy\n");
+    }
+    $rows = []; $roots = [];
+    foreach (STARTUP_RUNTIME_ONESHOTS as $name) {
+        $rows[] = ['name' => $name, 'kind' => 'oneshot',
+            'state' => $active === null ? 'unknown' : (in_array($name, $active, true) ? 'active' : 'not-active'),
+            'readiness' => 'unsupported', 'role' => 'none', 'pid' => 0, 'start_time_ticks' => 0, 'identity_hmac' => null];
+    }
+    foreach (STARTUP_RUNTIME_LONGRUNS as $name) {
+        [$exit, $out, $err] = $outputs[$name];
+        $row = ['name' => $name, 'kind' => 'longrun', 'state' => 'unknown', 'readiness' => 'unknown',
+            'role' => 'none', 'pid' => 0, 'start_time_ticks' => 0, 'identity_hmac' => null];
+        if ($exit === 1 && $out === '' && $err === 's6-svstat: fatal: unable to read status for /run/service/'.$name.": s6-supervise not running\n") {
+            $row['state'] = 'missing';
+        } elseif ($exit === 0) {
+            startupGate($err === '' && preg_match('/\A(true|false) (true|false) (true|false) (true|false) (-1|[0-9]+)\n\z/D', $out, $m) === 1);
+            $pid = (int)$m[5];
+            if ($m[1] === 'false') { startupGate($pid === -1 && $m[3] === 'false'); $row['state'] = 'down'; }
+            else {
+                startupGate($pid > 0 && $pid <= 4194304);
+                $process = $before[$pid] ?? null;
+                if ($process !== null && ($after[$pid] ?? null) === $process) {
+                    $row['pid'] = $pid; $row['start_time_ticks'] = $process['start'];
+                    $row['identity_hmac'] = startupHmac('runtime-process', $process, $key);
+                    $row['role'] = 'unknown'; $row['state'] = 'unstable';
+                    $parent = $before[$process['parent']] ?? null;
+                    $supervised = $parent !== null && ($after[$process['parent']] ?? null) === $parent
+                        && $parent['exe'] === '/package/admin/s6-2.13.2.0/command/s6-supervise'
+                        && $parent['argv'] === "s6-supervise\0".$name."\0" && $parent['parent'] === 1;
+                    $expected = match ($name) {
+                        'php-fpm' => $process['exe'] === '/usr/local/sbin/php-fpm'
+                            && rtrim($process['argv'], "\0") === 'php-fpm: master process (/usr/local/etc/php-fpm.conf)',
+                        'nginx' => $process['exe'] === '/usr/sbin/nginx' && rtrim($process['argv'], "\0") === 'nginx: master process nginx',
+                        'reverb' => $process['exe'] === '/usr/local/bin/php' && $process['argv'] === "php\0artisan\0reverb:start\0--host=0.0.0.0\0--port=6001\0",
+                        'terminal-server' => $process['exe'] === '/usr/bin/node' && $process['argv'] === "node\0/terminal/terminal-server.js\0",
+                        'horizon' => $flags['HORIZON_ENABLED'] && $process['exe'] === '/usr/local/bin/php' && $process['argv'] === "php\0artisan\0horizon\0",
+                        'scheduler-worker' => $flags['SCHEDULER_ENABLED'] && $process['exe'] === '/usr/local/bin/php' && $process['argv'] === "php\0artisan\0schedule:work\0",
+                    };
+                    $disabled = in_array($name, ['horizon', 'scheduler-worker'], true)
+                        && !$flags[$name === 'horizon' ? 'HORIZON_ENABLED' : 'SCHEDULER_ENABLED']
+                        && $process['exe'] === '/bin/busybox' && $process['argv'] === "sleep\0infinity\0";
+                    if ($supervised && ($expected || $disabled) && $active !== null && in_array($name, $active, true)
+                            && $m[2] === 'true' && $m[4] === 'false') {
+                        $row['state'] = 'up'; $row['role'] = $disabled ? 'disabled-sleep' : $name;
+                        $row['readiness'] = in_array($name, ['php-fpm', 'nginx'], true)
+                            ? ($m[3] === 'true' ? 'notified' : 'not-notified') : 'unsupported';
+                        $roots[$pid] = $name;
+                    }
+                } else { $row['state'] = 'unstable'; }
+            }
+        }
+        $rows[] = $row;
+    }
+    // Classify the whole application UID namespace conservatively. Descendants
+    // are membership facts, never evidence of idle/drained queue or terminal.
+    $unclassified = 0;
+    foreach ($after as $pid => $process) {
+        $cursor = $pid; $seen = []; $classified = false;
+        while (isset($after[$cursor]) && !isset($seen[$cursor])) {
+            if (isset($roots[$cursor])) { $classified = true; break; }
+            $seen[$cursor] = true; $cursor = $after[$cursor]['parent'];
+        }
+        if (!$classified) {
+            $exe = $process['exe'];
+            // These are infrastructure processes only when actual executable
+            // and S6 ancestry agree. Unknown application execs are counted.
+            $supervisorArgv = array_map(fn ($name) => "s6-supervise\0".$name."\0",
+                array_merge(STARTUP_RUNTIME_LONGRUNS, ['s6rc-fdholder', 's6rc-oneshot-runner', 's6-linux-init-shutdownd']));
+            $classified = ($pid === 1 && $exe === '/package/admin/s6-2.13.2.0/command/s6-svscan'
+                    && $process['argv'] === "/package/admin/s6/command/s6-svscan\0-d4\0--\0/run/service\0")
+                || ($process['parent'] === 1 && $exe === '/package/admin/s6-2.13.2.0/command/s6-supervise'
+                    && in_array($process['argv'], $supervisorArgv, true))
+                || (isset($after[$process['parent']]) && $after[$process['parent']]['exe'] === '/package/admin/s6-2.13.2.0/command/s6-supervise'
+                    && in_array($after[$process['parent']]['argv'], $supervisorArgv, true)
+                    && in_array($exe, ['/package/admin/s6-2.13.2.0/command/s6-ipcserverd',
+                        '/package/admin/s6-linux-init-1.1.3.0/command/s6-linux-init-shutdownd'], true));
+        }
+        if (!$classified) { $unclassified++; }
+    }
+    startupGate(true);
+    $result = ['version' => 1, 'operation' => 'runtime-observe', 'selected_version' => $version,
+        'horizon_enabled' => $flags['HORIZON_ENABLED'], 'scheduler_enabled' => $flags['SCHEDULER_ENABLED'],
+        'services' => $rows, 'membership_state' => $before !== $after ? 'changed' : ($unclassified > 0 ? 'unknown' : 'stable'),
+        'owned_process_count' => count($after), 'unclassified_count' => $unclassified,
+        'source_hmac' => startupHmac('runtime-source', $sourceBefore, $key),
+        'config_hmac' => startupHmac('runtime-config', $configBefore, $key),
+        'membership_hmac_before' => startupHmac('runtime-membership', $before, $key),
+        'membership_hmac_after' => startupHmac('runtime-membership', $after, $key)];
+    startupGate(strlen(json_encode($result, JSON_THROW_ON_ERROR)) <= 8192); startupResult($result, 0);
+}
+
 $startupCategory = 'ssh_input_invalid';
 $startupDb = null;
 try {
-    startupGate(PHP_SAPI === 'cli' && $argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore'], true)
+    startupGate(PHP_SAPI === 'cli' && $argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe'], true)
         && realpath(__FILE__) === '/probe/startup.php'
         && posix_geteuid() === 9999 && posix_getegid() === 9999);
     $startupCategory = 'ssh_hmac_invalid';
@@ -551,13 +845,16 @@ try {
         && config('app.debug') === false && is_string(getenv('APP_KEY'))
         && hash_equals(getenv('APP_KEY'), (string)config('app.key')));
     foreach (['HORIZON_ENABLED', 'SCHEDULER_ENABLED', 'MIGRATION_ENABLED', 'SEEDER_ENABLED', 'AUTOUPDATE'] as $flag) {
-        startupGate(getenv($flag) === 'false');
+        if ($argv[1] === 'runtime-observe' && in_array($flag, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) {
+            startupGate(in_array(getenv($flag), ['true', 'false'], true));
+        } else { startupGate(getenv($flag) === 'false'); }
     }
     $startupConnection = config('database.connections.pgsql');
     startupGate(is_array($startupConnection) && $startupConnection['host'] === '127.0.0.1'
         && (string)$startupConnection['port'] === '5432' && $startupConnection['database'] === 'coolify'
         && $startupConnection['username'] === 'coolify' && $startupConnection['password'] === 'rehearsal-only-password'
         && empty($startupConnection['url']) && empty($startupConnection['read']) && empty($startupConnection['write']));
+    if ($argv[1] === 'runtime-observe') { startupRuntime($startupVersion, $startupHmacKey); }
     if ($argv[1] !== 'ssh-reconstruct') { startupBarrier($argv[1], $startupVersion, $startupHmacKey); }
     $startupCategory = 'ssh_database_invalid';
     $startupDb = Illuminate\Support\Facades\DB::connection();
@@ -645,6 +942,6 @@ try {
     if ($startupDb !== null) { try { $startupDb->rollBack(); } catch (Throwable $ignored) {} }
     // A failed exclusive create can leave ONLY its own partial leaf. Existing
     // files are never removed/repaired; a subsequent invocation rejects it.
-    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore'], true) ? $argv[1] : 'ssh-reconstruct';
+    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe'], true) ? $argv[1] : 'ssh-reconstruct';
     startupResult(['version' => 1, 'operation' => $startupOperation, 'category' => $startupCategory], 1);
 }

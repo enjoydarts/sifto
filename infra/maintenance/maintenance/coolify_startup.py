@@ -30,7 +30,7 @@ from .coolify_plan import OLD_ARM, NEW_ARM, profile_sha256
 
 
 RESOURCE_SHA256 = (
-    ('coolify_startup.php', '2a563c60bddea003c4d230a0c1084910265617420559cbf6c993158ebc9bc356'),
+    ('coolify_startup.php', 'd92d043730def425842d47cc2ac32bfc85e7175065aeea4fecd84e35a7b6e953'),
     ('coolify_startup_init', 'afe14f036a705b057afcd8346b61c3ba06b34cff02199ef6b2dc663bf7196522'),
     ('coolify_startup_middleware.php', 'fe5cb12552e94585d1fa9b831b4e4bac7caf4bbbe657cb0a3cd62b80ac67186d'),
     ('coolify_startup_nginx.conf', '11b1a85b104ec8bd848d2688da694ad8f64cdc9fe88bc67c02fe01583a305284'),
@@ -193,3 +193,140 @@ def parse_barrier_result(raw, *, selected_version, operation):
         return BarrierObservation(**value)
     except (ValueError, UnicodeError, TypeError, RecursionError):
         raise ValueError('startup_barrier_result') from None
+
+
+RUNTIME_SERVICES = ('fix-attrs', 'legacy-cont-init', 'db-migration', 'init-seeder',
+                    'init-script', 'legacy-services', 'php-fpm', 'nginx', 'reverb',
+                    'terminal-server', 'horizon', 'scheduler-worker')
+
+
+@dataclass(frozen=True, repr=False)
+class RuntimeServiceObservation:
+    """Ephemeral identity data. Never a capability to signal this PID."""
+    name: str
+    kind: str
+    state: str
+    readiness: str
+    role: str
+    pid: int
+    start_time_ticks: int
+    identity_hmac: str | None
+
+
+@dataclass(frozen=True, repr=False)
+class RuntimeObservation:
+    """Passive clone snapshot, without startup, drain or execution authority."""
+    version: int
+    operation: str
+    selected_version: str
+    horizon_enabled: bool
+    scheduler_enabled: bool
+    services: tuple[RuntimeServiceObservation, ...]
+    membership_state: str
+    owned_process_count: int
+    unclassified_count: int
+    source_hmac: str
+    config_hmac: str
+    membership_hmac_before: str
+    membership_hmac_after: str
+
+
+def parse_runtime_result(raw, *, selected_version):
+    """Parse exact bounded data only. No runtime observation authorizes work."""
+    def reject():
+        raise ValueError('startup_runtime_result')
+
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                reject()
+            value[key] = item
+        return value
+
+    def hmac(value):
+        return type(value) is str and re.fullmatch('[a-f0-9]{64}', value) is not None
+
+    try:
+        if (type(raw) is not bytes or not 0 < len(raw) <= 8192
+                or type(selected_version) is not str or selected_version not in ('4.4.2', '4.4.6')):
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(RuntimeObservation.__dataclass_fields__):
+            reject()
+        for name, expected in dict(version=1, operation='runtime-observe', selected_version=selected_version).items():
+            if type(value[name]) is not type(expected) or value[name] != expected:
+                reject()
+        for name in ('horizon_enabled', 'scheduler_enabled'):
+            if type(value[name]) is not bool:
+                reject()
+        for name in ('owned_process_count', 'unclassified_count'):
+            if type(value[name]) is not int or not 0 <= value[name] <= 256:
+                reject()
+        if value['unclassified_count'] > value['owned_process_count']:
+            reject()
+        for name in ('source_hmac', 'config_hmac', 'membership_hmac_before', 'membership_hmac_after'):
+            if not hmac(value[name]):
+                reject()
+        if (type(value['membership_state']) is not str
+                or value['membership_state'] not in ('stable', 'changed', 'unknown')):
+            reject()
+        equal = value['membership_hmac_before'] == value['membership_hmac_after']
+        if (value['membership_state'] == 'stable' and (not equal or value['unclassified_count'])
+                or value['membership_state'] == 'changed' and equal):
+            reject()
+        rows = value['services']
+        if type(rows) is not list or len(rows) != len(RUNTIME_SERVICES):
+            reject()
+        parsed = []
+        seen_pids = set()
+        for index, (row, name) in enumerate(zip(rows, RUNTIME_SERVICES)):
+            if type(row) is not dict or set(row) != set(RuntimeServiceObservation.__dataclass_fields__):
+                reject()
+            oneshot = index < 6
+            if row['name'] != name or row['kind'] != ('oneshot' if oneshot else 'longrun'):
+                reject()
+            for field in ('pid', 'start_time_ticks'):
+                if type(row[field]) is not int or not 0 <= row[field] <= 9007199254740991:
+                    reject()
+            for field, allowed in dict(
+                    state=('active', 'not-active', 'unknown') if oneshot else ('up', 'down', 'missing', 'unknown', 'unstable'),
+                    readiness=('notified', 'not-notified', 'unsupported', 'unknown'),
+                    role=('none',) if oneshot else (name, 'unknown', 'none', 'disabled-sleep')).items():
+                if type(row[field]) is not str or row[field] not in allowed:
+                    reject()
+            has_identity = row['pid'] > 0
+            if (has_identity != (row['start_time_ticks'] > 0)
+                    or has_identity != hmac(row['identity_hmac'])
+                    or not has_identity and row['identity_hmac'] is not None):
+                reject()
+            if has_identity:
+                if row['pid'] in seen_pids or row['pid'] > 4194304:
+                    reject()
+                seen_pids.add(row['pid'])
+            if oneshot:
+                if has_identity or row['readiness'] != 'unsupported':
+                    reject()
+            else:
+                if ((row['role'] == 'none') != (not has_identity)
+                        or row['state'] == 'up' and not has_identity
+                        or row['state'] in ('down', 'missing') and has_identity):
+                    reject()
+                if row['role'] == 'disabled-sleep':
+                    if name not in ('horizon', 'scheduler-worker') or value[
+                            'horizon_enabled' if name == 'horizon' else 'scheduler_enabled']:
+                        reject()
+                if name in ('horizon', 'scheduler-worker') and row['role'] == name and not value[
+                        'horizon_enabled' if name == 'horizon' else 'scheduler_enabled']:
+                    reject()
+                if row['readiness'] in ('notified', 'not-notified'):
+                    if name not in ('php-fpm', 'nginx') or row['state'] != 'up' or row['role'] != name:
+                        reject()
+            parsed.append(RuntimeServiceObservation(**row))
+        if len(seen_pids) > value['owned_process_count']:
+            reject()
+        value['services'] = tuple(parsed)
+        return RuntimeObservation(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
+        raise ValueError('startup_runtime_result') from None

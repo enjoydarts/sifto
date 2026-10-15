@@ -1,0 +1,47 @@
+# Passive PUBLIC synthetic observation only. Never native admission.
+services:
+  tool-old: &tool
+    extends: {file: ../startup/compose.yml, service: source-old}
+    entrypoint: [php, /startup/tool-cleanup.php]
+    command: [deadline]
+    volumes:
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+      - ./tool-cleanup.php:/startup/tool-cleanup.php:ro
+      - ${SIFTO_STARTUP_RUNTIME_TOOL_FAULT:-/nonexistent-runtime-tool-fault}:/command/s6-rc:ro
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  tool-target:
+    <<: *tool
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup/compose.yml, service: old}
+    env_file: ${SIFTO_STARTUP_RUNTIME_ENV:-../startup/public.env}
+    volumes:
+      - ${SIFTO_STARTUP_RUNTIME_ENV:-../startup/public.env}:/var/www/html/.env:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+      - ./fixture.php:/startup/runtime-fixture.php:ro
+      - ./wait-ready.sh:/startup/runtime-wait-ready.sh:ro
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  controller:
+    extends: {file: ../compose.yml, service: test}
+    profiles: [fixture]
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.1
+    pids_limit: 48
+    environment: {PYTHONPATH: /src}
+    volumes:
+      - ${SIFTO_STARTUP_RUNTIME_STAGING:-/nonexistent-runtime-public-staging}:/fixture
+volumes:
+  storage:
+    labels: {sifto.owner: startup-runtime-public-fixture-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: startup-runtime-public-fixture-v1}

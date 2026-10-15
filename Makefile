@@ -194,6 +194,10 @@ maintenance-coolify-startup-ssh-test:
 maintenance-coolify-startup-barrier-test:
 	sh infra/maintenance/startup-barrier/test.sh
 
+.PHONY: maintenance-coolify-startup-runtime-test
+maintenance-coolify-startup-runtime-test:
+	sh infra/maintenance/startup-runtime/test.sh
+
 .PHONY: maintenance-backup-test
 maintenance-backup-test: maintenance-backup-unit-test
 	docker compose --env-file /dev/null --project-name sifto-maintenance-backup-fixtures -f infra/maintenance/backup/compose.yml --profile test run --build --rm -T proof-test

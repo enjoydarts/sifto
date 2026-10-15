@@ -7,7 +7,7 @@ cp /fixture/host_agent.py /root/payload/
 cp /fixture/coolify_native_controller.py /fixture/coolify_native_engine.py /root/payload/
 cp /fixture/systemd/sifto-coolify-native-controller.service /root/payload/systemd/
 cp /fixture/maintenance/*.py /root/payload/maintenance/
-cp /fixture/maintenance/coolify-public-manifest.json /fixture/maintenance/coolify_probe.php /root/payload/maintenance/
+cp /fixture/maintenance/coolify-public-manifest.json /fixture/maintenance/coolify_probe.php /fixture/maintenance/coolify_startup.php /root/payload/maintenance/
 cp /fixture/maintenance/coolify_startup_init /fixture/maintenance/coolify_startup_middleware.php /fixture/maintenance/coolify_startup_nginx.conf /fixture/maintenance/coolify_startup_site.conf /root/payload/maintenance/
 native_resources=(host_agent.py coolify_native_controller.py coolify_native_engine.py
   maintenance/__init__.py maintenance/plan.py maintenance/host.py
@@ -17,7 +17,7 @@ native_resources=(host_agent.py coolify_native_controller.py coolify_native_engi
   maintenance/coolify_systemd.py maintenance/coolify_native_protocol.py
   maintenance/coolify_cleanup.py maintenance/coolify_native_owner.py
   maintenance/coolify-public-manifest.json maintenance/coolify_probe.php
-  maintenance/coolify_startup.py maintenance/coolify_startup_init
+  maintenance/coolify_startup.php maintenance/coolify_startup.py maintenance/coolify_startup_init
   maintenance/coolify_startup_middleware.php maintenance/coolify_startup_nginx.conf
   maintenance/coolify_startup_site.conf
   systemd/sifto-coolify-native-controller.service)
@@ -98,7 +98,7 @@ for name in ('coolify-native-request', 'coolify-native-state', 'coolify-native-r
 # The reviewed resource is installed as source only; no service activation.
 assert not pathlib.Path('/etc/systemd/system/sifto-coolify-native-controller.service').exists()
 PY
-for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php coolify_startup.py coolify_startup_init coolify_startup_middleware.php coolify_startup_nginx.conf coolify_startup_site.conf; do
+for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify_rehearsal_engine.py coolify_systemd.py coolify_native_protocol.py coolify_cleanup.py coolify_native_owner.py coolify-public-manifest.json coolify_probe.php coolify_startup.php coolify_startup.py coolify_startup_init coolify_startup_middleware.php coolify_startup_nginx.conf coolify_startup_site.conf; do
   cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
   [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
   [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]

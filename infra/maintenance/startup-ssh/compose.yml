@@ -1,0 +1,26 @@
+# PUBLIC synthetic SSH fixture. No native startup authority or private inputs.
+services:
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &probe
+    extends: {file: ../startup/compose.yml, service: probe}
+    entrypoint: [php, /startup/ssh-fixture.php]
+    volumes:
+      - ./fixture.php:/startup/ssh-fixture.php:ro
+      - type: bind
+        source: ../maintenance/coolify_startup.php
+        target: /probe/startup.php
+        read_only: true
+        bind: {create_host_path: false}
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+  target:
+    <<: *probe
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+volumes:
+  storage:
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: controlled-startup-public-fixture-v1}

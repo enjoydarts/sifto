@@ -9,13 +9,22 @@ must complete before OwnedDocker may accept any ControlledStartup record.
 Source resources are installed as root-owned 0644 inputs. Future authenticated
 staging must make the init-script leaf root-owned 0755 before mounting it RO;
 this catalog never installs, stages, reads private input or executes anything.
+
+The SSH producer requires preexisting UID/GID 9999 keys and mux directories at
+0700 with no other application writer. The PUBLIC fixture supplies them. Native
+prepare_phase still starts with empty runtime SSH storage: future Task4B4 staging
+must create these parents before any producer integration can be accepted.
 """
 import copy
+from dataclasses import dataclass
+import json
+import re
 
 from .coolify_plan import OLD_ARM, NEW_ARM, profile_sha256
 
 
 RESOURCE_SHA256 = (
+    ('coolify_startup.php', '367507a800a0d8f053e295b457dca73377473011d1b2849b87eb0a9b825b2165'),
     ('coolify_startup_init', 'afe14f036a705b057afcd8346b61c3ba06b34cff02199ef6b2dc663bf7196522'),
     ('coolify_startup_middleware.php', 'fe5cb12552e94585d1fa9b831b4e4bac7caf4bbbe657cb0a3cd62b80ac67186d'),
     ('coolify_startup_nginx.conf', '11b1a85b104ec8bd848d2688da694ad8f64cdc9fe88bc67c02fe01583a305284'),
@@ -43,3 +52,62 @@ def fixed_candidate():
         'images': _IMAGES, 'original_sha256': ORIGINAL_SHA256,
         'resource_sha256': RESOURCE_SHA256, 'registered': False,
         'production_eligible': False})
+
+
+@dataclass(frozen=True, repr=False)
+class SshObservation:
+    """Typed observation only; construction grants no execution capability."""
+    version: int
+    operation: str
+    selected_version: str
+    rows_checked: int
+    keys_created: int
+    keys_matched: int
+    unrelated_key_count: int
+    mux_entry_count: int
+    db_identity_hmac: str
+    existing_keys_hmac_before: str
+    existing_keys_hmac_after: str
+    mux_hmac_before: str
+    mux_hmac_after: str
+    created_inventory_hmac: str
+
+
+def parse_ssh_result(raw, *, selected_version):
+    """Parse the fixed producer's exact bounded schema without authority."""
+    def reject():
+        raise ValueError('startup_ssh_result')
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                reject()
+            result[key] = value
+        return result
+
+    try:
+        if type(raw) is not bytes or not 0 < len(raw) <= 8192 or selected_version not in ('4.4.2', '4.4.6'):
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(SshObservation.__dataclass_fields__):
+            reject()
+        if (type(value['version']) is not int or value['version'] != 1
+                or value['operation'] != 'ssh-reconstruct' or value['selected_version'] != selected_version):
+            reject()
+        for name in ('rows_checked', 'keys_created', 'keys_matched', 'unrelated_key_count', 'mux_entry_count'):
+            if type(value[name]) is not int or not 0 <= value[name] <= 1024:
+                reject()
+        if (value['keys_created'] + value['keys_matched'] != value['rows_checked']
+                or value['rows_checked'] + value['unrelated_key_count'] > 1024):
+            reject()
+        for name in (key for key in value if 'hmac' in key):
+            if type(value[name]) is not str or re.fullmatch('[a-f0-9]{64}', value[name]) is None:
+                reject()
+        if (value['existing_keys_hmac_before'] != value['existing_keys_hmac_after']
+                or value['mux_hmac_before'] != value['mux_hmac_after']):
+            reject()
+        return SshObservation(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError):
+        raise ValueError('startup_ssh_result') from None

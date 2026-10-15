@@ -22,6 +22,7 @@
 !maintenance/coolify_startup_middleware.php
 !maintenance/coolify_startup_nginx.conf
 !maintenance/coolify_startup_site.conf
+!maintenance/coolify_startup.php
 !systemd/sifto-coolify-native-controller.service
 !bootstrap/install-host.sh
 !bootstrap/test-install.sh

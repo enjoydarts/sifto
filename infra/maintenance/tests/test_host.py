@@ -799,7 +799,7 @@ class HostTests(unittest.TestCase):
             f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
         resources = ("coolify_rehearsal.py", "coolify_evidence.py", "coolify_docker.py", "coolify_rehearsal_engine.py",
                      "coolify_systemd.py", "coolify_native_protocol.py", "coolify_cleanup.py", "coolify_native_owner.py",
-                     "coolify-public-manifest.json", "coolify_probe.php", "coolify_startup.py",
+                     "coolify-public-manifest.json", "coolify_probe.php", "coolify_startup.php", "coolify_startup.py",
                      "coolify_startup_init", "coolify_startup_middleware.php",
                      "coolify_startup_nginx.conf", "coolify_startup_site.conf")
         for name in resources:

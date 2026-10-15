@@ -157,9 +157,9 @@ class DependencyAutomationContract(unittest.TestCase):
     def test_mount_regression_blocks_automatic_dependency_approval(self):
         job = read_yaml('.github/workflows/dependency-check.yml')['jobs']['policy']
         self.assertEqual(job['name'], 'Dependency Policy')
-        self.assertEqual(job['runs-on'], 'ubuntu-26.04')
+        self.assertEqual(job['runs-on'], 'ubuntu-26.04-arm')
         step = next(step for step in job['steps'] if 'make maintenance-postgres-data-mount-test' in step.get('run', ''))
-        self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/amd64')
+        self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/arm64')
         self.assertNotIn('if', step)
         self.assertIsNot(step.get('continue-on-error'), True)
         fixture = read_yaml('infra/maintenance/bootstrap/compose.postgres-data-mount.yml')['services']['test']
@@ -237,17 +237,16 @@ class DependencyAutomationContract(unittest.TestCase):
             'Dependency API', 'Dependency Worker', 'Dependency Web', 'Dependency Policy',
         })
         self.assertEqual(len(jobs), 4)
+        self.assertEqual(set(jobs), {'api', 'worker', 'web', 'policy'})
         policy = jobs['policy']
-        self.assertEqual(policy['runs-on'], 'ubuntu-26.04')
+        native_mount_job = read_yaml('.github/workflows/maintenance-test.yml')['jobs']['postgres-data-mount']
+        self.assertEqual(policy['runs-on'], native_mount_job['runs-on'])
+        self.assertEqual(policy['runs-on'], 'ubuntu-26.04-arm')
+        self.assertEqual(policy['timeout-minutes'], 25)
         self.assertNotIn('if', policy)
         self.assertNotIn('continue-on-error', policy)
         qemu_steps = [step for step in policy['steps'] if step.get('uses', '').startswith('docker/setup-qemu-action@')]
-        self.assertEqual(len(qemu_steps), 1, 'ARM-only installer needs QEMU on the AMD64 policy runner')
-        qemu = qemu_steps[0]
-        self.assertEqual(qemu['uses'], 'docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130')
-        self.assertEqual(qemu['with'], {'platforms': 'arm64'})
-        self.assertNotIn('if', qemu)
-        self.assertNotIn('continue-on-error', qemu)
+        self.assertEqual(qemu_steps, [], 'ARM fixtures must execute natively without QEMU')
         for target in ['maintenance-bootstrap-test', 'maintenance-backup-test']:
             with self.subTest(target=target):
                 steps = [step for step in policy['steps'] if f'make {target}' in step.get('run', '')]
@@ -255,13 +254,20 @@ class DependencyAutomationContract(unittest.TestCase):
                 step = steps[0]
                 self.assertNotIn('if', step)
                 self.assertNotIn('continue-on-error', step)
-                self.assertLess(policy['steps'].index(qemu), policy['steps'].index(step))
                 self.assertNotIn('MAINTENANCE_BOOTSTRAP_TEST_PLATFORM', step['env'])
-                self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/amd64')
+                installer = read_yaml('infra/maintenance/bootstrap/compose.yml')['services']['test']
+                self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], installer['platform'])
+                self.assertEqual(step['env']['POSTGRES_MOUNT_TEST_PLATFORM'], 'linux/arm64')
                 # Plain make commands keep the shell's failure propagation; reject
                 # conditionals, ignored exits, or a replacement with syntax checks.
                 commands = [line.strip() for line in step['run'].splitlines() if line.strip()]
-                self.assertIn(f'make {target}', commands)
+                self.assertEqual(commands, [f'make {name}' for name in [
+                    'dependency-python-locks-check', 'dependency-python-locks-test',
+                    'dependency-contract', 'dependency-renovate-validate', 'dependency-audio',
+                    'maintenance-test', 'maintenance-syntax', 'maintenance-bootstrap-test',
+                    'maintenance-backup-test', 'maintenance-postgres-data-mount-test',
+                    'image-security-test',
+                ]])
                 for command in commands:
                     self.assertRegex(command, r'^make [a-z][a-z0-9-]*$')
 
@@ -282,6 +288,8 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(fixture['build'], {'context': '..', 'dockerfile': 'bootstrap/Dockerfile.test'})
         self.assertEqual(fixture['command'], ['/bin/bash', '/fixture/test-install.sh'])
         self.assertEqual(fixture['network_mode'], 'none')
+        self.assertEqual(fixture.get('hostname'), 'sifto-bootstrap-fixture')
+        self.assertEqual(fixture.get('extra_hosts'), ['sifto-bootstrap-fixture:127.0.0.1'])
         self.assertTrue({'depends_on', 'profiles', 'ports', 'volumes', 'env_file', 'environment', 'privileged'}.isdisjoint(fixture))
 
     def test_backup_make_target_runs_only_isolated_synthetic_fixture_services(self):

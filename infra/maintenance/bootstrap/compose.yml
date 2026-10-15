@@ -5,4 +5,8 @@ services:
       dockerfile: bootstrap/Dockerfile.test
     platform: linux/arm64
     network_mode: none
+    # network_mode: none omits Docker's automatic hostname entry; sudo still resolves it.
+    hostname: sifto-bootstrap-fixture
+    extra_hosts:
+      - sifto-bootstrap-fixture:127.0.0.1
     command: [/bin/bash, /fixture/test-install.sh]

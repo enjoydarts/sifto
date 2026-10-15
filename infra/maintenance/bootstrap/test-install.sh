@@ -5,6 +5,7 @@ umask 077
 install -d -m 0700 /root/payload /root/payload/maintenance
 cp /fixture/host_agent.py /root/payload/
 cp /fixture/maintenance/*.py /root/payload/maintenance/
+cp /fixture/maintenance/coolify-public-manifest.json /fixture/maintenance/coolify_probe.php /root/payload/maintenance/
 ssh-keygen -q -t ed25519 -N '' -f /root/payload/scan
 ssh-keygen -q -t ed25519 -N '' -f /root/payload/apply
 cat > /root/payload/config.json <<'JSON'
@@ -31,8 +32,38 @@ if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
   printf 'unmanaged existing account unexpectedly accepted\n' >&2; exit 1
 fi
 userdel sifto-maint-scan
+# The installer must reject every new untrusted resource before local imports.
+cp -p /root/payload/maintenance/__init__.py /root/package.saved
+printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /root/payload/maintenance/__init__.py
+payload_rejections=0
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+  for defect in missing group-writable other-writable nonroot symlink directory fifo; do
+    resource="/root/payload/maintenance/$native"
+    cp -p "$resource" /root/resource.saved
+    case "$defect" in
+      missing) rm "$resource" ;;
+      group-writable) chmod 0664 "$resource" ;;
+      other-writable) chmod 0646 "$resource" ;;
+      nonroot) chown 65534:65534 "$resource" ;;
+      symlink) rm "$resource"; ln -s host.py "$resource" ;;
+      directory) rm "$resource"; mkdir "$resource" ;;
+      fifo) rm "$resource"; mkfifo "$resource" ;;
+    esac
+    if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
+      printf 'untrusted payload resource accepted: %s %s\n' "$native" "$defect" >&2; exit 1
+    fi
+    if [[ -e /root/unvalidated-package-imported ]]; then
+      printf 'installer imported local package before rejecting resource: %s %s\n' "$native" "$defect" >&2; exit 1
+    fi
+    [[ $(cat /tmp/denied.out) == *'invalid payload'* || $(cat /tmp/denied.out) == *'payload must be protected and root-owned'* ]]
+    ((payload_rejections+=1))
+    if [[ "$defect" == directory ]]; then rmdir "$resource"; else rm -f "$resource"; fi
+    mv /root/resource.saved "$resource"
+  done
+done
+mv /root/package.saved /root/payload/maintenance/__init__.py
 bash /fixture/install-host.sh /root/payload
-for native in coolify_host.py coolify_plan.py; do
+for native in coolify_host.py coolify_plan.py coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
   cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
   [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
   [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
@@ -50,6 +81,11 @@ if bash /fixture/install-host.sh /root/payload >/tmp/denied.out 2>&1; then
 fi
 rm /etc/sudoers.d/extra-grant
 bash /fixture/install-host.sh /root/payload
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+  cmp "/root/payload/maintenance/$native" "/opt/sifto-maintenance/maintenance/$native"
+  [[ $(stat -c %u "/opt/sifto-maintenance/maintenance/$native") == 0 ]]
+  [[ $(stat -c %a "/opt/sifto-maintenance/maintenance/$native") == 644 ]]
+done
 [[ $(stat -c %a /etc/sifto-maintenance/config.json) == 600 ]]
 [[ $(stat -c %a /var/lib/sifto-maintenance/plans) == 700 ]]
 [[ $(stat -c %u /var/lib/sifto-maintenance-ssh/scan/.ssh/authorized_keys) == 0 ]]
@@ -97,6 +133,41 @@ for native in coolify_host.py coolify_plan.py; do
   [[ $(cat /tmp/denied.out) == *'maintenance bootstrap rejected'* ]]
   mv -f /root/native.saved "/opt/sifto-maintenance/maintenance/$native"
 done
+# Poison a protected package to prove new resource checks precede all imports.
+cp -p /opt/sifto-maintenance/maintenance/__init__.py /root/package.saved
+printf 'from pathlib import Path\nPath("/root/unvalidated-package-imported").touch()\nraise RuntimeError("public fixture unexpected local import")\n' > /opt/sifto-maintenance/maintenance/__init__.py
+ssh_resource_rejections=0
+before_resources=$(find /var/lib/sifto-maintenance -type f -exec sha256sum {} + | sort)
+for native in coolify_rehearsal.py coolify_evidence.py coolify_docker.py coolify-public-manifest.json coolify_probe.php; do
+  for defect in missing group-writable other-writable nonroot symlink directory fifo; do
+    resource="/opt/sifto-maintenance/maintenance/$native"
+    cp -p "$resource" /root/resource.saved
+    case "$defect" in
+      missing) rm "$resource" ;;
+      group-writable) chmod 0664 "$resource" ;;
+      other-writable) chmod 0646 "$resource" ;;
+      nonroot) chown 65534:65534 "$resource" ;;
+      symlink) rm "$resource"; ln -s host.py "$resource" ;;
+      directory) rm "$resource"; mkdir "$resource" ;;
+      fifo) rm "$resource"; mkfifo "$resource" ;;
+    esac
+    for gateway in scan apply; do
+      if [[ "$gateway" == scan ]]; then command=coolify-report; else command=apply; fi
+      if printf '{}' | ssh_call "$gateway" "$command" >/tmp/denied.out 2>&1; then
+        printf 'untrusted installed resource accepted: %s %s %s\n' "$native" "$defect" "$gateway" >&2; exit 1
+      fi
+      [[ $(cat /tmp/denied.out) == *'maintenance bootstrap rejected'* ]]
+      [[ ! -e /root/unvalidated-package-imported ]]
+      ((ssh_resource_rejections+=1))
+    done
+    if [[ "$defect" == directory ]]; then rmdir "$resource"; else rm -f "$resource"; fi
+    mv /root/resource.saved "$resource"
+  done
+done
+mv /root/package.saved /opt/sifto-maintenance/maintenance/__init__.py
+after_resources=$(find /var/lib/sifto-maintenance -type f -exec sha256sum {} + | sort)
+[[ "$before_resources" == "$after_resources" ]]
+printf 'source-closure payload rejections=%d; real SSH resource rejections=%d; state content unchanged\n' "$payload_rejections" "$ssh_resource_rejections"
 if printf '{}' | ssh_call scan apply >/tmp/denied.out 2>&1; then
   printf 'scan key unexpectedly entered apply gateway\n' >&2
   exit 1

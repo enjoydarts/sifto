@@ -23,7 +23,10 @@ def validate_installed_sources():
     if Path(__file__).absolute() != installed / "host_agent.py" or os.geteuid() != 0:
         raise ValueError("agent must run as root from trusted installation")
     for source in ("host_agent.py", "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py",
-                   "maintenance/coolify_host.py", "maintenance/coolify_plan.py"):
+                   "maintenance/coolify_host.py", "maintenance/coolify_plan.py",
+                   "maintenance/coolify_rehearsal.py", "maintenance/coolify_evidence.py",
+                   "maintenance/coolify_docker.py",
+                   "maintenance/coolify-public-manifest.json", "maintenance/coolify_probe.php"):
         path = installed / source
         for candidate in [path, *path.parents]:
             info = candidate.lstat()

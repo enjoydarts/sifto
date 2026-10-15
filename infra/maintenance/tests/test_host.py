@@ -788,6 +788,54 @@ class HostTests(unittest.TestCase):
         self.assertIn(b"invalid envelope", result.stderr)
         self.assertEqual(list(installed.rglob("*.pyc")), [], "first dry-run wrote Python bytecode")
 
+    def test_real_isolated_entrypoint_rejects_untrusted_coolify_resources_before_local_import(self):
+        installed = self.install_entrypoint_fixture()
+        package = installed / "maintenance"
+        marker = self.root / "unvalidated-package-imported"
+        (package / "__init__.py").write_text(
+            f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+        resources = ("coolify_rehearsal.py", "coolify_evidence.py", "coolify_docker.py",
+                     "coolify-public-manifest.json", "coolify_probe.php")
+        for name in resources:
+            resource = package / name
+            original = resource.read_bytes()
+            for defect in ("missing", "group-writable", "other-writable", "nonroot", "symlink", "directory", "fifo"):
+                with self.subTest(resource=name, defect=defect):
+                    marker.unlink(missing_ok=True)
+                    resource.unlink()
+                    if defect == "directory":
+                        resource.mkdir(mode=0o755)
+                    elif defect == "fifo":
+                        os.mkfifo(resource, mode=0o600)
+                    elif defect == "symlink":
+                        resource.symlink_to(package / "host.py")
+                    elif defect != "missing":
+                        resource.write_bytes(original)
+                        resource.chmod({"group-writable": 0o664, "other-writable": 0o646}.get(defect, 0o644))
+                        if defect == "nonroot":
+                            os.chown(resource, 65534, 65534)
+                    try:
+                        result = self.run_installed_entrypoint(installed)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertFalse(marker.exists(), "local package imported before resource validation")
+                        self.assertIn(b"maintenance bootstrap rejected", result.stderr)
+                    finally:
+                        if resource.is_dir() and not resource.is_symlink():
+                            resource.rmdir()
+                        else:
+                            resource.unlink(missing_ok=True)
+                        resource.write_bytes(original)
+                        resource.chmod(0o644)
+        try:
+            package.chmod(0o777)
+            marker.unlink(missing_ok=True)
+            result = self.run_installed_entrypoint(installed)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(marker.exists(), "local package imported through writable ancestor")
+            self.assertIn(b"maintenance bootstrap rejected", result.stderr)
+        finally:
+            package.chmod(0o755)
+
     def test_real_isolated_entrypoint_bypasses_timestamp_valid_malicious_cache(self):
         installed = self.install_entrypoint_fixture()
         host_source = installed / "maintenance" / "host.py"

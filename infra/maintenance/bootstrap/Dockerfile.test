@@ -4,5 +4,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-cryptography sudo openssh-client openssh-server util-linux passwd \
     && rm -rf /var/lib/apt/lists/*
 COPY host_agent.py /fixture/host_agent.py
-COPY maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py /fixture/maintenance/
+COPY maintenance/__init__.py maintenance/plan.py maintenance/host.py maintenance/coolify_host.py maintenance/coolify_plan.py maintenance/coolify_rehearsal.py maintenance/coolify_evidence.py maintenance/coolify_docker.py maintenance/coolify-public-manifest.json maintenance/coolify_probe.php /fixture/maintenance/
 COPY bootstrap/install-host.sh bootstrap/test-install.sh /fixture/

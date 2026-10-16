@@ -828,7 +828,8 @@ function startupRuntime(string $version, string $key): never {
 $startupCategory = 'ssh_input_invalid';
 $startupDb = null;
 try {
-    startupGate(PHP_SAPI === 'cli' && $argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe'], true)
+    startupGate(PHP_SAPI === 'cli' && ($argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore'], true)
+            || $argc === 7 && $argv[1] === 'horizon-restore-worker')
         && realpath(__FILE__) === '/probe/startup.php'
         && posix_geteuid() === 9999 && posix_getegid() === 9999);
     $startupCategory = 'ssh_hmac_invalid';
@@ -858,13 +859,19 @@ try {
         $startupCategory = 'horizon_inspection_held';
         startupRuntimeEnvironment();
         $startupHelper = '/var/www/html/app/SiftoMaintenance/InspectSupervisor.php';
-        [, $startupHelperBytes] = startupRead($startupHelper, 65536);
-        startupGate(hash('sha256', $startupHelperBytes) === '2c1e314fcc66a3a030f03be93b857663b81d5c9212431954d3e01e10e5ce5620');
+        [, $startupHelperBytes] = startupRead($startupHelper, 131072);
+        startupGate(hash('sha256', $startupHelperBytes) === 'eef76cd9881407dd35a4e16c1d476373a001c06fae384ddbbc9c6728ade15b20');
         if ($argv[1] === 'horizon-drain-enter') {
             startupResult(App\SiftoMaintenance\InspectSupervisor::drainEnter($startupDeadline), 0);
         }
         if ($argv[1] === 'horizon-drain-observe') {
             startupResult(App\SiftoMaintenance\InspectSupervisor::drainObserve($startupDeadline), 0);
+        }
+        if ($argv[1] === 'horizon-restore') {
+            startupResult(App\SiftoMaintenance\InspectSupervisor::restore($startupDeadline), 0);
+        }
+        if ($argv[1] === 'horizon-restore-worker') {
+            App\SiftoMaintenance\InspectSupervisor::restoreWorker(array_slice($argv, 2));
         }
         $startupResult = $argv[1] === 'horizon-inspect-request'
             ? App\SiftoMaintenance\InspectSupervisor::request($startupDeadline) : App\SiftoMaintenance\InspectSupervisor::observe();
@@ -959,6 +966,6 @@ try {
     if ($startupDb !== null) { try { $startupDb->rollBack(); } catch (Throwable $ignored) {} }
     // A failed exclusive create can leave ONLY its own partial leaf. Existing
     // files are never removed/repaired; a subsequent invocation rejects it.
-    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe'], true) ? $argv[1] : 'ssh-reconstruct';
+    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore', 'horizon-restore-worker'], true) ? $argv[1] : 'ssh-reconstruct';
     startupResult(['version' => 1, 'operation' => $startupOperation, 'category' => $startupCategory], 1);
 }

@@ -1,0 +1,42 @@
+services:
+  unit:
+    extends: {file: ../startup-inspect/compose.yml, service: unit}
+  source-old: &source
+    extends: {file: ../startup-drain/compose.yml, service: source-old}
+    entrypoint: [php, /startup/restore-source.php]
+    volumes: [./source.php:/startup/restore-source.php:ro, ./lock.php:/startup/restore-lock.php:ro,
+      ./guards.php:/startup/restore-guards.php:ro, .:/restore-fixture:ro]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,mode=1777,size=1048576']
+  source-target:
+    <<: *source
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  partial:
+    <<: *source
+    entrypoint: [php, /startup/restore-partial.php]
+    volumes: [./partial.php:/startup/restore-partial.php:ro, ./partial-child.php:/probe/startup.php:ro]
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup-drain/compose.yml, service: old}
+    volumes: [./fixture.php:/startup/restore-fixture.php:ro, ./RestoreFixture.php:/startup/RestoreFixture.php:ro,
+      ./diagnose.ini:/usr/local/etc/php/conf.d/zz-public-restore.ini:ro, ./diagnose.php:/startup/restore-diagnose.php:ro]
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  old-component:
+    extends: {service: old}
+    init: true
+    entrypoint: [php, artisan, horizon]
+    command: []
+  target-component:
+    extends: {service: target}
+    init: true
+    entrypoint: [php, artisan, horizon]
+    command: []
+volumes:
+  storage:
+    labels: {sifto.owner: horizon-state-restoration-public-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: horizon-state-restoration-public-v1}

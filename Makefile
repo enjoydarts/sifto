@@ -202,6 +202,14 @@ maintenance-coolify-startup-runtime-test:
 maintenance-coolify-startup-drain-test:
 	sh infra/maintenance/startup-drain/test.sh
 
+.PHONY: maintenance-coolify-startup-restore-test
+maintenance-coolify-startup-restore-test:
+	sh infra/maintenance/startup-restore/test.sh
+
+.PHONY: maintenance-coolify-startup-restore-lock-test
+maintenance-coolify-startup-restore-lock-test:
+	SIFTO_STARTUP_PUBLIC_INIT="$(CURDIR)/infra/maintenance/maintenance/coolify_startup_init" docker compose --env-file /dev/null -p sifto-horizon-state-restoration-source -f infra/maintenance/startup-restore/compose.yml run --rm -T --no-deps --entrypoint php source-old /startup/restore-lock.php
+
 .PHONY: maintenance-coolify-startup-drain-expiry-test
 maintenance-coolify-startup-drain-expiry-test:
 	SIFTO_STARTUP_PUBLIC_INIT="$(CURDIR)/infra/maintenance/maintenance/coolify_startup_init" docker compose --env-file /dev/null -p sifto-horizon-graceful-drain-source -f infra/maintenance/startup-drain/compose.yml run --rm -T --no-deps --entrypoint php source-old /startup/drain-expiry.php

@@ -86,6 +86,7 @@ jobs:
           make maintenance-bootstrap-test
           make maintenance-backup-test
           make maintenance-postgres-data-mount-test
+          make maintenance-coolify-startup-scheduler-native-test
           make image-security-test
       - if: always()
         run: make dependency-clean

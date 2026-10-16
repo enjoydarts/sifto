@@ -266,6 +266,7 @@ class DependencyAutomationContract(unittest.TestCase):
                     'dependency-contract', 'dependency-renovate-validate', 'dependency-audio',
                     'maintenance-test', 'maintenance-syntax', 'maintenance-bootstrap-test',
                     'maintenance-backup-test', 'maintenance-postgres-data-mount-test',
+                    'maintenance-coolify-startup-scheduler-native-test',
                     'image-security-test',
                 ]])
                 for command in commands:

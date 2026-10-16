@@ -350,7 +350,7 @@ function startupBarrierRestoreFile(string $name, array $original, ?array $staged
         && startupBarrierSemantic([$current]) === startupBarrierSemantic([$original]));
 }
 
-function startupBarrier(string $operation, string $version, string $hmacKey): never {
+function startupBarrierContext(string $hmacKey): array {
     global $startupCategory;
     $startupCategory = 'barrier_environment_invalid';
     startupGate(config('app.maintenance.driver') === 'cache' && config('app.maintenance.store') === 'redis'
@@ -386,6 +386,12 @@ function startupBarrier(string $operation, string $version, string $hmacKey): ne
     startupGate($middleware->getExcludedPaths() === ['/api/health']);
     $storage = startupBarrierStorage();
     $physical = $client->getOption(Redis::OPT_PREFIX).$store->getPrefix().'illuminate:foundation:down';
+    return [$client, $physical, $redisIdentity, $storage, $store, $config, $server['run_id']];
+}
+
+function startupBarrier(string $operation, string $version, string $hmacKey): never {
+    global $startupCategory;
+    [$client, $physical, $redisIdentity, $storage, $store] = startupBarrierContext($hmacKey);
     $startupCategory = 'barrier_state_invalid';
     $raw = startupBarrierRaw($client, $physical);
     $files = ['maintenance' => startupBarrierFile('maintenance'), 'down' => startupBarrierFile('down')];
@@ -639,6 +645,136 @@ function startupRuntimeSource(): array {
     return [$live, $source];
 }
 
+function startupSchedulerRequest(): array {
+    [$identity, $bytes] = startupRuntimeFile('/probe/scheduler.request.json', 2048);
+    startupGate($identity['uid'] === 0 && $identity['gid'] === 0 && ($identity['mode'] & 07777) === 0444);
+    $request = json_decode($bytes, true, 8, JSON_THROW_ON_ERROR);
+    startupGate(is_array($request) && array_keys($request) === ['version', 'phase', 'generation', 'deadline_ns']
+        && json_encode($request, JSON_THROW_ON_ERROR) === $bytes && $request['version'] === 1
+        && $request['phase'] === 'scheduler-proof-held' && is_string($request['generation'])
+        && preg_match('/\A[a-f0-9]{32}\z/D', $request['generation']) === 1
+        && is_int($request['deadline_ns']) && $request['deadline_ns'] > hrtime(true)
+        && $request['deadline_ns'] - hrtime(true) <= 1200000000000);
+    return [$identity, hash('sha256', $bytes), $request];
+}
+
+function startupSchedulerUncached(): void {
+    foreach (['/var/www/html/bootstrap/cache/config.php', '/tmp/rehearsal-startup-uncached-config.php'] as $path) {
+        clearstatcache(true, $path); startupGate(@lstat($path) === false);
+    }
+}
+
+function startupSchedulerS6(): string {
+    // Only this proc_open-owned read-only tool may be cleaned up on expiry.
+    $process = proc_open(['/command/s6-svstat', '-o', 'up,wantedup,pid', '/run/service/scheduler-worker'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    startupGate(is_resource($process));
+    $out = ''; $err = ''; $limit = hrtime(true) + 100000000;
+    try {
+        stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
+        do {
+            $out .= stream_get_contents($pipes[1], 257); $err .= stream_get_contents($pipes[2], 257);
+            startupGate(strlen($out) <= 256 && strlen($err) <= 256 && hrtime(true) < $limit);
+            $state = proc_get_status($process);
+            if (!$state['running']) { break; }
+            usleep(1000);
+        } while (true);
+        $out .= stream_get_contents($pipes[1], 257); $err .= stream_get_contents($pipes[2], 257);
+        startupGate($state['exitcode'] === 0 && $err === ''
+            && preg_match('/\Atrue true [1-9][0-9]{0,9}\n\z/D', $out) === 1);
+        return $out;
+    } finally {
+        $state = proc_get_status($process);
+        if ($state['running']) { proc_terminate($process, 9); }
+        fclose($pipes[1]); fclose($pipes[2]); proc_close($process);
+    }
+}
+
+function startupSchedulerCheck(string $key, ?array $created = null): never {
+    global $startupCategory;
+    $startupCategory = 'scheduler_context_invalid';
+    [$projectionIdentity, $bytes] = startupRead('/probe/scheduler.context.json', 131072);
+    $projection = json_decode($bytes, true, 32, JSON_THROW_ON_ERROR);
+    startupGate(is_array($projection) && array_keys($projection) === ['data', 'hmac']
+        && json_encode($projection, JSON_THROW_ON_ERROR) === $bytes && is_array($projection['data'])
+        && is_string($projection['hmac']) && hash_equals(startupHmac('scheduler-context', $projection['data'], $key), $projection['hmac']));
+    $data = $projection['data'];
+    startupGate($created === null || $data === $created);
+    startupGate(array_keys($data) === ['version', 'selected_version', 'request', 'environment', 'helper', 'source', 'storage', 's6', 'cache']
+        && $data['version'] === 1 && in_array($data['selected_version'], ['4.4.2', '4.4.6'], true)
+        && startupSchedulerRequest() === $data['request']);
+    startupSchedulerUncached();
+    $environment = startupRuntimeFile('/var/www/html/.env', 65536);
+    $helper = startupRuntimeFile(__FILE__, 131072);
+    startupGate([$environment[0], hash('sha256', $environment[1])] === $data['environment']
+        && [$helper[0], hash('sha256', $helper[1])] === $data['helper']
+        && startupRuntimeSource() === $data['source'] && startupBarrierStorage() === $data['storage']);
+    startupGate(is_string($data['s6']) && startupSchedulerS6() === $data['s6']);
+    $cache = $data['cache'];
+    startupGate(is_array($cache) && array_keys($cache) === ['config', 'prefix', 'physical', 'run_id']
+        && is_array($cache['config']) && $cache['config']['host'] === '127.0.0.1'
+        && (string)$cache['config']['port'] === '6379' && (string)$cache['config']['database'] === '1'
+        && $cache['config']['password'] === 'rehearsal-only-password'
+        && is_string($cache['prefix']) && preg_match('/\A[a-zA-Z0-9_.:-]{0,192}\z/D', $cache['prefix']) === 1
+        && is_string($cache['physical']) && strlen($cache['physical']) <= 512
+        && str_starts_with($cache['physical'], $cache['prefix'])
+        && str_ends_with($cache['physical'], 'illuminate:foundation:down')
+        && is_string($cache['run_id']) && preg_match('/\A[a-f0-9]{40}\z/D', $cache['run_id']) === 1);
+    $client = new Redis;
+    startupGate($client->connect('127.0.0.1', 6379, 0.1, null, 0, 0.1)
+        && $client->auth($cache['config']['password']) && $client->select(1)
+        && $client->setOption(Redis::OPT_PREFIX, $cache['prefix']));
+    $server = $client->info('server');
+    startupGate(is_array($server) && ($server['run_id'] ?? null) === $cache['run_id']);
+    $plain = ['type' => 'string', 'raw' => base64_encode(serialize(startupBarrierPlain())), 'deadline' => -1];
+    startupGate(startupBarrierRaw($client, $cache['physical']) === $plain
+        && startupBarrierFile('maintenance')['identity'] === null && startupBarrierFile('down')['identity'] === null);
+    // Post-I/O current-cache and immutable-context barrier. This path never
+    // loads Laravel or accepts a caller path/command/configuration projection.
+    startupGate(startupSchedulerRequest() === $data['request']
+        && startupRuntimeFile('/var/www/html/.env', 65536) === $environment
+        && startupRuntimeFile(__FILE__, 131072) === $helper && startupRuntimeSource() === $data['source']
+        && startupBarrierStorage() === $data['storage'] && startupBarrierRaw($client, $cache['physical']) === $plain
+        && startupRead('/probe/scheduler.context.json', 131072) === [$projectionIdentity, $bytes]
+        && startupBarrierFile('maintenance')['identity'] === null && startupBarrierFile('down')['identity'] === null
+        && startupSchedulerS6() === $data['s6']);
+    startupSchedulerUncached(); startupGate(hrtime(true) < $data['request'][2]['deadline_ns']);
+    startupResult(['version' => 1, 'operation' => 'scheduler-context',
+        'selected_version' => $data['selected_version'], 'generation' => $data['request'][2]['generation'],
+        'context_hmac' => $projection['hmac']], 0);
+}
+
+function startupSchedulerContext(string $version, string $key): never {
+    global $startupCategory;
+    $startupCategory = 'scheduler_context_invalid';
+    $environment = startupRuntimeEnvironment();
+    startupGate($environment[0]['SCHEDULER_ENABLED'] && !$environment[0]['HORIZON_ENABLED']);
+    $source = startupRuntimeSource();
+    [$client, $physical, $redisIdentity, $storage, $store, $config, $runId] = startupBarrierContext($key);
+    $plain = ['type' => 'string', 'raw' => base64_encode(serialize(startupBarrierPlain())), 'deadline' => -1];
+    $files = ['maintenance' => startupBarrierFile('maintenance'), 'down' => startupBarrierFile('down')];
+    startupGate(startupBarrierRaw($client, $physical) === $plain
+        && $files['maintenance']['identity'] === null && $files['down']['identity'] === null);
+    startupSchedulerUncached();
+    $startupCategory = 'scheduler_context_invalid';
+    $envFile = startupRuntimeFile('/var/www/html/.env', 65536);
+    $helper = startupRuntimeFile(__FILE__, 131072);
+    $projection = ['version' => 1, 'selected_version' => $version, 'request' => startupSchedulerRequest(),
+        'environment' => [$envFile[0], hash('sha256', $envFile[1])], 'helper' => [$helper[0], hash('sha256', $helper[1])],
+        'source' => $source, 'storage' => $storage, 's6' => startupSchedulerS6(),
+        'cache' => ['config' => $config, 'prefix' => $client->getOption(Redis::OPT_PREFIX), 'physical' => $physical, 'run_id' => $runId]];
+    // Re-read all context after I/O; no live process inventory/paused assertion
+    // is borrowed from the passive S1 selector, and no operation releases it.
+    startupGate(startupRuntimeEnvironment() === $environment && startupRuntimeSource() === $source
+        && startupBarrierStorage() === $storage && startupBarrierRaw($client, $physical) === $plain
+        && startupBarrierFile('maintenance') === $files['maintenance'] && startupBarrierFile('down') === $files['down']);
+    startupGate(true);
+    $bytes = json_encode(['data' => $projection, 'hmac' => startupHmac('scheduler-context', $projection, $key)], JSON_THROW_ON_ERROR);
+    startupGate(strlen($bytes) <= 131072);
+    startupCreate('/probe/scheduler.context.json', $bytes, startupParents('/probe/scheduler.context.json'));
+    startupSchedulerCheck($key, $projection);
+}
+
 function startupRuntimeProcesses(): array {
     $paths = glob('/proc/[0-9]*/stat'); startupGate(is_array($paths) && count($paths) <= 256);
     $rows = [];
@@ -828,13 +964,14 @@ function startupRuntime(string $version, string $key): never {
 $startupCategory = 'ssh_input_invalid';
 $startupDb = null;
 try {
-    startupGate(PHP_SAPI === 'cli' && ($argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore'], true)
+    startupGate(PHP_SAPI === 'cli' && ($argc === 2 && in_array($argv[1], ['ssh-reconstruct', 'barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'scheduler-context', 'scheduler-context-check', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore'], true)
             || $argc === 7 && $argv[1] === 'horizon-restore-worker')
         && realpath(__FILE__) === '/probe/startup.php'
         && posix_geteuid() === 9999 && posix_getegid() === 9999);
     $startupCategory = 'ssh_hmac_invalid';
     [, $startupHmacKey] = startupRead('/probe/hmac.key', 32);
     startupGate(strlen($startupHmacKey) === 32);
+    if ($argv[1] === 'scheduler-context-check') { startupSchedulerCheck($startupHmacKey); }
     $startupCategory = 'ssh_environment_invalid';
     putenv('APP_CONFIG_CACHE=/tmp/rehearsal-startup-uncached-config.php');
     require '/var/www/html/vendor/autoload.php';
@@ -846,7 +983,7 @@ try {
         && config('app.debug') === false && is_string(getenv('APP_KEY'))
         && hash_equals(getenv('APP_KEY'), (string)config('app.key')));
     foreach (['HORIZON_ENABLED', 'SCHEDULER_ENABLED', 'MIGRATION_ENABLED', 'SEEDER_ENABLED', 'AUTOUPDATE'] as $flag) {
-        if (($argv[1] === 'runtime-observe' || str_starts_with($argv[1], 'horizon-')) && in_array($flag, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) {
+        if (($argv[1] === 'runtime-observe' || $argv[1] === 'scheduler-context' || str_starts_with($argv[1], 'horizon-')) && in_array($flag, ['HORIZON_ENABLED', 'SCHEDULER_ENABLED'], true)) {
             startupGate(in_array(getenv($flag), ['true', 'false'], true));
         } else { startupGate(getenv($flag) === 'false'); }
     }
@@ -879,6 +1016,7 @@ try {
         startupResult($startupResult, 0);
     }
     if ($argv[1] === 'runtime-observe') { startupRuntime($startupVersion, $startupHmacKey); }
+    if ($argv[1] === 'scheduler-context') { startupSchedulerContext($startupVersion, $startupHmacKey); }
     if ($argv[1] !== 'ssh-reconstruct') { startupBarrier($argv[1], $startupVersion, $startupHmacKey); }
     $startupCategory = 'ssh_database_invalid';
     $startupDb = Illuminate\Support\Facades\DB::connection();
@@ -966,6 +1104,6 @@ try {
     if ($startupDb !== null) { try { $startupDb->rollBack(); } catch (Throwable $ignored) {} }
     // A failed exclusive create can leave ONLY its own partial leaf. Existing
     // files are never removed/repaired; a subsequent invocation rejects it.
-    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore', 'horizon-restore-worker'], true) ? $argv[1] : 'ssh-reconstruct';
+    $startupOperation = isset($argv[1]) && in_array($argv[1], ['barrier-observe', 'barrier-enter', 'barrier-restore', 'runtime-observe', 'scheduler-context', 'scheduler-context-check', 'horizon-inspect-request', 'horizon-inspect-observe', 'horizon-drain-enter', 'horizon-drain-observe', 'horizon-restore', 'horizon-restore-worker'], true) ? $argv[1] : 'ssh-reconstruct';
     startupResult(['version' => 1, 'operation' => $startupOperation, 'category' => $startupCategory], 1);
 }

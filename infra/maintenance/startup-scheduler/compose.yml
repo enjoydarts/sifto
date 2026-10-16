@@ -1,0 +1,56 @@
+# PUBLIC scheduler-focused synthetic events, unchanged actual S6/vendor launcher.
+services:
+  postgres:
+    extends: {file: ../startup/compose.yml, service: postgres}
+  redis:
+    extends: {file: ../startup/compose.yml, service: redis}
+  old: &app
+    extends: {file: ../startup/compose.yml, service: old}
+    env_file: ${SIFTO_SCHEDULER_ENV:?owned synthetic env required}
+    volumes:
+      - ${SIFTO_SCHEDULER_ENV}:/var/www/html/.env:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+      - ./fixture.php:/scheduler/fixture.php:ro
+      - ../startup-runtime/wait-ready.sh:/scheduler/wait-ready.sh:ro
+      - ./fixture.php:/var/www/html/app/Console/Kernel.php:ro
+      - ${SIFTO_SCHEDULER_STATE:?owned PUBLIC state required}:/scheduler-state
+      - ${SIFTO_SCHEDULER_REQUEST:?root owned phase request required}:/probe/scheduler.request.json:ro
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576
+    labels:
+      sifto.owner: startup-scheduler-public-fixture-v1
+      sifto.scheduler.run: ${SIFTO_SCHEDULER_RUN:?source-owned run required}
+  target:
+    <<: *app
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  context-old: &context
+    # Only validates PHP projection/cache mechanics on Docker Desktop. This
+    # different service/label/tmpfs profile cannot pass native role admission.
+    extends: {file: ../startup/compose.yml, service: old}
+    profiles: [context]
+    env_file: ${SIFTO_SCHEDULER_ENV}
+    volumes:
+      - ${SIFTO_SCHEDULER_ENV}:/var/www/html/.env:ro
+      - ../maintenance/coolify_startup.php:/probe/startup.php:ro
+      - ./fixture.php:/scheduler/fixture.php:ro
+      - ./fixture.php:/var/www/html/app/Console/Kernel.php:ro
+      - ${SIFTO_SCHEDULER_STATE}:/scheduler-state
+    tmpfs:
+      - /probe:rw,nosuid,nodev,noexec,mode=0777,size=1048576
+    labels:
+      sifto.owner: startup-scheduler-context-component-v1
+  context-target:
+    <<: *context
+    image: docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5
+  controller:
+    extends: {file: ../compose.yml, service: test}
+    profiles: [fixture]
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+volumes:
+  storage:
+    labels: {sifto.owner: startup-scheduler-public-fixture-v1}
+  bootstrap-cache:
+    labels: {sifto.owner: startup-scheduler-public-fixture-v1}

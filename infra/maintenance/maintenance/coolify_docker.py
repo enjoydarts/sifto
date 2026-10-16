@@ -1320,13 +1320,215 @@ def _start_token(pid):
     return value[value.rfind(b')') + 2:].split()[19]
 
 
+def _scheduler_token(procfd):
+    raw = _FixedRoleProcessControl._proc_read(procfd, 'stat', 8192)
+    fields = raw[raw.rfind(b')') + 2:].split()
+    status = _FixedRoleProcessControl._proc_read(procfd, 'status', 16384).splitlines()
+    ids = [line.split()[1:] for line in status if line.startswith((b'Uid:', b'Gid:'))]
+    _require(len(fields) == 50 and len(ids) == 2 and all(len(row) == 4 for row in ids), 'startup_state')
+    return [int(fields[19]), int(fields[1]), [[int(part) for part in row] for row in ids]]
+
+
+def _scheduler_terminal(procfd, token):
+    """Known Z plus positive proc access witness; disappearance is unknown.
+
+    Upstream proc_pid_syscall checks PTRACE_MODE_ATTACH_FSCREDS before emitting
+    metadata. That successful check is stronger than stat's READ_FSCREDS check
+    under the supported standard Linux/LSM profile. Root/capability names alone
+    are NOT evidence. Do not expose the syscall metadata or read process memory.
+    """
+    try:
+        if _scheduler_token(procfd) != token:
+            return 'unknown'
+        witness = _FixedRoleProcessControl._proc_read(procfd, 'syscall', 256)
+        if witness != b'-1 0x0 0x0\n':
+            return 'unknown'
+        raw = _FixedRoleProcessControl._proc_read(procfd, 'stat', 8192)
+        fields = raw[raw.rfind(b')') + 2:].split()
+        if len(fields) != 50 or fields[0] != b'Z' or _scheduler_token(procfd) != token:
+            return 'unknown'
+        code = int(fields[49])
+        if not 0 <= code <= 65535:
+            return 'unknown'
+        if os.WIFEXITED(code):
+            return 'finished' if os.WEXITSTATUS(code) == 0 else 'failed'
+        return 'signaled' if os.WIFSIGNALED(code) else 'unknown'
+    except (OSError, ValueError, DockerError):
+        return 'unknown'
+
+
+class _SchedulerDrain:
+    """Private finite observer; only its already-authenticated control signals.
+
+    Keep the launcher's full original immutable snapshot separate from work
+    inventory. No reaping, pipe closing, handle replacement or job signals.
+    """
+    def __init__(self, control):
+        _require(type(control._role) is str and control._role == 'scheduler-worker', 'startup_state')
+        self._control = control
+        self._known = {}
+        self._unknown = set()
+        self._stable = {}
+        rows = self._inventory()
+        descendants = {control._pid}
+        for _ in range(256):
+            added = {pid for pid, (_, token) in rows.items() if token[1] in descendants} - descendants
+            if not added:
+                break
+            descendants |= added
+        expected_stable = getattr(control, '_scheduler_stable', None)
+        for pid, (fd, token) in rows.items():
+            if pid == control._pid:
+                os.close(fd)
+            elif pid in descendants:
+                self._known[pid] = [fd, token]
+            elif expected_stable is not None and pid in expected_stable:
+                identity = control._proc_identity(fd)
+                _require(identity == expected_stable[pid], 'startup_state')
+                self._stable[pid] = identity
+                os.close(fd)
+            else:
+                self._unknown.add(pid)
+                os.close(fd)
+        if expected_stable is not None:
+            _require(set(self._stable) == set(expected_stable), 'startup_state')
+
+    def close(self):
+        for fd, _ in self._known.values():
+            os.close(fd)
+        self._known.clear()
+
+    def _inventory(self):
+        control = self._control
+        identity = control._identity()
+        rows = {}
+        try:
+            for pid, start in identity['members']:
+                fd = os.open('/proc/' + str(pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    token = _scheduler_token(fd)
+                    _require(str(token[0]) == start, 'startup_state')
+                except BaseException:
+                    os.close(fd)
+                    raise
+                rows[pid] = (fd, token)
+            _require(identity['members'] == control._identity()['members'], 'startup_state')
+            return rows
+        except BaseException:
+            for fd, _ in rows.values():
+                os.close(fd)
+            raise
+
+    def _result(self, category, counts):
+        import hmac
+        from .coolify_startup import parse_scheduler_result
+        control = self._control
+        return parse_scheduler_result(_json(dict(version=1, category=category,
+            live_count=counts[0], finished_count=counts[1], failed_count=counts[2], unknown_count=counts[3],
+            restore_required=bool(control._intent and control._intent['restore_required']),
+            maintenance_held=True, identity_hmac=hmac.new(control._key,
+                _json([control._selected, control._pins]), hashlib.sha256).hexdigest())))
+
+    def observe(self):
+        control = self._control
+        counts = [0, 0, 0, 0]
+        rows = {}
+        try:
+            control._journal_matches()
+            control._restoration_guard(control._deadline)
+            _require(all(state == 'T' for _, state in control._tasks()), 'startup_state')
+            rows = self._inventory()
+            # A later dueEvents entry can launch after the barrier. Include new
+            # observed descendants; do not whitelist unrelated role descendants.
+            for _ in range(256):
+                added = False
+                for pid, (fd, token) in list(rows.items()):
+                    if pid not in self._known and pid not in self._stable and pid != control._pid:
+                        if token[1] in self._known or token[1] == control._pid:
+                            self._known[pid] = [os.dup(fd), token]
+                            added = True
+                if not added:
+                    break
+            for pid, original in self._stable.items():
+                if pid not in rows or control._proc_identity(rows[pid][0]) != original:
+                    self._unknown.add(pid)
+            for pid in rows:
+                if pid != control._pid and pid not in self._known and pid not in self._stable:
+                    self._unknown.add(pid)
+            for pid, (fd, token) in self._known.items():
+                # Linux excludes zombies from cgroup.procs. A retained procfd
+                # can still supply identity-bound positive terminal evidence;
+                # an absent/reaped proc or pidfd readiness alone never can.
+                if (pid in rows and rows[pid][1] != token) or _scheduler_token(fd) != token:
+                    self._unknown.add(pid)
+                    continue
+                raw = control._proc_read(fd, 'stat', 8192)
+                state = raw[raw.rfind(b')') + 2:].split()[0]
+                if state == b'Z':
+                    outcome = _scheduler_terminal(fd, token)
+                    if outcome == 'finished':
+                        counts[1] += 1
+                    elif outcome == 'failed':
+                        counts[2] += 1
+                    else:
+                        self._unknown.add(pid)
+                elif state in (b'R', b'S', b'D', b'I'):
+                    counts[0] += 1
+                else:
+                    self._unknown.add(pid)
+            counts[3] = len(self._unknown)
+            _require(sum(counts) <= 256, 'output_bound')
+            control._restoration_guard(control._deadline)
+            _require(all(state == 'T' for _, state in control._tasks()), 'startup_state')
+            final = self._inventory()
+            try:
+                _require({pid: token for pid, (_, token) in rows.items()}
+                         == {pid: token for pid, (_, token) in final.items()}, 'startup_state')
+                for pid, original in self._stable.items():
+                    _require(pid in final and control._proc_identity(final[pid][0]) == original, 'startup_state')
+            finally:
+                for fd, _ in final.values():
+                    os.close(fd)
+            _require(all(state == 'T' for _, state in control._tasks()), 'startup_state')
+            control._final_guard(control._deadline)
+            return self._result('quiescent' if not (counts[0] or counts[2] or counts[3]) else 'held', counts)
+        except (OSError, ValueError, DockerError):
+            return self._result('held', [0, 0, 0, max(1, min(256, len(self._unknown)))])
+        finally:
+            for fd, _ in rows.values():
+                os.close(fd)
+
+    def run(self):
+        control = self._control
+        frozen = control.freeze()
+        if frozen.category not in ('frozen', 'already-stopped'):
+            return self._result('rejected', [0, 0, 0, 1])
+        result = self.observe()
+        while (result.live_count and not result.unknown_count and not result.failed_count
+               and time.monotonic() < control._deadline):
+            time.sleep(.005)
+            if time.monotonic() >= control._deadline:
+                break
+            observed = self.observe()
+            if time.monotonic() >= control._deadline:
+                break
+            result = observed
+        if result.category != 'quiescent':
+            control.restore()
+            # Restoration is independent evidence, never work completion.
+            result = self._result('held', [result.live_count, result.finished_count,
+                                            result.failed_count, result.unknown_count])
+        return result
+
+
 class _FixedRoleProcessControl:
     """Dormant K0 same-PID-namespace component, NOT native App authority.
 
     No constructor/selector is registered. PUBLIC tests alone assemble this
     object from harness-owned children and synthetic pinned context descriptors.
-    A later source-owned join must supply authenticated container/init/S6 role
-    selection, host namespace/cgroup mapping and barrier/generation projection.
+    The private PUBLIC native-fixture subclass joins authenticated init/S6 role,
+    host namespace/cgroup mapping and barrier/generation projection. Production
+    selection and the separate full native allocation gate remain closed.
     Caller observations, a PID, role string or boolean cannot enable that join.
 
     STOP/CONT here address ONLY a retained pidfd, never service names, process
@@ -1370,7 +1572,7 @@ class _FixedRoleProcessControl:
         finally:
             os.close(tasksfd)
 
-    def _proc_identity(self, fd):
+    def _proc_identity(self, fd, *, native_titles=False):
         raw = self._proc_read(fd, 'stat', 8192)
         fields = raw[raw.rfind(b')') + 2:].split()
         status = self._proc_read(fd, 'status').decode('ascii')
@@ -1382,11 +1584,26 @@ class _FixedRoleProcessControl:
                  'startup_state')
         namespaces = [os.readlink('ns/' + name, dir_fd=fd) for name in ('pid', 'mnt', 'net')]
         exe = os.stat('exe', dir_fd=fd)
-        argv = self._proc_read(fd, 'cmdline', 32768).split(b'\0')
+        command = self._proc_read(fd, 'cmdline', 32768)
+        # These fixed native services use setproctitle's NUL padding. No other
+        # argv grammar or the default K0 component is broadened.
+        if native_titles and command.startswith((b'php-fpm: ', b'nginx: ')):
+            command = command.rstrip(b'\0') + b'\0'
+        argv = command.split(b'\0')
         _require(argv[-1] == b'' and all(argv[:-1]), 'startup_state')
         return dict(start=fields[19].decode('ascii'), parent=int(fields[1]), ids=ids,
                     namespaces=namespaces, cgroup=self._proc_read(fd, 'cgroup', 16384).decode('ascii'),
                     exe=list(_metadata(exe)), argv=[part.hex() for part in argv[:-1]])
+
+    def _placement(self, selected, parent, init):
+        # Default component remains restricted to its own namespace/cgroup.
+        # The PUBLIC native fixture overrides this with authenticated daemon
+        # ownership, init and host/container namespace mapping checks.
+        current = Path('/proc/self/cgroup').read_text()
+        _require(selected['cgroup'] == current and parent['cgroup'] == current
+                 and selected['namespaces'] == [os.readlink('/proc/self/ns/' + name)
+                     for name in ('pid', 'mnt', 'net')], 'startup_state')
+        return 'same-pid-namespace-component', Path('/sys/fs/cgroup/cgroup.procs')
 
     def _identity(self):
         selected = self._proc_identity(self._procfd)
@@ -1396,29 +1613,43 @@ class _FixedRoleProcessControl:
         finally:
             os.close(parentfd)
         init = self._proc_identity(self._initfd)
-        # The component only supports its own visible cgroup and PID namespace.
         # No assumption that UID 9999 defines membership; include EVERY member.
-        current = Path('/proc/self/cgroup').read_text()
-        _require(selected['cgroup'] == current and parent['cgroup'] == current
-                 and selected['namespaces'] == [os.readlink('/proc/self/ns/' + name)
-                     for name in ('pid', 'mnt', 'net')]
-                 and _start_token(self._pid).decode('ascii') == selected['start'], 'startup_state')
-        members = sorted(int(part) for part in Path('/sys/fs/cgroup/cgroup.procs').read_text().split())
+        scope, membership = self._placement(selected, parent, init)
+        _require(_start_token(self._pid).decode('ascii') == selected['start'], 'startup_state')
+        members = sorted(int(part) for part in membership.read_text().split())
         _require(0 < len(members) <= 256 and self._pid in members
                  and all(pid > 0 for pid in members), 'startup_state')
         member_tokens = [[pid, _start_token(pid).decode('ascii')] for pid in members]
-        _require(members == sorted(int(part) for part in Path('/sys/fs/cgroup/cgroup.procs').read_text().split()),
+        _require(members == sorted(int(part) for part in membership.read_text().split()),
                  'startup_state')
+        executable_limit = self._executable_limit()
         _require(list(_metadata(os.fstat(self._exefd))) == selected['exe']
-                 and 0 < os.fstat(self._exefd).st_size <= 16 * 1024 * 1024, 'startup_state')
+                 and 0 < os.fstat(self._exefd).st_size <= executable_limit, 'startup_state')
         task_tokens = []
         for tid, _ in self._tasks():
             raw = self._proc_read(self._procfd, 'task/' + str(tid) + '/stat', 8192)
             task_tokens.append([tid, raw[raw.rfind(b')') + 2:].split()[19].decode('ascii')])
-        return dict(scope='same-pid-namespace-component', role=self._role, task_tokens=task_tokens,
+        return dict(scope=scope, role=self._role, task_tokens=task_tokens,
                     boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
                     process=selected, parent=parent, init=init, members=member_tokens,
-                    executable_sha256=_hash(os.pread(self._exefd, 16 * 1024 * 1024 + 1, 0)))
+                    executable_sha256=self._executable_hash(executable_limit))
+
+    def _executable_hash(self, limit):
+        before = _metadata(os.fstat(self._exefd))
+        size = os.fstat(self._exefd).st_size
+        _require(0 < size <= limit, 'startup_state')
+        digest = hashlib.sha256()
+        offset = 0
+        while offset < size:
+            chunk = os.pread(self._exefd, min(1024 * 1024, size - offset), offset)
+            _require(chunk, 'startup_state')
+            digest.update(chunk)
+            offset += len(chunk)
+        _require(before == _metadata(os.fstat(self._exefd)), 'startup_state')
+        return digest.hexdigest()
+
+    def _executable_limit(self):
+        return 16 * 1024 * 1024
 
     def _alive(self):
         import select
@@ -1594,6 +1825,373 @@ class _FixedRoleProcessControl:
             return self._restore_locked()
         finally:
             fcntl.flock(self._lockfd, fcntl.LOCK_UN)
+
+
+class _SchedulerHostProcessControl(_FixedRoleProcessControl):
+    """Private fixed PUBLIC-owner join, never production registration.
+
+    The fixture's exact newly created namespace is the only entry. Selection
+    uses daemon state + stock S6 internally, never a caller PID/public result.
+    This pins the daemon-created cgroup for scheduler proof; it does not claim
+    the separate full CgroupBudget/native-entry allocation protocol.
+    """
+    _project = 'sifto-startup-scheduler-public'
+
+    def __init__(self):
+        raise DockerError('startup_profile_unverified')
+
+    @staticmethod
+    def _docker(args, *, timeout=2, limit=65536):
+        import subprocess
+        try:
+            result = subprocess.run(['/usr/bin/docker', *args], stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
+                env={'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LC_ALL': 'C'}, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise DockerError('command_failed') from None
+        _require(result.returncode == 0 and len(result.stdout) <= limit
+                 and len(result.stderr) <= 4096, 'command_failed')
+        return result.stdout
+
+    def _inspect_fixture(self):
+        fields = {'Id': '.Id', 'Image': '.Image', 'Reference': '.Config.Image',
+            'Labels': '.Config.Labels', 'User': '.Config.User', 'Entrypoint': '.Config.Entrypoint',
+            'Cmd': '.Config.Cmd', 'Pid': '.State.Pid', 'Running': '.State.Running', 'OOM': '.State.OOMKilled',
+            'Mounts': '.Mounts', 'Tmpfs': '.HostConfig.Tmpfs'}
+        for name in ('Memory', 'MemorySwap', 'NanoCpus', 'PidsLimit', 'Privileged', 'ReadonlyRootfs',
+                     'CapDrop', 'CapAdd', 'SecurityOpt', 'NetworkMode', 'PidMode', 'CgroupnsMode', 'Devices'):
+            fields[name] = '.HostConfig.' + name
+        template = '{' + ','.join('"' + k + '":{{json ' + v + '}}' for k, v in fields.items()) + '}'
+        value = strict_json(self._docker(['container', 'inspect', '--format=' + template, self._cid]))
+        _require(type(value) is dict and value['Id'] == self._cid and value['Running'] is True
+                 and value['OOM'] is False and type(value['Pid']) is int and value['Pid'] > 0, 'container_identity')
+        return value
+
+    @classmethod
+    def _for_public_fixture(cls, *, service, run, root, private):
+        # root/private come only from the source-owned fixture creator, which
+        # requires an initially empty fixed project before any Docker creation.
+        _require(platform.system() == 'Linux' and os.geteuid() == 0
+                 and service in ('old', 'target') and type(run) is str
+                 and re.fullmatch('[a-f0-9]{32}', run) is not None, 'startup_profile_unverified')
+        for path in (root, private):
+            _require(isinstance(path, Path) and path.is_absolute() and path.resolve() == path
+                     and os.lstat(path).st_uid == 0 and stat.S_IMODE(os.lstat(path).st_mode) == 0o700,
+                     'startup_state')
+        info = strict_json(cls._docker(['info', '--format', '{"driver":{{json .CgroupDriver}},"version":{{json .CgroupVersion}},"os":{{json .OSType}},"arch":{{json .Architecture}}}']))
+        _require(info['os'] == 'linux' and info['arch'] in ('aarch64', 'arm64')
+                 and info['version'] == '2' and info['driver'] in ('systemd', 'cgroupfs'), 'resource_isolation')
+        raw = cls._docker(['container', 'ls', '--no-trunc', '--format={{.ID}}',
+            '--filter=label=com.docker.compose.project=' + cls._project,
+            '--filter=label=com.docker.compose.service=' + service,
+            '--filter=label=sifto.scheduler.run=' + run], limit=128).strip()
+        _require(re.fullmatch(rb'[a-f0-9]{64}', raw) is not None, 'ownership_unknown')
+        self = object.__new__(cls)
+        self._cid = raw.decode('ascii')
+        self._role = 'scheduler-worker'
+        self._driver = info['driver']
+        self._root = root
+        self._run = run
+        self._service = service
+        self._fds = []
+        try:
+            observed = self._inspect_fixture()
+            from .coolify_startup import _IMAGES, RESOURCE_SHA256
+            _, reference, image = next(row for row in _IMAGES if row[0] == service)
+            labels = observed['Labels']
+            _require(observed['Reference'] == reference and observed['Image'] == image
+                     and labels['sifto.owner'] == 'startup-scheduler-public-fixture-v1'
+                     and labels['sifto.scheduler.run'] == run
+                     and labels['com.docker.compose.project'] == cls._project
+                     and labels['com.docker.compose.service'] == service
+                     and observed['User'] == '9999:9999'
+                     and observed['Entrypoint'] == ['docker-php-serversideup-entrypoint']
+                     and observed['Cmd'] == ['/init'], 'container_spec')
+            _require((observed['Memory'], observed['MemorySwap'], observed['NanoCpus'], observed['PidsLimit'])
+                     == (512 * 1024 * 1024, 512 * 1024 * 1024, 1000000000, 256)
+                     and observed['Privileged'] is False and observed['ReadonlyRootfs'] is True
+                     and observed['CapDrop'] == ['ALL'] and not observed['CapAdd'] and not observed['Devices']
+                     and observed['SecurityOpt'] == ['no-new-privileges:true']
+                     and observed['PidMode'] == '' and observed['CgroupnsMode'] == 'private'
+                     and re.fullmatch('container:[a-f0-9]{64}', observed['NetworkMode']) is not None,
+                     'resource_isolation')
+            source_root = Path(__file__).resolve().parents[1]
+            expected = {'/var/www/html/.env': (root / 'canonical.env', True),
+                '/etc/s6-overlay/s6-rc.d/init-script/up': (root / 'init', True),
+                '/probe/startup.php': (source_root / 'maintenance/coolify_startup.php', True),
+                '/probe/scheduler.request.json': (root / 'request.json', True),
+                '/scheduler/fixture.php': (source_root / 'startup-scheduler/fixture.php', True),
+                '/scheduler/wait-ready.sh': (source_root / 'startup-runtime/wait-ready.sh', True),
+                '/var/www/html/app/Console/Kernel.php': (source_root / 'startup-scheduler/fixture.php', True),
+                '/scheduler-state': (root / 'state', False),
+                '/var/www/html/app/Http/Middleware/PreventRequestsDuringMaintenance.php': (source_root / 'maintenance/coolify_startup_middleware.php', True),
+                '/etc/nginx/nginx.conf': (source_root / 'maintenance/coolify_startup_nginx.conf', True),
+                '/etc/nginx/conf.d/default.conf': (source_root / 'maintenance/coolify_startup_site.conf', True),
+                '/startup/fixture.php': (source_root / 'startup/fixture.php', True),
+                '/data/coolify/ssl/public-fixture.txt': (source_root / 'startup/public-ssl.txt', True),
+                '/data/coolify/proxy/public-fixture.txt': (source_root / 'startup/public-proxy.txt', True)}
+            mounts = {row['Destination']: row for row in observed['Mounts']}
+            _require(len(mounts) == len(observed['Mounts'])
+                     and set(mounts) == set(expected) | {'/var/www/html/storage', '/var/www/html/bootstrap/cache'}
+                     and observed['Tmpfs'] == {
+                         '/run': 'rw,nosuid,nodev,exec,uid=9999,gid=9999,mode=0755,size=33554432',
+                         '/tmp': 'rw,nosuid,nodev,noexec,mode=1777,size=16777216',
+                         '/probe': 'rw,nosuid,nodev,noexec,uid=9999,gid=9999,mode=0700,size=1048576'}, 'container_spec')
+            for destination, (path, readonly) in expected.items():
+                mount = mounts[destination]
+                _require(mount['Type'] == 'bind' and mount['Source'] == str(path)
+                         and mount['RW'] is not readonly, 'container_spec')
+            for destination in ('/var/www/html/storage', '/var/www/html/bootstrap/cache'):
+                _require(mounts[destination]['Type'] == 'volume' and mounts[destination]['RW'] is True
+                         and mounts[destination]['Name'].startswith(cls._project + '_'), 'container_spec')
+            self._container = observed
+            self._initpid = observed['Pid']
+            def opened(path, flags):
+                fd = os.open(path, flags | os.O_CLOEXEC)
+                self._fds.append(fd)
+                return fd
+            self._initfd = opened('/proc/' + str(self._initpid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            self._rootfd = os.open('root', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=self._initfd)
+            self._fds.append(self._rootfd)
+            self._init_token = _start_token(self._initpid)
+            self._time_namespace = os.readlink('/proc/self/ns/time')
+            _require(os.readlink('ns/time', dir_fd=self._initfd) == self._time_namespace, 'startup_state')
+            self._cgroup = self._proc_read(self._initfd, 'cgroup', 16384).decode('ascii')
+            match = re.fullmatch(r'0::(/[^\n]+)\n', self._cgroup)
+            _require(match is not None and '..' not in match[1].split('/'), 'resource_isolation')
+            group = match[1]
+            _require(group.endswith('/docker-' + self._cid + '.scope') if self._driver == 'systemd'
+                     else group.endswith('/' + self._cid), 'resource_isolation')
+            self._group_path = Path('/sys/fs/cgroup' + group)
+            self._groupfd = opened(self._group_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            self._group_identity = _metadata(os.fstat(self._groupfd), directory=True)
+            _require(self._proc_read(self._groupfd, 'cgroup.type', 64) == b'domain\n', 'resource_isolation')
+            _require(self._proc_read(self._groupfd, 'memory.max', 64) == b'536870912\n'
+                     and self._proc_read(self._groupfd, 'memory.swap.max', 64) == b'0\n'
+                     and self._proc_read(self._groupfd, 'pids.max', 64) == b'256\n', 'resource_isolation')
+            quota = self._proc_read(self._groupfd, 'cpu.max', 64).split()
+            _require(len(quota) == 2 and quota[0].isdigit() and quota[1].isdigit()
+                     and int(quota[0]) == int(quota[1]) > 0, 'resource_isolation')
+            self._membership = self._group_path / 'cgroup.procs'
+            self._sourcefd = os.open('etc/s6-overlay/s6-rc.d/scheduler-worker/run', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self._rootfd)
+            self._fds.append(self._sourcefd)
+            _require(_hash(_read(self._sourcefd, 4096)) == '9034571c9f328e694720f9c66c461016e96a3d932ade29f5d2498754677d906c', 'source_closure')
+            helper = os.open('probe/startup.php', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self._rootfd)
+            try:
+                _require(_hash(_read(helper, 131072)) == dict(RESOURCE_SHA256)['coolify_startup.php'], 'source_closure')
+            finally:
+                os.close(helper)
+            observed_context = self._context('scheduler-context', timeout=15)
+            self._context_observation = observed_context
+            self._contextfd = os.open('probe/scheduler.context.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self._rootfd)
+            self._fds.append(self._contextfd)
+            projection = strict_json(_read(self._contextfd, 131072))
+            _require(projection['hmac'] == observed_context['context_hmac'], 'startup_state')
+            self._pin_request(projection['data']['request'])
+            status = projection['data']['s6']
+            _require(type(status) is str, 'startup_state')
+            match = re.fullmatch(r'true true ([1-9][0-9]{0,9})\n', status)
+            _require(match is not None, 'startup_state')
+            selected = []
+            for pid in self._members():
+                fd = opened('/proc/' + str(pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                row = self._proc_identity(fd)
+                if row['ids']['NSpid'] == [str(pid), match[1]]:
+                    selected.append(pid)
+            _require(len(selected) == 1, 'startup_state')
+            self._pid = selected[0]
+            self._pidfd = opened_pidfd = os.pidfd_open(self._pid)
+            self._fds.append(opened_pidfd)
+            self._procfd = opened('/proc/' + str(self._pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            self._exefd = opened('/proc/' + str(self._pid) + '/exe', os.O_RDONLY)
+            self._dirfd = opened(private, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            self._lockfd = os.open('scheduler-worker.lock', os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=self._dirfd)
+            self._fds.append(self._lockfd)
+            self._deadline = time.monotonic() + 20
+            self._key = secrets.token_bytes(32)
+            self._original = None
+            self._intent = None
+            self._pins = self._read_pins()
+            self._selected = self._identity()
+            self._scheduler_stable = self._stable_members()
+            self._guard(self._deadline)
+            return self
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        for fd in reversed(self._fds):
+            os.close(fd)
+        self._fds.clear()
+
+    def _context(self, operation, *, timeout=.35):
+        _require(operation in ('scheduler-context', 'scheduler-context-check'), 'startup_state')
+        value = strict_json(self._docker(['exec', '--user=9999:9999', self._cid,
+            'php', '/probe/startup.php', operation], timeout=timeout, limit=8192))
+        _require(type(value) is dict and set(value) == {'version', 'operation', 'selected_version', 'generation', 'context_hmac'}
+                 and type(value['version']) is int and value['version'] == 1
+                 and value['operation'] == 'scheduler-context'
+                 and value['selected_version'] == ('4.4.2' if self._service == 'old' else '4.4.6')
+                 and type(value['generation']) is str and re.fullmatch('[a-f0-9]{32}', value['generation'])
+                 and type(value['context_hmac']) is str and _HASH.fullmatch(value['context_hmac']), 'startup_state')
+        return value
+
+    def _read_pins(self):
+        pins = super()._read_pins()
+        _require(self._context('scheduler-context-check') == self._context_observation, 'startup_state')
+        return pins
+
+    @staticmethod
+    def _request_snapshot(fd):
+        info = os.fstat(fd)
+        metadata = list(_metadata(info))
+        _require(stat.S_ISREG(info.st_mode) and info.st_uid == info.st_gid == 0
+                 and stat.S_IMODE(info.st_mode) == 0o444 and info.st_nlink == 1, 'startup_state')
+        raw = _read(fd, 2048)
+        _require(metadata == list(_metadata(os.fstat(fd))), 'startup_state')
+        return [metadata, _hash(raw)]
+
+    def _pin_request(self, expected):
+        _require(type(expected) is list and len(expected) == 3 and type(expected[0]) is dict
+                 and type(expected[1]) is str and _HASH.fullmatch(expected[1])
+                 and type(expected[2]) is dict, 'startup_state')
+        self._request_source_path = self._root / 'request.json'
+        self._request_source_fd = os.open(self._request_source_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        self._fds.append(self._request_source_fd)
+        self._request_mount_fd = os.open('probe/scheduler.request.json',
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=self._rootfd)
+        self._fds.append(self._request_mount_fd)
+        self._request_pins = [self._request_snapshot(fd)
+            for fd in (self._request_source_fd, self._request_mount_fd)]
+        info = os.fstat(self._request_mount_fd)
+        php_identity = dict(dev=info.st_dev, ino=info.st_ino, mode=info.st_mode, nlink=info.st_nlink,
+            uid=info.st_uid, gid=info.st_gid, size=info.st_size, mtime=int(info.st_mtime), ctime=int(info.st_ctime))
+        self._request_data = expected[2]
+        _require(self._request_pins[0] == self._request_pins[1]
+                 and self._request_pins[0][1] == expected[1] and php_identity == expected[0]
+                 and strict_json(_read(self._request_mount_fd, 2048)) == self._request_data
+                 and set(self._request_data) == {'version', 'phase', 'generation', 'deadline_ns'}
+                 and type(self._request_data['version']) is int and self._request_data['version'] == 1
+                 and self._request_data['phase'] == 'scheduler-proof-held'
+                 and self._request_data['generation'] == self._context_observation['generation']
+                 and type(self._request_data['deadline_ns']) is int, 'startup_state')
+        self._request_guard()
+
+    def _request_guard(self):
+        # A Docker bind may keep its old inode after the source pathname is
+        # replaced. Both source and mounted paths must still name the original
+        # root-owned phase file; a matching mounted projection alone is stale.
+        for index, fd in enumerate((self._request_source_fd, self._request_mount_fd)):
+            _require(self._request_snapshot(fd) == self._request_pins[index], 'startup_state')
+        _require(list(_metadata(os.stat(self._request_source_path, follow_symlinks=False))) == self._request_pins[0][0]
+                 and list(_metadata(os.stat('probe/scheduler.request.json', dir_fd=self._rootfd,
+                     follow_symlinks=False))) == self._request_pins[1][0], 'startup_state')
+        _require(time.monotonic_ns() < self._request_data['deadline_ns'], 'command_timeout')
+
+    def _final_guard(self, deadline):
+        # Revoke late generation/source changes AFTER identity/Docker/cgroup I/O.
+        # The inherited post-I/O original deadline and pidfd check remain last;
+        # this does not renew either the drain or separate restoration budget.
+        self._request_guard()
+        super()._final_guard(deadline)
+
+    def _proc_identity(self, fd):
+        return super()._proc_identity(fd, native_titles=True)
+
+    def _executable_limit(self):
+        # The authenticated fixed PHP executable is larger than Python K0's
+        # component ceiling; this remains a bounded exact-image file identity.
+        return 64 * 1024 * 1024
+
+    def _executable_hash(self, limit):
+        metadata = _metadata(os.fstat(self._exefd))
+        if not hasattr(self, '_fixed_php_hash'):
+            self._fixed_php_hash = (metadata, super()._executable_hash(limit))
+        # The daemon-authenticated image/rootfs is RO, the executable is the
+        # root-owned fixed-image PHP inode, and _placement rebinds that inode on
+        # every reread. Rehashing the same 19MiB inode at every 1ms poll is not
+        # additional application-write protection and can exhaust restoration.
+        _require(metadata == self._fixed_php_hash[0] and metadata[2] == 0, 'startup_state')
+        return self._fixed_php_hash[1]
+
+    def _members(self):
+        _require(_metadata(os.stat(self._group_path, follow_symlinks=False), directory=True)
+                 == self._group_identity == _metadata(os.fstat(self._groupfd), directory=True), 'resource_isolation')
+        values = [int(part) for part in self._proc_read(self._groupfd, 'cgroup.procs', 8192).split()]
+        _require(0 < len(values) <= 256 and len(values) == len(set(values)), 'resource_isolation')
+        return sorted(values)
+
+    def _placement(self, selected, parent, init):
+        _require(self._inspect_fixture() == self._container and _start_token(self._initpid) == self._init_token
+                 and os.readlink('ns/time', dir_fd=self._initfd) == self._time_namespace
+                 and os.readlink('ns/time', dir_fd=self._procfd) == self._time_namespace
+                 and init['ids']['NSpid'] == [str(self._initpid), '1']
+                 and selected['cgroup'] == parent['cgroup'] == init['cgroup'] == self._cgroup
+                 and selected['namespaces'] == parent['namespaces'] == init['namespaces']
+                 and selected['namespaces'][0] != os.readlink('/proc/self/ns/pid')
+                 and all(row['ids']['Uid'] == row['ids']['Gid'] == ['9999'] * 4 for row in (selected, parent, init))
+                 and selected['argv'] == [part.hex() for part in (b'php', b'artisan', b'schedule:work')]
+                 and parent['argv'] == [part.hex() for part in (b's6-supervise', b'scheduler-worker')]
+                 and parent['parent'] == self._initpid
+                 and selected['exe'] == list(_metadata(os.stat('usr/local/bin/php', dir_fd=self._rootfd)))
+                 and parent['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-supervise', dir_fd=self._rootfd)))
+                 and init['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-svscan', dir_fd=self._rootfd))), 'startup_state')
+        _require(self._members() == sorted(int(part) for part in self._membership.read_text().split()), 'resource_isolation')
+        return 'owned-public-native-scheduler', self._membership
+
+    def _stable_members(self):
+        rows = {}
+        for pid in self._members():
+            fd = os.open('/proc/' + str(pid), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                rows[pid] = self._proc_identity(fd)
+            finally:
+                os.close(fd)
+        roles = ('php-fpm', 'nginx', 'reverb', 'terminal-server', 'horizon', 'scheduler-worker',
+                 's6rc-fdholder', 's6rc-oneshot-runner', 's6-linux-init-shutdownd')
+        stable = {}
+        supervisor = {}
+        for pid, row in rows.items():
+            argv = [bytes.fromhex(part) for part in row['argv']]
+            if pid == self._initpid and argv == [b'/package/admin/s6/command/s6-svscan', b'-d4', b'--', b'/run/service']:
+                stable[pid] = row
+            elif row['parent'] == self._initpid and len(argv) == 2 and argv[0] == b's6-supervise' and argv[1].decode('ascii') in roles:
+                if row['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-supervise', dir_fd=self._rootfd))):
+                    stable[pid] = row
+                    supervisor[pid] = argv[1].decode('ascii')
+        exact = {
+            'php-fpm': ('usr/local/sbin/php-fpm', [b'php-fpm: master process (/usr/local/etc/php-fpm.conf)']),
+            'nginx': ('usr/sbin/nginx', [b'nginx: master process nginx']),
+            'reverb': ('usr/local/bin/php', [b'php', b'artisan', b'reverb:start', b'--host=0.0.0.0', b'--port=6001']),
+            'terminal-server': ('usr/bin/node', [b'node', b'/terminal/terminal-server.js']),
+            'horizon': ('bin/busybox', [b'sleep', b'infinity']),
+            's6-linux-init-shutdownd': ('package/admin/s6-linux-init-1.1.3.0/command/s6-linux-init-shutdownd',
+                [b'/package/admin/s6-linux-init/command/s6-linux-init-shutdownd', b'-d3', b'-c', b'/run/s6/basedir', b'-g', b'3000', b'-C', b'-B']),
+            's6rc-oneshot-runner': ('package/admin/s6-2.13.2.0/command/s6-ipcserverd',
+                [b'/package/admin/s6/command/s6-ipcserverd', b'-1', b'--', b'/package/admin/s6/command/s6-ipcserver-access',
+                 b'-v0', b'-E', b'-l0', b'-i', b'data/rules', b'--', b'/package/admin/s6/command/s6-sudod', b'-t',
+                 b'30000', b'--', b'/package/admin/s6-rc/command/s6-rc-oneshot-run', b'-l', b'../..', b'--'])}
+        masters = {}
+        for pid, row in rows.items():
+            role = supervisor.get(row['parent'])
+            if role in exact:
+                executable, argv = exact[role]
+                if row['argv'] == [part.hex() for part in argv] and row['exe'] == list(_metadata(os.stat(executable, dir_fd=self._rootfd))):
+                    stable[pid] = row
+                    masters[pid] = role
+        for pid, row in rows.items():
+            role = masters.get(row['parent'])
+            if role in ('php-fpm', 'nginx'):
+                executable = exact[role][0]
+                argv = b'php-fpm: pool www' if role == 'php-fpm' else b'nginx: worker process'
+                if row['argv'] == [argv.hex()] and row['exe'] == list(_metadata(os.stat(executable, dir_fd=self._rootfd))):
+                    stable[pid] = row
+        for pid, row in stable.items():
+            _require(row['cgroup'] == self._cgroup and row['namespaces'] == self._selected['process']['namespaces']
+                     and row['ids']['Uid'] == row['ids']['Gid'] == ['9999'] * 4
+                     and len(row['ids']['NSpid']) == 2 and row['ids']['NSpid'][0] == str(pid), 'startup_state')
+        return stable
 
 
 def _supervise(argv, *, output_fd, prefix, pass_fds=(), stdin_fd=None,

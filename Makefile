@@ -198,6 +198,10 @@ maintenance-coolify-startup-barrier-test:
 maintenance-coolify-startup-runtime-test:
 	sh infra/maintenance/startup-runtime/test.sh
 
+.PHONY: maintenance-coolify-startup-scheduler-native-test
+maintenance-coolify-startup-scheduler-native-test:
+	sh infra/maintenance/startup-scheduler/test.sh
+
 .PHONY: maintenance-coolify-startup-drain-test
 maintenance-coolify-startup-drain-test:
 	sh infra/maintenance/startup-drain/test.sh

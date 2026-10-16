@@ -43,7 +43,7 @@ from .coolify_plan import OLD_ARM, NEW_ARM, profile_sha256
 
 
 RESOURCE_SHA256 = (
-    ('coolify_startup.php', 'c52fd716d07bad829af59def8d271a679f15d52166fb35fe32fe3edf7858b083'),
+    ('coolify_startup.php', '557ee78671c0b7cc24cabd7fa25de3bb37c7eab0259990c3f14d850b170d8e02'),
     ('coolify_horizon_inspect.php', 'eef76cd9881407dd35a4e16c1d476373a001c06fae384ddbbc9c6728ade15b20'),
     ('coolify_startup_init', 'afe14f036a705b057afcd8346b61c3ba06b34cff02199ef6b2dc663bf7196522'),
     ('coolify_startup_middleware.php', 'fe5cb12552e94585d1fa9b831b4e4bac7caf4bbbe657cb0a3cd62b80ac67186d'),
@@ -123,6 +123,55 @@ def parse_process_control_result(raw):
         return ProcessControlObservation(**value)
     except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
         raise ValueError('startup_process_control_result') from None
+
+
+@dataclass(frozen=True, repr=False)
+class SchedulerObservation:
+    """Finite frozen-launcher observation; never native admission."""
+    version: int
+    category: str
+    live_count: int
+    finished_count: int
+    failed_count: int
+    unknown_count: int
+    restore_required: bool
+    maintenance_held: bool
+    identity_hmac: str
+
+
+def parse_scheduler_result(raw):
+    def reject():
+        raise ValueError('startup_scheduler_result')
+
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                reject()
+            value[key] = item
+        return value
+
+    try:
+        if type(raw) is not bytes or not 0 < len(raw) <= 8192:
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(SchedulerObservation.__dataclass_fields__):
+            reject()
+        counts = [value[key] for key in ('live_count', 'finished_count', 'failed_count', 'unknown_count')]
+        if (type(value['version']) is not int or value['version'] != 1
+                or type(value['category']) is not str or value['category'] not in ('quiescent', 'held', 'rejected')
+                or any(type(count) is not int or not 0 <= count <= 256 for count in counts)
+                or sum(counts) > 256 or type(value['restore_required']) is not bool
+                or type(value['maintenance_held']) is not bool or not value['maintenance_held']
+                or type(value['identity_hmac']) is not str
+                or re.fullmatch('[a-f0-9]{64}', value['identity_hmac']) is None
+                or value['category'] == 'quiescent' and any(value[key] for key in (
+                    'live_count', 'failed_count', 'unknown_count'))):
+            reject()
+        return SchedulerObservation(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
+        raise ValueError('startup_scheduler_result') from None
 
 
 @dataclass(frozen=True, repr=False)

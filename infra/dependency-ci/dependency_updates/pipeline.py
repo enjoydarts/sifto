@@ -123,6 +123,194 @@ def run_name(plan):
     return 'Dependency PR %d %s %s' % (plan['pr'], plan['head'], plan['base'])
 
 
+def native_job_names(api, source):
+    """Bind REST job inventory to the immutable trusted workflow source.
+
+    This intentionally recognizes only the historical two-job workflow and
+    the current three-job workflow, without adding a runtime YAML dependency.
+    Duplicate/unknown job keys or a different jobs block fail closed.
+    """
+    text = '\n' + blob(api, '.github/workflows/' + WORKFLOW, source)
+    require(text.count('\njobs:\n') == 1 and not re.search(r'^jobs:.*\S', text, re.M),
+            'Ambiguous native workflow jobs block')
+    block = text.split('\njobs:\n', 1)[1]
+    require(not re.search(r'^\S', block, re.M), 'Unexpected native workflow jobs boundary')
+    matches = list(re.finditer(r'^  ([a-z][a-z-]*):[ \t]*\n', block, re.M))
+    names = tuple(match[1] for match in matches)
+    require(names in {('prepare', 'approve-merge-deploy'),
+                      ('prepare', 'owner-approval', 'approve-merge-deploy')},
+            'Unsupported native workflow job shape')
+    require(len(re.findall(r'^  \S', block, re.M)) == len(names),
+            'Ambiguous native workflow job keys')
+    sections = {match[1]: block[match.end():matches[index + 1].start() if index + 1 < len(matches) else len(block)]
+                for index, match in enumerate(matches)}
+    gate = 'owner-approval' if 'owner-approval' in names else 'approve-merge-deploy'
+    expected_needs = {'prepare': [], gate: ['    needs: prepare']}
+    if 'owner-approval' in names:
+        expected_needs['approve-merge-deploy'] = ['    needs: [prepare, owner-approval]']
+    require(all(re.findall(r'^    needs:[^\n]*$', sections[name], re.M) == expected_needs[name]
+                for name in names)
+            and re.findall(r'^    environment:[^\n]*$', block, re.M)
+                == ['    environment: production-maintenance']
+            and re.findall(r'^    environment:[^\n]*$', sections[gate], re.M)
+                == ['    environment: production-maintenance'],
+            'Native owner gate environment or dependency DAG mismatch')
+    return set(names)
+
+
+def registered_native(api, run, repo_id, workflow_id):
+    from . import followup
+    require(type(run) is dict and type(run.get('display_title')) is str,
+            'Missing immutable native dependency title')
+    number, head, base = followup.parse_title(run)
+    followup.run_identity(run, {'workflow_id': workflow_id,
+        'path': '.github/workflows/' + WORKFLOW, 'event': 'workflow_dispatch',
+        'head_branch': 'main', 'head_sha': base}, api.repo, repo_id)
+    require(followup.positive(run.get('run_number')), 'Invalid native workflow run sequence')
+    return number, head, base
+
+
+def unstarted_job(job):
+    return (job.get('steps') == [] and 'runner_id' in job
+            and (job['runner_id'] is None or type(job['runner_id']) is int and job['runner_id'] == 0)
+            and 'runner_name' in job and job['runner_name'] in (None, ''))
+
+
+def stale_waiting_snapshot(api, listed):
+    """Only positively obsolete, never-reviewed waiting owner gates are idle.
+
+    A populated waiting started_at is ordinary GitHub metadata, not execution.
+    No approved, rejected, running, preparing or unknown authority is exempt.
+    """
+    from . import followup
+    if (listed.get('status') != 'waiting' or listed.get('run_attempt') != 1
+            or any(key not in listed for key in ('workflow_id', 'repository', 'head_repository',
+                                                'actor', 'triggering_actor', 'run_number'))):
+        return None
+    repository = api.get('')
+    require(type(repository) is dict and followup.positive(repository.get('id')),
+            'Missing native repository identity')
+    followup.repository(repository, api.repo, repository['id'])
+    workflow_id = followup.registered(api, WORKFLOW, followup.PARENT_NAME)
+    try:
+        number, head, base = registered_native(api, listed, repository['id'], workflow_id)
+    except Refused:
+        return None
+    run_id = listed['id']
+    current = api.get('/actions/runs/' + str(run_id))
+    registered_native(api, current, repository['id'], workflow_id)
+    require(followup.immutable_run(current) == followup.immutable_run(listed)
+            and current.get('run_number') == listed['run_number'], 'Waiting native run identity changed')
+    if current.get('status') != 'waiting' or current.get('conclusion') is not None:
+        return None
+    if api.get('/actions/runs/%d/approvals' % run_id) != []:
+        return None
+    names = native_job_names(api, base)
+    jobs = api.pages('/actions/runs/%d/jobs?filter=all' % run_id, 'jobs', require_total=True)
+    # GitHub does not create downstream jobs while their needs are waiting.
+    # The exact authenticated DAG above proves the omitted apply cannot start
+    # before this owner gate succeeds. A listed apply must prove it is unstarted.
+    observed_names = {job.get('name') for job in jobs if type(job) is dict}
+    allowed_names = [names]
+    if 'owner-approval' in names:
+        allowed_names.append({'prepare', 'owner-approval'})
+    if (observed_names not in allowed_names or len(jobs) != len(observed_names)
+            or any(type(job) is not dict for job in jobs)
+            or not all(followup.positive(job.get('id')) and job.get('run_id') == run_id
+                       and type(job.get('run_attempt')) is int and job['run_attempt'] == 1
+                       and job.get('head_sha') == base for job in jobs)
+            or len({job['id'] for job in jobs}) != len(jobs)):
+        return None
+    by_name = {job['name']: job for job in jobs}
+    prepared = by_name['prepare']
+    gate_name = 'owner-approval' if 'owner-approval' in names else 'approve-merge-deploy'
+    gate = by_name[gate_name]
+    if (prepared.get('status') != 'completed' or prepared.get('conclusion') != 'success'
+            or not isinstance(prepared.get('steps'), list) or gate.get('status') != 'waiting'
+            or gate.get('conclusion') is not None or not unstarted_job(gate)):
+        return None
+    if 'owner-approval' in names and 'approve-merge-deploy' in by_name:
+        apply = by_name['approve-merge-deploy']
+        if (apply.get('status') not in {'queued', 'pending', 'requested'}
+                or apply.get('conclusion') is not None or not unstarted_job(apply)
+                or 'started_at' not in apply or apply['started_at'] is not None):
+            return None
+    pending = api.get('/actions/runs/%d/pending_deployments' % run_id)
+    if (type(pending) is not list or len(pending) != 1 or type(pending[0]) is not dict):
+        return None
+    environment, reviewers = pending[0].get('environment'), pending[0].get('reviewers')
+    if (type(environment) is not dict or not followup.positive(environment.get('id'))
+            or environment.get('name') != 'production-maintenance'
+            or type(reviewers) is not list or len(reviewers) != 1 or type(reviewers[0]) is not dict
+            or reviewers[0].get('type') != 'User' or type(reviewers[0].get('reviewer')) is not dict
+            or any(reviewers[0]['reviewer'].get(key) != value
+                   for key, value in {'id': 19749005, 'login': 'enjoydarts', 'type': 'User'}.items())):
+        return None
+    source = main_sha(api)
+    require(type(source) is str and SHA.fullmatch(source), 'Invalid current main for waiting gate')
+    pr = api.get('/pulls/' + str(number))
+    require(type(pr) is dict and pr.get('number') == number and pr.get('state') == 'open'
+            and pr.get('merged') is False and type(pr.get('head')) is dict
+            and type(pr.get('base')) is dict, 'Missing current waiting candidate identity')
+    followup.repository(pr['head'].get('repo'), api.repo, repository['id'])
+    followup.repository(pr['base'].get('repo'), api.repo, repository['id'])
+    branch = pr['head'].get('ref', '')
+    emergency = re.fullmatch(r'dependency-security/[a-z0-9][a-z0-9.-]{0,79}', branch) is not None
+    require((emergency or re.fullmatch(r'renovate-ci/[a-zA-Z0-9_.-]{1,120}', branch))
+            and not branch.startswith('renovate-ci/approval-probe-')
+            and pr.get('user', {}).get('login') == ('enjoydarts' if emergency else 'github-actions[bot]')
+            and pr['base'].get('ref') == 'main'
+            and all(type(value) is str and SHA.fullmatch(value)
+                    for value in (pr['head'].get('sha'), pr['base'].get('sha'))),
+            'Invalid current waiting dependency candidate')
+    if (pr['head']['sha'], pr['base']['sha'], source) == (head, base, base):
+        return None
+    return canonical({'run': followup.immutable_run(current), 'sequence': current['run_number'],
+        'jobs': jobs, 'environment': {'id': environment['id'], 'name': environment['name']},
+        'reviewer': {key: reviewers[0]['reviewer'][key] for key in ('id', 'login', 'type')},
+        'main': source, 'pr': {'number': number, 'head': pr['head']['sha'],
+                              'base': pr['base']['sha'], 'branch': branch}})
+
+
+def stale_waiting(api, run):
+    first = stale_waiting_snapshot(api, run)
+    if first is None:
+        return None
+    # Freeze complete authority before exempting, then compare the same proof
+    # again at discovery's final dispatch boundary. These are reads, not a lock.
+    second = stale_waiting_snapshot(api, run)
+    require(second == first, 'Waiting gate or candidate changed during stale readback')
+    return first
+
+
+def require_unsuperseded(api, run, plan):
+    """A newer registered same-PR request permanently consumes older authority."""
+    from . import followup
+    repository = api.get('')
+    require(type(repository) is dict and followup.positive(repository.get('id')),
+            'Missing native repository identity')
+    followup.repository(repository, api.repo, repository['id'])
+    workflow_id = followup.registered(api, WORKFLOW, followup.PARENT_NAME)
+    require(registered_native(api, run, repository['id'], workflow_id)
+            == (plan['pr'], plan['head'], plan['base']), 'Execution native candidate mismatch')
+    runs = api.pages('/actions/workflows/' + WORKFLOW + '/runs?event=workflow_dispatch',
+                     'workflow_runs', require_total=True)
+    identifiers, sequences, found = set(), set(), False
+    for other in runs:
+        number, _, _ = registered_native(api, other, repository['id'], workflow_id)
+        require(other['id'] not in identifiers and other['run_number'] not in sequences,
+                'Duplicate native workflow run identity or sequence')
+        identifiers.add(other['id'])
+        sequences.add(other['run_number'])
+        if other['id'] == run['id']:
+            require(followup.immutable_run(other) == followup.immutable_run(run)
+                    and other['run_number'] == run['run_number'], 'Execution native inventory mismatch')
+            found = True
+        require(number != plan['pr'] or other['run_number'] <= run['run_number'],
+                'Native dependency request superseded by a newer request for this PR')
+    require(found, 'Execution native run missing from complete inventory')
+
+
 def deduplicated(api, plan):
     runs = api.pages('/actions/workflows/' + WORKFLOW + '/runs?event=workflow_dispatch', 'workflow_runs', require_total=True)
     for run in runs:
@@ -154,29 +342,31 @@ def unconsumed_preparation(api, listed, plan):
     if not isinstance(reviews, list) or reviews:
         return False
     jobs = api.pages('/actions/runs/%d/jobs?filter=all' % run_id, 'jobs', require_total=True)
-    if len(jobs) != 2 or {job.get('name') for job in jobs} != {'prepare', 'approve-merge-deploy'}:
+    names = native_job_names(api, plan['source'])
+    if len(jobs) != len(names) or {job.get('name') for job in jobs} != names:
         return False
-    if not all(isinstance(job.get('id'), int) and job.get('run_id') == run_id and job.get('head_sha') == plan['source'] and job.get('status') == 'completed' for job in jobs) or len({job['id'] for job in jobs}) != 2:
+    if not all(type(job.get('id')) is int and job.get('run_id') == run_id and job.get('head_sha') == plan['source'] and job.get('status') == 'completed' for job in jobs) or len({job['id'] for job in jobs}) != len(names):
+        return False
+    if 'owner-approval' in names and not all(type(job.get('run_attempt')) is int
+                                            and job['run_attempt'] == 1 for job in jobs):
         return False
     prepare_job = next(job for job in jobs if job['name'] == 'prepare')
-    privileged = next(job for job in jobs if job['name'] == 'approve-merge-deploy')
     if prepare_job.get('conclusion') not in ('failure', 'cancelled', 'timed_out') or not isinstance(prepare_job.get('steps'), list):
         return False
-    if privileged.get('steps') != [] or 'runner_id' not in privileged or privileged['runner_id'] not in (None, 0) or 'runner_name' not in privileged or privileged['runner_name'] not in (None, ''):
-        return False
-    if privileged.get('conclusion') == 'skipped':
-        unstarted = True
-    else:
-        unstarted = privileged.get('conclusion') == 'cancelled' and 'started_at' in privileged and privileged['started_at'] is None
-    if not unstarted:
-        return False
+    for privileged in (job for job in jobs if job['name'] != 'prepare'):
+        if not unstarted_job(privileged):
+            return False
+        if privileged.get('conclusion') != 'skipped' and not (
+                privileged.get('conclusion') == 'cancelled' and 'started_at' in privileged
+                and privileged['started_at'] is None):
+            return False
     # A reviewer or manual rerun can race the inventory queries. Read back both
     # authorities before permitting a separate fresh run with its own gate.
     final = api.get('/actions/runs/' + str(run_id))
     return all(final.get(key) == value for key, value in expected.items()) and api.get('/actions/runs/%d/approvals' % run_id) == []
 
 
-def active_approval(api):
+def active_approval(api, stale_proofs=None):
     # Read the full workflow inventory, without a head filter that could hide
     # an approval or deployment still running from the previous main.
     runs = api.pages('/actions/workflows/' + WORKFLOW + '/runs?event=workflow_dispatch',
@@ -200,7 +390,11 @@ def active_approval(api):
             # the merged main. A coherent old-source run is still ordinary busy.
             require(run['run_attempt'] == 1 and run.get('conclusion') is None,
                     'Active native approval metadata mismatch')
-            active = True
+            proof = stale_waiting(api, run)
+            if proof is None:
+                active = True
+            elif stale_proofs is not None:
+                stale_proofs[run['id']] = proof
     return active
 
 
@@ -208,7 +402,8 @@ def discover(api):
     source = main_sha(api)
     require(type(source) is str and SHA.fullmatch(source) and source == os.environ.get('GITHUB_SHA'),
             'Discovery workflow source must equal exact current main')
-    if active_approval(api):
+    stale_proofs = {}
+    if active_approval(api, stale_proofs):
         print('Native dependency approval or deployment is active; no new request')
         return
     for pr in api.pages('/pulls?state=open&base=main'):
@@ -221,9 +416,12 @@ def discover(api):
             continue
         if not deduplicated(api, plan):
             require(main_sha(api) == source, 'Main advanced during dependency discovery')
-            if active_approval(api):
+            final_proofs = {}
+            if active_approval(api, final_proofs):
                 print('Native dependency approval or deployment became active; no new request')
                 return
+            require(final_proofs == stale_proofs,
+                    'Waiting gate or candidate changed before fresh dispatch')
             api.request('POST', '/actions/workflows/' + WORKFLOW + '/dispatches', {'ref': 'main', 'inputs': {'pr_number': str(plan['pr']), 'head_sha': plan['head'], 'base_sha': source, 'source_sha': source}})
             print('Requested native dependency approval for PR %d' % pr['number'])
             return
@@ -348,7 +546,7 @@ def native_authority(run, approvals):
     def identity(value):
         require(type(value) is dict, 'Malformed native actor authority')
         return {key: value.get(key) for key in ('id', 'login', 'type')}
-    proof = {'run': {key: run.get(key) for key in ('id', 'workflow_id', 'event', 'head_branch',
+    proof = {'run': {key: run.get(key) for key in ('id', 'workflow_id', 'run_number', 'display_title', 'event', 'head_branch',
              'head_sha', 'path', 'run_attempt', 'status', 'conclusion')},
              'actor': identity(run.get('actor')),
              'triggering_actor': identity(run.get('triggering_actor', {})),
@@ -365,10 +563,17 @@ def execute(api, plan, digest):
     require(plan_hash(plan) == digest and plan['source'] == os.environ['GITHUB_SHA'], 'Untrusted or altered prepared plan')
     run_id = int(os.environ['GITHUB_RUN_ID'])
     run = api.get('/actions/runs/' + str(run_id))
-    require(run.get('event') == 'workflow_dispatch' and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source'] and run.get('path') == '.github/workflows/' + WORKFLOW and run.get('run_attempt') == 1, 'Approval run source mismatch')
+    require(run.get('id') == run_id and run.get('status') == 'in_progress'
+            and run.get('conclusion') is None and run.get('event') == 'workflow_dispatch'
+            and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source']
+            and run.get('path') == '.github/workflows/' + WORKFLOW
+            and run.get('run_attempt') == 1, 'Approval run source mismatch')
     approvals = api.get('/actions/runs/%d/approvals' % run_id)
     authority = native_authority(run, approvals)
     verify_approval(approvals, run.get('actor', {}).get('login'))
+    require(native_job_names(api, plan['source']) == {'prepare', 'owner-approval', 'approve-merge-deploy'},
+            'Execution requires the current separate native owner gate')
+    require_unsuperseded(api, run, plan)
     require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
             'Prepared plan has no fixed Python artifact-age evidence; prepare again')
     require(type(plan.get('image_security')) is dict,
@@ -387,6 +592,10 @@ def execute(api, plan, digest):
     verify_approval(final_approvals, final_run.get('actor', {}).get('login'))
     require(native_authority(final_run, final_approvals) == authority,
             'Native approval authority changed during revalidation; fresh approval required')
+    # Supersession cannot retroactively revoke a legitimate running mutation.
+    # The global apply job lock plus exact protected-main/head merge guards
+    # serialize writes and prevent another queued request applying stale state.
+    require_unsuperseded(api, final_run, plan)
     merged = merge_once(api, plan)
     require(main_sha(api) == merged, 'Main advanced after merge; deployment stopped')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:

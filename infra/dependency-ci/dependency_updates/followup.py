@@ -148,14 +148,16 @@ def parent(api, event_run, parent_id, repo_id, source, active=False, plan=None):
                     for review in approvals), 'Malformed native approval inventory')
     verify_approval(approvals, run['actor']['login'])
     jobs = api.pages('/actions/runs/%d/jobs?filter=all' % parent_id, 'jobs', require_total=True)
-    require(len(jobs) == 2 and all(type(job) is dict and positive(job.get('id'))
+    from .pipeline import native_job_names
+    names = native_job_names(api, base)
+    require(len(jobs) == len(names) and all(type(job) is dict and positive(job.get('id'))
             and type(job.get('run_id')) is int and job['run_id'] == parent_id
             and type(job.get('run_attempt')) is int and job['run_attempt'] == 1
             and job.get('head_sha') == base
             and job.get('status') == ('in_progress' if active and job.get('name') == 'approve-merge-deploy' else 'completed')
             and job.get('conclusion') == (None if active and job.get('name') == 'approve-merge-deploy' else 'success') for job in jobs)
-            and len({job['id'] for job in jobs}) == 2
-            and {job.get('name') for job in jobs} == {'prepare', 'approve-merge-deploy'},
+            and len({job['id'] for job in jobs}) == len(names)
+            and {job.get('name') for job in jobs} == names,
             'Complete first-attempt native job success is required')
     pr = api.get('/pulls/' + str(number))
     require(type(pr) is dict and type(pr.get('number')) is int and pr['number'] == number

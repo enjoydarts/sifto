@@ -54,10 +54,25 @@ jobs:
           DEPENDENCY_PR_CI_AUTO_APPROVAL: ${{ vars.DEPENDENCY_PR_CI_AUTO_APPROVAL }}
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.pipeline prepare
-  approve-merge-deploy:
+  owner-approval:
     if: github.ref == 'refs/heads/main'
     needs: prepare
     environment: production-maintenance
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Record native owner approval
+        run: printf '%s\n' 'Native owner approval recorded.'
+  approve-merge-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: [prepare, owner-approval]
+    # Approval happens before this repository-wide write lock. Keep approved
+    # pending jobs queued instead of replacing the previous pending apply.
+    concurrency:
+      group: dependency-production-apply
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-26.04
     # Deploy 145m + Audio 50m + image evidence 80m + 10m setup allowance.
     timeout-minutes: 285

@@ -945,13 +945,15 @@ class PipelineTests(unittest.TestCase):
                     'path': '.github/workflows/' + endpoint.rsplit('/', 1)[1], 'state': 'active'}
         if endpoint == '/actions/workflows/dependency-followup.yml/runs':
             return {'workflow_runs': [], 'total_count': 0}
+        if endpoint == '/actions/workflows/dependency-update.yml/runs':
+            return {'workflow_runs': [self.transport('GET', '/actions/runs/10', None)], 'total_count': 1}
         if endpoint == '/git/commits/' + self.merged:
             return {'sha': self.merged, 'parents': [{'sha': BASE}, {'sha': SHA}]}
         if endpoint == '/actions/runs/10/jobs':
             return {'jobs': [{'id': 100 + index, 'name': name, 'run_id': 10, 'run_attempt': 1,
-                             'head_sha': BASE, 'status': 'completed' if index == 0 else 'in_progress',
-                             'conclusion': 'success' if index == 0 else None}
-                            for index, name in enumerate(['prepare', 'approve-merge-deploy'])], 'total_count': 2}
+                             'head_sha': BASE, 'status': 'in_progress' if name == 'approve-merge-deploy' else 'completed',
+                             'conclusion': None if name == 'approve-merge-deploy' else 'success'}
+                            for index, name in enumerate(['prepare', 'owner-approval', 'approve-merge-deploy'])], 'total_count': 3}
         if endpoint == '/git/ref/heads/main':
             return {'object': {'sha': self.base}}
         if endpoint == '/branches/main':
@@ -970,6 +972,11 @@ class PipelineTests(unittest.TestCase):
             return [{'filename': path, 'status': 'modified', 'additions': 1, 'deletions': 1} for path in self.paths]
         if endpoint.startswith('/contents/'):
             import base64
+            if endpoint == '/contents/.github/workflows/dependency-update.yml':
+                text = ('jobs:\n  prepare:\n  owner-approval:\n    needs: prepare\n'
+                        '    environment: production-maintenance\n  approve-merge-deploy:\n'
+                        '    needs: [prepare, owner-approval]\n')
+                return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
             text = 'httpx==0.28.1\n' if 'ref=' + BASE in path else self.after
             if '/requirements.txt?' in path:
                 text = policy.UV_HEADER + text.rstrip('\n') + ' \\\n    --hash=sha256:' + 'a' * 64 + '\n    # via -r requirements.in\n'
@@ -980,7 +987,7 @@ class PipelineTests(unittest.TestCase):
                 statuses.append({'context': 'Vercel', 'state': 'failure', 'creator': {'login': 'vercel[bot]'}})
             return statuses
         if endpoint == '/actions/runs/10':
-            return {'id': 10, 'workflow_id': 20, 'event': 'workflow_dispatch', 'head_branch': 'main',
+            return {'id': 10, 'workflow_id': 20, 'run_number': 17, 'event': 'workflow_dispatch', 'head_branch': 'main',
                     'head_sha': BASE, 'path': '.github/workflows/dependency-update.yml', 'run_attempt': 1,
                     'actor': bot, 'triggering_actor': bot, 'repository': repository, 'head_repository': repository,
                     'status': 'in_progress', 'conclusion': None,
@@ -1169,7 +1176,7 @@ class PipelineTests(unittest.TestCase):
         self.paths = ['worker/requirements.txt']
         transport = self.transport
         def content(method, path, body):
-            if path.startswith('/contents/'):
+            if path.startswith('/contents/') and not path.startswith('/contents/.github/workflows/'):
                 value = before if 'ref=' + BASE in path else after
                 return {'type': 'file', 'encoding': 'base64', 'size': len(value), 'content': base64.b64encode(value.encode()).decode()}
             return transport(method, path, body)
@@ -1756,6 +1763,10 @@ class ReproposalTests(unittest.TestCase):
             return None
         self.reads.append(path)
         endpoint = path.split('?')[0]
+        if endpoint == '/contents/.github/workflows/dependency-update.yml':
+            import base64
+            text = 'jobs:\n  prepare:\n  approve-merge-deploy:\n    needs: prepare\n    environment: production-maintenance\n'
+            return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
         if endpoint == '/actions/workflows/dependency-update.yml/runs':
             return {'workflow_runs': [dict(self.run)], 'total_count': 1}
         if endpoint == '/actions/runs/10': return dict(self.run)
@@ -1785,7 +1796,7 @@ class ReproposalTests(unittest.TestCase):
         def transport(method, path, body):
             if path.split('?')[0] == '/pulls':
                 return [{'number': 1, 'head': {'sha': SHA}}]
-            if path.startswith('/actions/'):
+            if path.startswith('/actions/') or path.startswith('/contents/.github/workflows/'):
                 return original(method, path, body)
             return fixture.transport(method, path, body)
         api = github.GitHub('owner/repo', transport=transport)
@@ -1802,7 +1813,7 @@ class ReproposalTests(unittest.TestCase):
         def transport(method, path, body):
             if path.split('?')[0] == '/pulls':
                 return [{'number': 1, 'head': {'sha': SHA}}]
-            if path.startswith('/actions/'):
+            if path.startswith('/actions/') or path.startswith('/contents/.github/workflows/'):
                 return original(method, path, body)
             return fixture.transport(method, path, body)
         with patch.dict(os.environ, {'GITHUB_SHA': BASE}):

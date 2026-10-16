@@ -339,10 +339,27 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertEqual(gates, ['production-maintenance'])
         for job in workflow['jobs'].values():
             self.assertIn("github.ref == 'refs/heads/main'", job['if'])
+            if job is workflow['jobs']['owner-approval']:
+                continue
             checkout = next(step for step in job['steps'] if step.get('uses', '').startswith('actions/checkout@'))
             self.assertEqual(checkout['with']['ref'], '${{ github.sha }}')
         execution = workflow['jobs']['approve-merge-deploy']
-        self.assertEqual(execution['needs'], 'prepare')
+        self.assertEqual(set(workflow['jobs']), {'prepare', 'owner-approval', 'approve-merge-deploy'})
+        self.assertEqual(execution['needs'], ['prepare', 'owner-approval'])
+        self.assertNotIn('environment', execution)
+        self.assertEqual(execution['concurrency'], {'group': 'dependency-production-apply',
+                         'cancel-in-progress': False, 'queue': 'max'})
+        gate = workflow['jobs']['owner-approval']
+        self.assertEqual(gate['permissions'], {})
+        self.assertEqual(gate['needs'], 'prepare')
+        self.assertEqual(gate['environment'], 'production-maintenance')
+        self.assertEqual(gate['steps'], [{'name': 'Record native owner approval',
+                                        'run': "printf '%s\\n' 'Native owner approval recorded.'"}])
+        self.assertIn('test_stale_approval.py', (ROOT / 'Makefile').read_text())
+        from unittest.mock import patch
+        from dependency_updates import pipeline
+        with patch.object(pipeline, 'blob', return_value=(ROOT / '.github/workflows/dependency-update.yml').read_text()):
+            self.assertEqual(pipeline.native_job_names(None, 'a' * 40), set(workflow['jobs']))
         self.assertIn('dependency_updates.pipeline execute', str(execution))
         self.assertIn('dependency_updates.pipeline discover', (ROOT / '.github/workflows/renovate.yml').read_text())
 

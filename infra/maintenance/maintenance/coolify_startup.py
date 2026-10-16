@@ -75,6 +75,57 @@ def fixed_candidate():
 
 
 @dataclass(frozen=True, repr=False)
+class ProcessControlObservation:
+    """K0 component observation only; never a process selection capability."""
+    version: int
+    role: str
+    category: str
+    task_count: int
+    restore_required: bool
+    maintenance_held: bool
+    identity_hmac: str
+
+
+def parse_process_control_result(raw):
+    def reject():
+        raise ValueError('startup_process_control_result')
+
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                reject()
+            value[key] = item
+        return value
+
+    try:
+        if type(raw) is not bytes or not 0 < len(raw) <= 8192:
+            reject()
+        value = json.loads(raw.decode('utf-8', 'strict'), object_pairs_hook=pairs,
+                           parse_constant=lambda _: reject())
+        if type(value) is not dict or set(value) != set(ProcessControlObservation.__dataclass_fields__):
+            reject()
+        if (type(value['version']) is not int or value['version'] != 1
+                or type(value['role']) is not str or value['role'] not in ('scheduler-worker', 'terminal-server')
+                or type(value['category']) is not str or value['category'] not in (
+                    'frozen', 'already-stopped', 'restored', 'freeze-restored', 'unchanged', 'rejected', 'busy', 'held')
+                or type(value['task_count']) is not int or not 0 <= value['task_count'] <= 256
+                or type(value['restore_required']) is not bool
+                or type(value['maintenance_held']) is not bool or not value['maintenance_held']
+                or type(value['identity_hmac']) is not str
+                or re.fullmatch('[a-f0-9]{64}', value['identity_hmac']) is None):
+            reject()
+        category = value['category']
+        if (value['restore_required'] != (category in ('frozen', 'held'))
+                or category in ('frozen', 'already-stopped', 'restored', 'freeze-restored', 'unchanged') and value['task_count'] == 0
+                or category in ('rejected', 'busy') and value['task_count'] != 0):
+            reject()
+        return ProcessControlObservation(**value)
+    except (ValueError, UnicodeError, TypeError, RecursionError, KeyError):
+        raise ValueError('startup_process_control_result') from None
+
+
+@dataclass(frozen=True, repr=False)
 class SshObservation:
     """Typed observation only; construction grants no execution capability."""
     version: int

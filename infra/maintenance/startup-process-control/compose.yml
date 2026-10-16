@@ -1,0 +1,17 @@
+services:
+  test:
+    build: ..
+    working_dir: /src
+    command: [python, -B, -m, unittest, tests.test_coolify_startup_process_control, -v]
+    volumes:
+      - ..:/src:ro
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:mode=1777,size=32m
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 1
+    pids_limit: 48

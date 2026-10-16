@@ -1320,6 +1320,282 @@ def _start_token(pid):
     return value[value.rfind(b')') + 2:].split()[19]
 
 
+class _FixedRoleProcessControl:
+    """Dormant K0 same-PID-namespace component, NOT native App authority.
+
+    No constructor/selector is registered. PUBLIC tests alone assemble this
+    object from harness-owned children and synthetic pinned context descriptors.
+    A later source-owned join must supply authenticated container/init/S6 role
+    selection, host namespace/cgroup mapping and barrier/generation projection.
+    Caller observations, a PID, role string or boolean cannot enable that join.
+
+    STOP/CONT here address ONLY a retained pidfd, never service names, process
+    groups or descendants. Snapshots do not prove exclusive foreign signal
+    ownership. Durable state records an obligation, not arbitrary crash recovery.
+    """
+    def __init__(self):
+        raise DockerError('startup_profile_unverified')
+
+    @staticmethod
+    def _proc_read(fd, leaf, limit=131072):
+        opened = os.open(leaf, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=fd)
+        try:
+            value = os.read(opened, limit + 1)
+            _require(len(value) <= limit, 'output_bound')
+            return value
+        finally:
+            os.close(opened)
+
+    def _read_pins(self):
+        values = []
+        for fd in (self._sourcefd, self._contextfd):
+            before = _metadata(os.fstat(fd))
+            raw = _read(fd, 131072)
+            _require(before == _metadata(os.fstat(fd)), 'startup_state')
+            values.append([list(before), _hash(raw)])
+        return values
+
+    def _tasks(self):
+        tasksfd = os.open('task', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self._procfd)
+        try:
+            names = sorted(os.listdir(tasksfd), key=int)
+            _require(0 < len(names) <= 256, 'startup_state')
+            values = []
+            for name in names:
+                raw = self._proc_read(tasksfd, name + '/stat', 8192)
+                fields = raw[raw.rfind(b')') + 2:].split()
+                values.append([int(name), fields[0].decode('ascii')])
+            _require(names == sorted(os.listdir(tasksfd), key=int), 'startup_state')
+            return values
+        finally:
+            os.close(tasksfd)
+
+    def _proc_identity(self, fd):
+        raw = self._proc_read(fd, 'stat', 8192)
+        fields = raw[raw.rfind(b')') + 2:].split()
+        status = self._proc_read(fd, 'status').decode('ascii')
+        wanted = ('Uid:', 'Gid:', 'NSpid:', 'Groups:')
+        ids = {line.split(':', 1)[0]: line.split()[1:] for line in status.splitlines()
+               if line.startswith(wanted)}
+        _require(set(ids) == {'Uid', 'Gid', 'NSpid', 'Groups'} and ids['NSpid']
+                 and all(part.isascii() and part.isdecimal() for values in ids.values() for part in values),
+                 'startup_state')
+        namespaces = [os.readlink('ns/' + name, dir_fd=fd) for name in ('pid', 'mnt', 'net')]
+        exe = os.stat('exe', dir_fd=fd)
+        argv = self._proc_read(fd, 'cmdline', 32768).split(b'\0')
+        _require(argv[-1] == b'' and all(argv[:-1]), 'startup_state')
+        return dict(start=fields[19].decode('ascii'), parent=int(fields[1]), ids=ids,
+                    namespaces=namespaces, cgroup=self._proc_read(fd, 'cgroup', 16384).decode('ascii'),
+                    exe=list(_metadata(exe)), argv=[part.hex() for part in argv[:-1]])
+
+    def _identity(self):
+        selected = self._proc_identity(self._procfd)
+        parentfd = os.open('/proc/' + str(selected['parent']), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            parent = self._proc_identity(parentfd)
+        finally:
+            os.close(parentfd)
+        init = self._proc_identity(self._initfd)
+        # The component only supports its own visible cgroup and PID namespace.
+        # No assumption that UID 9999 defines membership; include EVERY member.
+        current = Path('/proc/self/cgroup').read_text()
+        _require(selected['cgroup'] == current and parent['cgroup'] == current
+                 and selected['namespaces'] == [os.readlink('/proc/self/ns/' + name)
+                     for name in ('pid', 'mnt', 'net')]
+                 and _start_token(self._pid).decode('ascii') == selected['start'], 'startup_state')
+        members = sorted(int(part) for part in Path('/sys/fs/cgroup/cgroup.procs').read_text().split())
+        _require(0 < len(members) <= 256 and self._pid in members
+                 and all(pid > 0 for pid in members), 'startup_state')
+        member_tokens = [[pid, _start_token(pid).decode('ascii')] for pid in members]
+        _require(members == sorted(int(part) for part in Path('/sys/fs/cgroup/cgroup.procs').read_text().split()),
+                 'startup_state')
+        _require(list(_metadata(os.fstat(self._exefd))) == selected['exe']
+                 and 0 < os.fstat(self._exefd).st_size <= 16 * 1024 * 1024, 'startup_state')
+        task_tokens = []
+        for tid, _ in self._tasks():
+            raw = self._proc_read(self._procfd, 'task/' + str(tid) + '/stat', 8192)
+            task_tokens.append([tid, raw[raw.rfind(b')') + 2:].split()[19].decode('ascii')])
+        return dict(scope='same-pid-namespace-component', role=self._role, task_tokens=task_tokens,
+                    boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                    process=selected, parent=parent, init=init, members=member_tokens,
+                    executable_sha256=_hash(os.pread(self._exefd, 16 * 1024 * 1024 + 1, 0)))
+
+    def _alive(self):
+        import select
+        _require(not select.select([self._pidfd], [], [], 0)[0], 'startup_state')
+
+    def _guard(self, deadline):
+        # All context I/O precedes a full identity reread and the final pidfd /
+        # generation/deadline barrier immediately adjacent to send_signal.
+        _require(self._read_pins() == self._pins, 'startup_state')
+        _require(self._identity() == self._selected, 'startup_state')
+        self._final_guard(deadline)
+
+    def _restoration_guard(self, deadline):
+        _require(self._read_pins() == self._pins, 'startup_state')
+        current = self._identity()  # still reads and bounds the complete closure
+        # Other cgroup members may finish while the exact launcher is stopped.
+        # Their changing inventory is not restoration authority or work success.
+        _require({key: value for key, value in current.items() if key != 'members'}
+                 == {key: value for key, value in self._selected.items() if key != 'members'}, 'startup_state')
+        self._final_guard(deadline)
+
+    def _final_guard(self, deadline):
+        _require([list(_metadata(os.fstat(fd))) for fd in (self._sourcefd, self._contextfd)]
+                 == [pin[0] for pin in self._pins], 'startup_state')
+        self._alive()
+        _require(time.monotonic() < deadline, 'command_timeout')
+
+    def _drain_guard(self, deadline):
+        self._guard(min(deadline, self._deadline))
+
+    def _save(self, stage, restore_required):
+        value = dict(version=1, role=self._role, stage=stage, original=self._original,
+                     identity=self._selected, pins=self._pins, restore_required=restore_required)
+        raw = _json(value)
+        _require(len(raw) <= 131072, 'output_bound')
+        pending = self._role + '.pending'
+        fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                     0o600, dir_fd=self._dirfd)
+        try:
+            _require(os.write(fd, raw) == len(raw), 'startup_state')
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.rename(pending, self._role + '.json', src_dir_fd=self._dirfd, dst_dir_fd=self._dirfd)
+        os.fsync(self._dirfd)
+        self._intent = value
+
+    def _journal_matches(self):
+        fd = os.open(self._role + '.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=self._dirfd)
+        try:
+            info = os.fstat(fd)
+            _require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                     and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o600, 'startup_state')
+            raw = _read(fd, 131072)
+            _require(strict_json(raw) == self._intent and raw == _json(self._intent), 'startup_state')
+        finally:
+            os.close(fd)
+
+    def _result(self, category):
+        import hmac
+        from .coolify_startup import parse_process_control_result
+        count = len(self._original or []) if category not in ('rejected', 'busy') else 0
+        return parse_process_control_result(_json(dict(version=1, role=self._role, category=category,
+            task_count=count, restore_required=category in ('frozen', 'held'), maintenance_held=True,
+            identity_hmac=hmac.new(self._key, _json([self._selected, self._pins]), hashlib.sha256).hexdigest())))
+
+    def _lock(self):
+        import fcntl
+        directory = os.fstat(self._dirfd)
+        info = os.fstat(self._lockfd)
+        _require(directory.st_uid == os.geteuid() == 0 and stat.S_IMODE(directory.st_mode) == 0o700
+                 and stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1
+                 and stat.S_IMODE(info.st_mode) == 0o600
+                 and _metadata(info) == _metadata(os.stat(self._role + '.lock',
+                     dir_fd=self._dirfd, follow_symlinks=False)), 'startup_state')
+        fcntl.flock(self._lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def freeze(self):
+        import fcntl
+        import signal
+        try:
+            _require(self._role in ('scheduler-worker', 'terminal-server'), 'startup_state')
+            self._lock()
+        except (OSError, DockerError):
+            return self._result('busy')
+        try:
+            # Existing/partial private state is ambiguous, never overwritten.
+            _require(self._intent is None and self._original is None, 'startup_state')
+            for leaf in (self._role + '.json', self._role + '.pending'):
+                try:
+                    os.stat(leaf, dir_fd=self._dirfd, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                self._ambiguous = True
+                raise DockerError('startup_state')
+            limit = min(self._deadline, time.monotonic() + 1)
+            self._drain_guard(limit)
+            original = self._tasks()
+            states = {state for _, state in original}
+            _require(states == {'T'} or states <= {'R', 'S', 'D', 'I'}, 'startup_state')
+            _require(original == self._tasks(), 'startup_state')
+            self._original = original
+            self._sent = False
+            self._save('intent', states != {'T'})
+            self._journal_matches()
+            if states == {'T'}:
+                self._drain_guard(limit)
+                self._save('unchanged', False)
+                self._drain_guard(limit)
+                return self._result('already-stopped')
+            self._drain_guard(limit)
+            signal.pidfd_send_signal(self._pidfd, signal.SIGSTOP)
+            self._sent = True
+            self._save('stop-sent', True)
+            while time.monotonic() < limit:
+                self._drain_guard(limit)
+                tasks = self._tasks()
+                if ([tid for tid, _ in tasks] == [tid for tid, _ in original]
+                        and all(state == 'T' for _, state in tasks) and tasks == self._tasks()):
+                    self._drain_guard(limit)
+                    self._save('applied', True)
+                    self._drain_guard(limit)
+                    return self._result('frozen')
+                # A bounded poll, never used to position an adversarial race.
+                time.sleep(.001)
+            raise DockerError('command_timeout')
+        except BaseException:
+            if self._original is None:
+                return self._result('held' if getattr(self, '_ambiguous', False) else 'rejected')
+            if getattr(self, '_sent', False):
+                restored = self._restore_locked()
+                return self._result('freeze-restored') if restored.category == 'restored' else restored
+            return self._result('held')
+        finally:
+            fcntl.flock(self._lockfd, fcntl.LOCK_UN)
+
+    def _restore_locked(self):
+        import signal
+        limit = time.monotonic() + 1  # one budget starts BEFORE any journal I/O
+        try:
+            self._journal_matches()
+            _require(self._original is not None, 'startup_state')
+            if all(state == 'T' for _, state in self._original):
+                _require(self._tasks() == self._original, 'startup_state')
+                self._restoration_guard(limit)
+                return self._result('unchanged')
+            # An intent alone or a restarted object cannot assert that its STOP
+            # succeeded. Only this live attempt's acknowledged syscall may CONT.
+            _require(self._sent and self._intent['restore_required'], 'startup_state')
+            _require([tid for tid, _ in self._tasks()] == [tid for tid, _ in self._original], 'startup_state')
+            self._restoration_guard(limit)
+            signal.pidfd_send_signal(self._pidfd, signal.SIGCONT)
+            while time.monotonic() < limit:
+                self._restoration_guard(limit)
+                tasks = self._tasks()
+                if ([tid for tid, _ in tasks] == [tid for tid, _ in self._original]
+                        and all(state in ('R', 'S', 'D', 'I') for _, state in tasks)):
+                    self._save('restored', False)
+                    self._restoration_guard(limit)
+                    return self._result('restored')
+                time.sleep(.001)
+        except BaseException:
+            pass
+        return self._result('held')
+
+    def restore(self):
+        import fcntl
+        try:
+            self._lock()
+        except (OSError, DockerError):
+            return self._result('busy')
+        try:
+            return self._restore_locked()
+        finally:
+            fcntl.flock(self._lockfd, fcntl.LOCK_UN)
+
+
 def _supervise(argv, *, output_fd, prefix, pass_fds=(), stdin_fd=None,
                deadline, limit, attach=None):
     """Private transport primitive, exercised with synthetic exec children only.

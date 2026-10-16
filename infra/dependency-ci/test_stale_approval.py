@@ -264,7 +264,8 @@ class ClosedStaleApprovalTests(unittest.TestCase):
 
     def test_reopening_or_merging_closed_candidate_at_each_readback_stops_dispatch(self):
         for boundary in [2, 3, 4]:
-            for lifecycle in [{'state': 'open', 'merged': False}, {'state': 'closed', 'merged': True},
+            for lifecycle in [{'state': 'open', 'merged': False},
+                              {'state': 'closed', 'merged': True, 'merge_commit_sha': BASE},
                               {'state': 'unknown', 'merged': False}, {'state': 'closed', 'merged': None}]:
                 with self.subTest(boundary=boundary, lifecycle=lifecycle):
                     self.setUp()
@@ -283,7 +284,7 @@ class ClosedStaleApprovalTests(unittest.TestCase):
 
     def test_closed_reviewed_running_or_incomplete_candidate_never_exempts(self):
         for condition in ['approved', 'rejected', 'runner', 'steps', 'missing_head', 'missing_job',
-                          'missing_pending', 'unknown_state', 'malformed_state', 'unknown_merged', 'merged']:
+                          'missing_pending', 'unknown_state', 'malformed_state', 'unknown_merged', 'missing_merge_sha']:
             with self.subTest(condition=condition):
                 self.setUp()
                 if condition in {'approved', 'rejected'}: self.reviews = [{'state': condition}]
@@ -294,7 +295,7 @@ class ClosedStaleApprovalTests(unittest.TestCase):
                 if condition == 'unknown_state': self.lifecycle['state'] = None
                 if condition == 'malformed_state': self.lifecycle['state'] = []
                 if condition == 'unknown_merged': self.lifecycle['merged'] = None
-                if condition == 'merged': self.lifecycle['merged'] = True
+                if condition == 'missing_merge_sha': self.lifecycle['merged'] = True
                 if condition == 'missing_head':
                     original = self.api.transport
                     def transport(method, path, body):
@@ -307,6 +308,81 @@ class ClosedStaleApprovalTests(unittest.TestCase):
                 except policy.Refused:
                     pass
                 self.assertEqual(self.fixture.mutations, [])
+
+    def merged_waiting(self, three=False):
+        old_source = 'e' * 40
+        self.fixture.head = SHA
+        self.run.update(head_sha=old_source, display_title='Dependency PR 1 ' + OLD + ' ' + old_source)
+        for job in self.jobs: job['head_sha'] = old_source
+        if three:
+            self.jobs[-1]['name'] = 'owner-approval'
+        completed = dict(self.run, id=21, run_number=18, status='completed', conclusion='success',
+                         display_title='Dependency PR 1 ' + SHA + ' ' + old_source)
+        self.inventory_override = {'workflow_runs': [self.run, completed], 'total_count': 2}
+        self.lifecycle = {'state': 'closed', 'merged': True, 'merge_commit_sha': BASE}
+        original = self.api.transport
+        def transport(method, path, body):
+            if path.startswith('/contents/.github/workflows/dependency-update.yml'):
+                return workflow_blob(three)
+            return original(method, path, body)
+        self.api.transport = transport
+
+    def test_merged_newer_request_leaves_old_unreviewed_gate_idle_for_next_open_pr(self):
+        for three in [False, True]:
+            with self.subTest(three_jobs=three):
+                self.setUp()
+                self.merged_waiting(three)
+                self.discover()
+                self.assertEqual(self.fixture.mutations, [('POST', '/actions/workflows/dependency-update.yml/dispatches', {
+                    'ref': 'main', 'inputs': {'pr_number': '2', 'head_sha': SHA, 'base_sha': BASE, 'source_sha': BASE}})])
+                self.assertGreaterEqual(self.reads.count('/actions/runs/20/approvals'), 4)
+
+    def test_merged_gate_missing_invalid_binding_or_reviewed_incomplete_work_stays_busy(self):
+        for condition in ['missing_sha', 'invalid_sha', 'malformed_sha', 'approved', 'rejected',
+                          'runner', 'missing_job', 'missing_pending', 'open_merged']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                self.merged_waiting()
+                if condition == 'missing_sha': self.lifecycle.pop('merge_commit_sha')
+                if condition == 'invalid_sha': self.lifecycle['merge_commit_sha'] = 'invalid'
+                if condition == 'malformed_sha': self.lifecycle['merge_commit_sha'] = []
+                if condition in {'approved', 'rejected'}: self.reviews = [{'state': condition}]
+                if condition == 'runner': self.jobs[-1]['runner_id'] = 1
+                if condition == 'missing_job': self.jobs = self.jobs[:1]
+                if condition == 'missing_pending': self.pending = []
+                if condition == 'open_merged': self.lifecycle['state'] = 'open'
+                try:
+                    self.discover()
+                except policy.Refused:
+                    pass
+                self.assertEqual(self.fixture.mutations, [])
+
+    def test_merged_gate_lifecycle_or_merge_binding_change_at_readback_stops_dispatch(self):
+        for boundary in [2, 3, 4]:
+            for condition in ['reopened', 'unmerged', 'merge_sha']:
+                with self.subTest(boundary=boundary, condition=condition):
+                    self.setUp()
+                    self.merged_waiting()
+                    def hook(path):
+                        if path == '/actions/runs/20' and self.reads.count(path) == boundary:
+                            if condition == 'reopened': self.lifecycle.update(state='open', merged=False)
+                            if condition == 'unmerged': self.lifecycle['merged'] = False
+                            if condition == 'merge_sha': self.lifecycle['merge_commit_sha'] = 'f' * 40
+                    self.hook = hook
+                    try:
+                        self.discover()
+                    except policy.Refused:
+                        pass
+                    self.assertEqual(self.fixture.mutations, [])
+
+    def test_another_running_apply_blocks_even_after_merged_gate_is_obsolete(self):
+        self.merged_waiting()
+        active = dict(self.run, id=22, run_number=19, status='in_progress',
+                      display_title='Dependency PR 3 ' + SHA + ' ' + self.run['head_sha'])
+        self.inventory_override['workflow_runs'].append(active)
+        self.inventory_override['total_count'] += 1
+        self.discover()
+        self.assertEqual(self.fixture.mutations, [])
 
 
 class SupersessionTests(unittest.TestCase):

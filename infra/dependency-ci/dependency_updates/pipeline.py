@@ -264,13 +264,17 @@ def stale_waiting_snapshot(api, listed):
             and all(type(value) is str and SHA.fullmatch(value)
                     for value in (pr['head'].get('sha'), pr['base'].get('sha'))),
             'Invalid current waiting dependency candidate')
-    if pr['merged'] or (pr['state'] == 'open'
-                       and (pr['head']['sha'], pr['base']['sha'], source) == (head, base, base)):
+    merged_commit = pr.get('merge_commit_sha') if pr['merged'] else None
+    require(not pr['merged'] or type(merged_commit) is str and SHA.fullmatch(merged_commit),
+            'Missing valid historical waiting candidate merge commit')
+    if (pr['state'] == 'open'
+            and (pr['head']['sha'], pr['base']['sha'], source) == (head, base, base)):
         return None
     return canonical({'run': followup.immutable_run(current), 'sequence': current['run_number'],
         'jobs': jobs, 'environment': {'id': environment['id'], 'name': environment['name']},
         'reviewer': {key: reviewers[0]['reviewer'][key] for key in ('id', 'login', 'type')},
         'main': source, 'pr': {'number': number, 'state': pr['state'], 'merged': pr['merged'],
+                              'merge_commit_sha': merged_commit,
                               'head': pr['head']['sha'],
                               'base': pr['base']['sha'], 'branch': branch}})
 

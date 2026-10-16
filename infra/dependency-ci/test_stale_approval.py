@@ -233,6 +233,82 @@ class StaleApprovalTests(unittest.TestCase):
                 self.assertEqual(self.fixture.mutations, [])
 
 
+class ClosedStaleApprovalTests(unittest.TestCase):
+    """Closing an unreviewed candidate must not strand another open PR."""
+    discover = StaleApprovalTests.discover
+
+    def setUp(self):
+        StaleApprovalTests.setUp(self)
+        self.fixture.head = OLD
+        self.lifecycle = {'state': 'closed', 'merged': False}
+
+    def transport(self, method, path, body):
+        endpoint = path.split('?')[0]
+        if method == 'GET' and endpoint.startswith('/pulls/2'):
+            value = self.fixture.transport(method, path.replace('/pulls/2', '/pulls/1', 1), body)
+            if endpoint == '/pulls/2':
+                value['head']['sha'] = SHA
+            return value
+        value = StaleApprovalTests.transport(self, method, path, body)
+        if method == 'GET' and endpoint == '/pulls':
+            return [{'number': 2, 'head': {'sha': SHA}}]
+        if method == 'GET' and endpoint == '/pulls/1':
+            value.update(self.lifecycle)
+        return value
+
+    def test_closed_unmerged_unchanged_waiting_candidate_allows_one_other_open_request(self):
+        self.discover()
+        self.assertEqual(self.fixture.mutations, [('POST', '/actions/workflows/dependency-update.yml/dispatches', {
+            'ref': 'main', 'inputs': {'pr_number': '2', 'head_sha': SHA, 'base_sha': BASE, 'source_sha': BASE}})])
+        self.assertGreaterEqual(self.reads.count('/actions/runs/20/approvals'), 4)
+
+    def test_reopening_or_merging_closed_candidate_at_each_readback_stops_dispatch(self):
+        for boundary in [2, 3, 4]:
+            for lifecycle in [{'state': 'open', 'merged': False}, {'state': 'closed', 'merged': True},
+                              {'state': 'unknown', 'merged': False}, {'state': 'closed', 'merged': None}]:
+                with self.subTest(boundary=boundary, lifecycle=lifecycle):
+                    self.setUp()
+                    # Reopening still leaves an obsolete head. Only freezing
+                    # lifecycle authority detects this change between reads.
+                    self.fixture.head = SHA
+                    def hook(path):
+                        if path == '/actions/runs/20' and self.reads.count(path) == boundary:
+                            self.lifecycle = lifecycle
+                    self.hook = hook
+                    try:
+                        self.discover()
+                    except policy.Refused:
+                        pass
+                    self.assertEqual(self.fixture.mutations, [])
+
+    def test_closed_reviewed_running_or_incomplete_candidate_never_exempts(self):
+        for condition in ['approved', 'rejected', 'runner', 'steps', 'missing_head', 'missing_job',
+                          'missing_pending', 'unknown_state', 'malformed_state', 'unknown_merged', 'merged']:
+            with self.subTest(condition=condition):
+                self.setUp()
+                if condition in {'approved', 'rejected'}: self.reviews = [{'state': condition}]
+                if condition == 'runner': self.jobs[-1]['runner_id'] = 1
+                if condition == 'steps': self.jobs[-1]['steps'] = [{'name': 'started'}]
+                if condition == 'missing_job': self.jobs = self.jobs[:1]
+                if condition == 'missing_pending': self.pending = []
+                if condition == 'unknown_state': self.lifecycle['state'] = None
+                if condition == 'malformed_state': self.lifecycle['state'] = []
+                if condition == 'unknown_merged': self.lifecycle['merged'] = None
+                if condition == 'merged': self.lifecycle['merged'] = True
+                if condition == 'missing_head':
+                    original = self.api.transport
+                    def transport(method, path, body):
+                        value = original(method, path, body)
+                        if path == '/pulls/1': value['head'].pop('sha')
+                        return value
+                    self.api.transport = transport
+                try:
+                    self.discover()
+                except policy.Refused:
+                    pass
+                self.assertEqual(self.fixture.mutations, [])
+
+
 class SupersessionTests(unittest.TestCase):
     def setUp(self):
         self.fixture = updates.PipelineTests()

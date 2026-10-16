@@ -249,8 +249,9 @@ def stale_waiting_snapshot(api, listed):
     source = main_sha(api)
     require(type(source) is str and SHA.fullmatch(source), 'Invalid current main for waiting gate')
     pr = api.get('/pulls/' + str(number))
-    require(type(pr) is dict and pr.get('number') == number and pr.get('state') == 'open'
-            and pr.get('merged') is False and type(pr.get('head')) is dict
+    require(type(pr) is dict and pr.get('number') == number and pr.get('state') in ('open', 'closed')
+            and type(pr.get('merged')) is bool and (pr['state'] == 'closed' or pr['merged'] is False)
+            and type(pr.get('head')) is dict
             and type(pr.get('base')) is dict, 'Missing current waiting candidate identity')
     followup.repository(pr['head'].get('repo'), api.repo, repository['id'])
     followup.repository(pr['base'].get('repo'), api.repo, repository['id'])
@@ -263,12 +264,14 @@ def stale_waiting_snapshot(api, listed):
             and all(type(value) is str and SHA.fullmatch(value)
                     for value in (pr['head'].get('sha'), pr['base'].get('sha'))),
             'Invalid current waiting dependency candidate')
-    if (pr['head']['sha'], pr['base']['sha'], source) == (head, base, base):
+    if pr['merged'] or (pr['state'] == 'open'
+                       and (pr['head']['sha'], pr['base']['sha'], source) == (head, base, base)):
         return None
     return canonical({'run': followup.immutable_run(current), 'sequence': current['run_number'],
         'jobs': jobs, 'environment': {'id': environment['id'], 'name': environment['name']},
         'reviewer': {key: reviewers[0]['reviewer'][key] for key in ('id', 'login', 'type')},
-        'main': source, 'pr': {'number': number, 'head': pr['head']['sha'],
+        'main': source, 'pr': {'number': number, 'state': pr['state'], 'merged': pr['merged'],
+                              'head': pr['head']['sha'],
                               'base': pr['base']['sha'], 'branch': branch}})
 
 

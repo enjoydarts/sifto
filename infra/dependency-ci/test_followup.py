@@ -1,5 +1,6 @@
 """Completed native dependency approval is the only follow-up authority."""
 import copy
+import base64
 import importlib.util
 from itertools import product
 import json
@@ -60,6 +61,7 @@ class CompletedFollowupTests(unittest.TestCase):
         self.mutations, self.reads = [], []
         self.hook = None
         self.error = None
+        self.three_jobs = False
         self.api = GitHub(REPO['full_name'], self.transport)
 
     def transport(self, method, path, body):
@@ -72,6 +74,11 @@ class CompletedFollowupTests(unittest.TestCase):
         if self.hook:
             self.hook(path)
         endpoint = path.split('?')[0]
+        if endpoint == '/contents/.github/workflows/dependency-update.yml':
+            text = ('jobs:\n  prepare:\n' + ('  owner-approval:\n' if self.three_jobs else '  approve-merge-deploy:\n')
+                    + '    needs: prepare\n    environment: production-maintenance\n'
+                    + ('  approve-merge-deploy:\n    needs: [prepare, owner-approval]\n' if self.three_jobs else ''))
+            return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
         routes = {'': REPO, '/actions/workflows/dependency-update.yml': self.parent_workflow,
                   '/actions/workflows/dependency-followup.yml': self.self_workflow,
                   '/actions/runs/10': self.parent, '/actions/runs/' + str(self.current['id']): self.current,

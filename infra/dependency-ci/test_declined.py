@@ -77,6 +77,14 @@ class DeclinedTests(unittest.TestCase):
         elif endpoint == '/git/ref/heads/main': value = {'object': {'sha': BASE}}
         elif endpoint == '/git/ref/heads/renovate-ci/python': value = {'object': {'sha': HEAD}}
         elif endpoint == '/actions/workflows/dependency-update.yml/runs': value = {'workflow_runs': self.runs, 'total_count': len(self.runs)}
+        elif endpoint == '/actions/runs/80': value = self.runs[0]
+        elif endpoint == '/actions/runs/80/jobs': value = {'jobs': self.stale_jobs, 'total_count': len(self.stale_jobs)}
+        elif endpoint == '/actions/runs/80/approvals': value = self.stale_reviews
+        elif endpoint == '/actions/runs/80/pending_deployments': value = self.stale_pending
+        elif endpoint == '/contents/.github/workflows/dependency-update.yml':
+            from test_stale_approval import workflow_blob
+            value = workflow_blob()
+        elif endpoint == '/pulls/9': value = self.stale_pr
         elif endpoint == '/pulls': value = [self.current] if 'state=open' in path else self.closed_prs
         elif endpoint == '/pulls/58': value = self.current
         elif endpoint == '/pulls/34': value = self.old
@@ -316,6 +324,123 @@ class DeclinedTests(unittest.TestCase):
     def test_active_or_already_requested_native_approval_preserves_proposal(self):
         for status in ('waiting', 'completed'):
             self.setUp(); self.runs = [self.native_run(status)]; self.refused()
+
+    def stale_waiting(self, number=9):
+        run = self.native_run('waiting')
+        run.update(run_number=17, display_title='Dependency PR %d %s %s' % (number, OLD, BASE))
+        self.runs = [run]
+        self.stale_pr = self.pr(number, HEAD, 'open', '2026-10-12T00:00:00Z')
+        self.stale_reviews = []
+        self.stale_jobs = [
+            {'id': 801, 'run_id': 80, 'run_attempt': 1, 'head_sha': BASE, 'name': 'prepare',
+             'status': 'completed', 'conclusion': 'success', 'steps': [{'name': 'prepare'}]},
+            {'id': 802, 'run_id': 80, 'run_attempt': 1, 'head_sha': BASE, 'name': 'owner-approval',
+             'status': 'waiting', 'conclusion': None, 'steps': [], 'runner_id': None,
+             'runner_name': None, 'started_at': '2026-10-12T00:01:00Z'}]
+        self.stale_pending = [{'environment': {'id': 42, 'name': 'production-maintenance'},
+                              'reviewers': [{'type': 'User', 'reviewer': {
+                                  'id': 19749005, 'login': 'enjoydarts', 'type': 'User'}}]}]
+
+    def test_stale_waiting_request_remains_in_complete_history(self):
+        self.stale_waiting()
+        try: rows = self.module.native_history(self.api, self.repo['id'])
+        except policy.Refused as exc: self.fail('Positively stale waiting history was rejected: ' + str(exc))
+        self.assertEqual(rows, self.runs)
+        self.assertTrue(self.module.requested(rows, 9))
+
+    def test_unrelated_stale_waiting_request_allows_daily_declined_cleanup(self):
+        self.stale_waiting()
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Unrelated stale waiting request failed daily cleanup: ' + str(exc))
+        self.assertEqual(self.requests, [('PATCH', '/pulls/58', {'state': 'closed'})])
+        self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
+
+    def test_previously_requested_stale_waiting_proposal_remains_protected(self):
+        self.stale_waiting(58)
+        try: self.clean()
+        except policy.Refused as exc: self.fail('Protected stale waiting proposal failed daily cleanup: ' + str(exc))
+        self.assertEqual(self.requests, [])
+        self.deleted.assert_not_called()
+
+    def test_unproven_or_active_stale_gate_still_blocks_cleanup(self):
+        for condition in ('approved', 'rejected', 'unknown_review', 'running', 'queued',
+                          'runner', 'steps', 'pending', 'unchanged', 'unknown_status'):
+            with self.subTest(condition=condition):
+                self.setUp(); self.stale_waiting()
+                if condition in ('approved', 'rejected'): self.stale_reviews = [{'state': condition}]
+                elif condition == 'unknown_review': self.stale_reviews = {}
+                elif condition == 'running': self.runs[0]['status'] = 'in_progress'
+                elif condition == 'queued': self.runs[0]['status'] = 'queued'
+                elif condition == 'runner': self.stale_jobs[-1]['runner_id'] = 1
+                elif condition == 'steps': self.stale_jobs[-1]['steps'] = [{'name': 'started'}]
+                elif condition == 'pending': self.stale_pending = []
+                elif condition == 'unchanged': self.stale_pr['head']['sha'] = OLD
+                else: self.runs[0]['status'] = 'unknown'
+                self.refused()
+
+    def test_stale_proof_must_match_fresh_history_inventory(self):
+        for condition in ('missing', 'completed', 'running', 'title', 'sequence', 'repo', 'actor',
+                          'attempt', 'workflow', 'path', 'event', 'source', 'conclusion', 'review', 'job'):
+            with self.subTest(condition=condition):
+                self.setUp(); self.stale_waiting(); count = 0
+                def race(endpoint):
+                    nonlocal count
+                    if endpoint != '/actions/workflows/dependency-update.yml/runs': return
+                    count += 1
+                    if count != 2: return
+                    run = self.runs[0]
+                    if condition == 'missing': self.runs = []
+                    elif condition == 'completed': run.update(status='completed', conclusion='cancelled')
+                    elif condition == 'running': run['status'] = 'in_progress'
+                    elif condition == 'title': run['display_title'] = 'Dependency PR 9 ' + 'd' * 40 + ' ' + BASE
+                    elif condition == 'sequence': run['run_number'] += 1
+                    elif condition == 'repo': run['repository'] = {**self.repo, 'id': 999}
+                    elif condition == 'actor': run['actor'] = OWNER
+                    elif condition == 'attempt': run['run_attempt'] = 2
+                    elif condition == 'workflow': run['workflow_id'] = 999
+                    elif condition == 'path': run['path'] = '.github/workflows/other.yml'
+                    elif condition == 'event': run['event'] = 'push'
+                    elif condition == 'source': run['head_sha'] = OLD
+                    elif condition == 'conclusion': run['conclusion'] = 'success'
+                    elif condition == 'review': self.stale_reviews = [{'state': 'approved'}]
+                    else: self.stale_jobs[-1]['runner_id'] = 1
+                self.mutate_read = race
+                with self.assertRaises(policy.Refused): self.module.native_history(self.api, self.repo['id'])
+                self.assertEqual(self.requests, [])
+                self.deleted.assert_not_called()
+
+    def test_missing_malformed_or_unbound_stale_proof_cannot_exempt_waiting_history(self):
+        for identifier, proof in ((80, None), (80, ''), (80, {}), (80, 'not-a-proof'), (81, 'not-a-proof')):
+            with self.subTest(identifier=identifier, proof=proof):
+                self.setUp(); self.stale_waiting()
+                def idle(api, proofs=None):
+                    if proofs is not None: proofs[identifier] = proof
+                    return False
+                with patch.object(self.module.pipeline, 'active_approval', side_effect=idle):
+                    with self.assertRaises(policy.Refused): self.module.native_history(self.api, self.repo['id'])
+
+    def test_stale_gate_becoming_active_before_close_or_deletion_preserves_mutation_boundary(self):
+        for boundary in (3, 5):
+            for condition in ('approved', 'running', 'executed'):
+                with self.subTest(boundary=boundary, condition=condition):
+                    self.setUp(); self.stale_waiting(); count = 0
+                    def race(endpoint):
+                        nonlocal count
+                        if endpoint != '/actions/workflows/dependency-update.yml/runs': return
+                        count += 1
+                        if count != boundary: return
+                        if condition == 'approved': self.stale_reviews = [{'state': 'approved'}]
+                        elif condition == 'running': self.runs[0]['status'] = 'in_progress'
+                        else: self.stale_jobs[-1]['runner_id'] = 1
+                    self.mutate_read = race
+                    if boundary == 3:
+                        self.clean()
+                        self.assertEqual(self.requests, [])
+                    else:
+                        with self.assertRaisesRegex(policy.Refused, 'Native approval started after close'):
+                            self.clean()
+                        self.assertEqual(self.requests, [('PATCH', '/pulls/58', {'state': 'closed'})])
+                    self.deleted.assert_not_called()
 
     def test_completed_owner_rerun_for_unrelated_pr_does_not_block_cleanup(self):
         run = self.native_run()

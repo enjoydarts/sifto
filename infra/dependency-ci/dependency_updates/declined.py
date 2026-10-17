@@ -156,12 +156,13 @@ def decision(api, pr, owner, now):
 
 
 def native_history(api, repo_id):
-    if pipeline.active_approval(api):
+    stale_proofs = {}
+    if pipeline.active_approval(api, stale_proofs):
         return None
     workflow_id = registered(api, pipeline.WORKFLOW, 'Dependency Approve Merge and Deploy')
     rows = api.pages('/actions/workflows/' + pipeline.WORKFLOW + '/runs?event=workflow_dispatch',
                      'workflow_runs', require_total=True)
-    identifiers = set()
+    identifiers, waiting = set(), set()
     for row in rows:
         require(type(row) is dict and positive(row.get('id')) and row['id'] not in identifiers,
                 'Malformed or duplicate consumed native request inventory')
@@ -176,13 +177,26 @@ def native_history(api, repo_id):
                 and row.get('path') in {'.github/workflows/' + pipeline.WORKFLOW,
                                         '.github/workflows/' + pipeline.WORKFLOW + '@main'}
                 and row.get('event') == 'workflow_dispatch' and row.get('head_branch') == 'main'
-                and row.get('head_sha') == title.split()[-1] and positive(row.get('run_attempt'))
-                and row.get('status') == 'completed'
-                and row.get('conclusion') in {'success', 'failure', 'cancelled', 'timed_out',
-                                             'neutral', 'skipped', 'action_required', 'stale', 'startup_failure'},
+                and row.get('head_sha') == title.split()[-1] and positive(row.get('run_attempt')),
                 'Consumed native request workflow/source/status mismatch')
         repository(row.get('repository'), api.repo, repo_id)
         repository(row.get('head_repository'), api.repo, repo_id)
+        if row.get('status') == 'waiting':
+            # A stale gate is idle, but its PR still consumed a native request.
+            # Bind the exception to this fresh inventory and the same complete
+            # authority proof; never exempt an arbitrary waiting history row.
+            # active_approval already compared two fresh snapshots. One more
+            # complete snapshot must match them; a fourth repeats the REST cost.
+            proof = stale_proofs.get(row['id'])
+            require(proof is not None and pipeline.stale_waiting_snapshot(api, row) == proof,
+                    'Waiting native request proof changed during history readback')
+            waiting.add(row['id'])
+        else:
+            require(row.get('status') == 'completed'
+                    and row.get('conclusion') in {'success', 'failure', 'cancelled', 'timed_out',
+                                                 'neutral', 'skipped', 'action_required', 'stale', 'startup_failure'},
+                    'Consumed native request workflow/source/status mismatch')
+    require(waiting == set(stale_proofs), 'Waiting native request inventory changed during history readback')
     return rows
 
 

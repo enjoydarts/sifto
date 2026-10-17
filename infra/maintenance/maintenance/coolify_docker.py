@@ -1827,7 +1827,7 @@ class _FixedRoleProcessControl:
             fcntl.flock(self._lockfd, fcntl.LOCK_UN)
 
 
-# PUBLIC fixture only. Exact raw leaf manifests in tests/fixtures/scheduler-images
+# PUBLIC fixture only. Exact raw leaf manifests in tests/scheduler_image_*.json
 # cryptographically bind these reviewed config IDs to the pinned references.
 # Docker's classic store reports the config ID; containerd reports the target
 # manifest ID and its Descriptor. Neither shape changes the fixed image pins.

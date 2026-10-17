@@ -72,8 +72,9 @@ class SchedulerImageIdentity(unittest.TestCase):
         self.assertEqual(tuple((name, reference.split('@')[1], config)
                                for name, reference, config, _ in docker._SCHEDULER_IMAGE_PINS[:2]), startup._IMAGES)
         for name, reference, config, media in docker._SCHEDULER_IMAGE_PINS:
+            # Flat test data preserves the pipeline source-manifest grammar.
             # Git's final newline encodes the public registry bytes, which have none.
-            raw = (Path(__file__).parent / 'fixtures/scheduler-images' / (name + '.json')).read_bytes().removesuffix(b'\n')
+            raw = (Path(__file__).parent / ('scheduler_image_' + name + '.json')).read_bytes().removesuffix(b'\n')
             self.assertLessEqual(len(raw), 65536)
             self.assertEqual('sha256:' + hashlib.sha256(raw).hexdigest(), reference.split('@')[1])
             manifest = docker.strict_json(raw)
@@ -189,6 +190,16 @@ class SchedulerDrain(unittest.TestCase):
         deadline = time.monotonic() + 1
         while descendant in [pid for pid, _ in control._identity()['members']]:
             self.assertLess(time.monotonic(), deadline)
+        # Linux removes cgroup membership before exit_notify publishes Z.
+        # Await that independent precondition on the already retained procfd.
+        procfd = drain._known[descendant][0]
+        while True:
+            with os.fdopen(os.open('stat', os.O_RDONLY | os.O_CLOEXEC, dir_fd=procfd), 'rb') as stream:
+                raw = stream.read(8192)
+            self.assertLess(time.monotonic(), deadline)
+            if raw[raw.rfind(b')') + 2:].split()[0] == b'Z':
+                break
+            time.sleep(.001)
         result = drain.observe()
         self.assertEqual(result.category, 'quiescent')
         self.assertEqual(result.finished_count, 1)

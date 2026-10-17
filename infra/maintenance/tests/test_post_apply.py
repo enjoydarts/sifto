@@ -339,6 +339,21 @@ class AppendTests(unittest.TestCase):
 class SourceAndScopeTests(unittest.TestCase):
     def setUp(self): self.assertIsNotNone(post, 'pipeline source verification missing')
 
+    def test_current_recursive_package_manifest_matches_flat_image_contract(self):
+        image = Path(__file__).resolve().parents[1]
+        paths = [image / 'requirements.txt'] + sorted(path
+            for name in ('maintenance', 'tests', 'playbooks')
+            for path in (image / name).rglob('*')
+            if path.is_file() and '__pycache__' not in path.parts)
+        lines = []
+        for path in paths:
+            raw = path.read_bytes()
+            digest = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+            lines.append('100644 blob ' + digest + '\tinfra/maintenance/' + str(path.relative_to(image)))
+        env = {'GITHUB_REF': 'refs/heads/main', 'GITHUB_REPOSITORY': 'enjoydarts/sifto', 'GITHUB_SHA': SOURCE,
+               'MAINTENANCE_CHECKED_OUT_SHA': SOURCE, 'MAINTENANCE_PIPELINE_SHA': SOURCE}
+        post.validate_source('\n'.join(lines).encode(), env, image)
+
     def test_actual_registered_workflow_must_be_active_and_match(self):
         self.assertTrue(hasattr(post, 'validate_workflow'), 'registered workflow reader missing')
         workflow = {'id': 381232664, 'path': '.github/workflows/maintenance-apply.yml', 'state': 'active'}

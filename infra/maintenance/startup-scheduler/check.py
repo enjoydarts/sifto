@@ -142,6 +142,14 @@ class Fixture:
                       and all(type(value) is bool for value in checks.values()), 'fixed mapping diagnostic')
                 self.record('mapping-rejected', dict(category='native_mapping_rejected', checks=checks,
                             startup_registered=False, production_eligible=False))
+            checks = getattr(failure, '_scheduler_identity_checks', None)
+            if checks is not None:
+                check(str(failure) == 'startup_state' and type(checks) is dict
+                      and set(checks) == {'scope', 'role', 'task_tokens', 'boot', 'process', 'parent', 'init',
+                                          'members', 'executable_sha256'}
+                      and all(type(value) is bool for value in checks.values()), 'fixed identity diagnostic')
+                self.record('identity-rejected', dict(case=name, image_version=service, category='startup_state',
+                            checks=checks, startup_registered=False, production_eligible=False))
             raise
         self.controls.append(control)
         self.record('mapped', dict(case=name, image_version=service, category='owned_native_mapping',

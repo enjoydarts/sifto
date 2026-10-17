@@ -1,7 +1,9 @@
 """Scheduler kernel evidence; these are NOT actual Laravel/native-host proofs."""
 import json
+import copy
 import hashlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import select
@@ -57,6 +59,140 @@ class SchedulerFixtureRecord(unittest.TestCase):
             self.assertEqual(record['category'], 'restored')
             self.assertFalse(record['restore_required'])
             self.assertGreaterEqual(record['elapsed_ms'], 0)
+
+    def rejected_control(self, failure):
+        self.fixture.root = self.fixture.public
+        self.fixture.run = 'a' * 32
+        with patch.object(self.fixture, 'request'), \
+             patch.object(self.fixture, 'root_path', return_value=self.fixture.public), \
+             patch.object(docker._SchedulerHostProcessControl, '_for_public_fixture', side_effect=failure), \
+             patch('sys.stdout', new_callable=io.StringIO) as output:
+            try:
+                self.fixture.control('target', 'pipe-full')
+            finally:
+                self.output = output.getvalue()
+                (self.fixture.root / 'private-target-pipe-full').rmdir()
+
+    def test_identity_rejection_serializes_only_fixed_checks_and_case_labels(self):
+        failure = docker.DockerError('startup_state')
+        checks = dict.fromkeys(SchedulerIdentityGuard.fields, True)
+        checks['members'] = False
+        failure._scheduler_identity_checks = checks
+        failure.private_identity = {'pid': 123456789, 'argv': 'PRIVATE-ARGV', 'path': '/private/PAYLOAD'}
+        with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+            self.rejected_control(failure)
+        self.assertIs(caught.exception, failure)
+        self.assertTrue((self.fixture.public / 'native-observations.jsonl').exists(), 'identity rejection record missing')
+        self.assertEqual(self.records(), [dict(case='pipe-full', image_version='target', category='startup_state',
+            checks=checks, startup_registered=False, production_eligible=False)])
+        self.assertTrue(self.output.startswith('identity-rejected: '))
+        self.assertNotIn('PRIVATE', self.output)
+        self.assertNotIn('123456789', self.output)
+
+    def test_identity_rejection_rejects_wrong_keys_and_non_boolean_values(self):
+        valid = dict.fromkeys(SchedulerIdentityGuard.fields, True)
+        defects = [dict((('foreign' if key == 'members' else key), value) for key, value in valid.items()),
+                   dict(valid, members=1), dict(valid, extra=False)]
+        for checks in defects:
+            with self.subTest(checks=checks):
+                failure = docker.DockerError('startup_state')
+                failure._scheduler_identity_checks = checks
+                with self.assertRaises(Exception) as caught:
+                    self.rejected_control(failure)
+                self.assertIsInstance(caught.exception, RuntimeError)
+                self.assertEqual(str(caught.exception), 'fixed identity diagnostic')
+                self.assertEqual(self.output, '')
+                self.assertFalse((self.fixture.public / 'native-observations.jsonl').exists())
+
+
+class SchedulerIdentityGuard(unittest.TestCase):
+    fields = ('scope', 'role', 'task_tokens', 'boot', 'process', 'parent', 'init', 'members', 'executable_sha256')
+
+    def control(self, cls=docker._SchedulerHostProcessControl):
+        control = object.__new__(cls)
+        control._pins = ['PRIVATE-PIN']
+        control._selected = {field: ['PRIVATE-' + field] for field in self.fields}
+        return control
+
+    def test_each_identity_field_rejects_from_the_single_read_with_exact_boolean_diagnostics(self):
+        for field in self.fields:
+            with self.subTest(field=field):
+                control = self.control()
+                original = copy.deepcopy(control._selected)
+                current = copy.deepcopy(original)
+                current[field].append('PRIVATE-CHANGED')
+                with patch.object(control, '_read_pins', return_value=control._pins) as pins, \
+                     patch.object(control, '_identity', return_value=current) as identity, \
+                     patch.object(control, '_final_guard') as final, \
+                     patch.object(signal, 'pidfd_send_signal') as send:
+                    with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+                        control._guard(123)
+                checks = getattr(caught.exception, '_scheduler_identity_checks', None)
+                self.assertEqual(checks, {key: key != field for key in self.fields})
+                self.assertTrue(all(type(value) is bool for value in checks.values()))
+                self.assertEqual(control._selected, original)
+                self.assertEqual(str(caught.exception), 'startup_state')
+                pins.assert_called_once_with()
+                identity.assert_called_once_with()
+                final.assert_not_called()
+                send.assert_not_called()
+
+    def test_full_snapshot_equality_and_final_deadline_are_preserved(self):
+        control = self.control()
+        current = dict(control._selected, unexpected='PRIVATE-PAYLOAD')
+        with patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=current), patch.object(control, '_final_guard') as final:
+            with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+                control._guard(123)
+            self.assertEqual(getattr(caught.exception, '_scheduler_identity_checks', None), dict.fromkeys(self.fields, True))
+            final.assert_not_called()
+        with patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=copy.deepcopy(control._selected)) as identity, \
+             patch.object(control, '_final_guard', side_effect=docker.DockerError('command_timeout')) as final:
+            with self.assertRaisesRegex(docker.DockerError, '^command_timeout$') as caught:
+                control._guard(123)
+            self.assertFalse(hasattr(caught.exception, '_scheduler_identity_checks'))
+            identity.assert_called_once_with()
+            final.assert_called_once_with(123)
+
+    def test_matching_snapshot_keeps_order_and_pin_failure_precedes_identity(self):
+        control = self.control()
+        order = []
+        with patch.object(control, '_read_pins', side_effect=lambda: order.append('pins') or control._pins), \
+             patch.object(control, '_identity', side_effect=lambda: order.append('identity') or copy.deepcopy(control._selected)), \
+             patch.object(control, '_final_guard', side_effect=lambda deadline: order.append(deadline)):
+            self.assertIsNone(control._guard(123))
+        self.assertEqual(order, ['pins', 'identity', 123])
+        with patch.object(control, '_read_pins', return_value=[]), \
+             patch.object(control, '_identity') as identity, patch.object(control, '_final_guard') as final:
+            with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+                control._guard(123)
+            self.assertFalse(hasattr(caught.exception, '_scheduler_identity_checks'))
+            identity.assert_not_called()
+            final.assert_not_called()
+
+    def test_identity_mismatch_keeps_freeze_rejected_without_stop(self):
+        control = self.control()
+        control._role, control._original, control._intent = 'scheduler-worker', None, None
+        control._deadline, control._dirfd, control._lockfd = time.monotonic() + 1, 1, 2
+        current = dict(control._selected, members=['PRIVATE-CHANGED'])
+        with patch.object(control, '_lock'), patch.object(docker.os, 'stat', side_effect=FileNotFoundError), \
+             patch('fcntl.flock'), patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=current) as identity, \
+             patch.object(control, '_result', side_effect=lambda category: SimpleNamespace(category=category)), \
+             patch.object(control, '_save') as save, patch.object(signal, 'pidfd_send_signal') as send:
+            self.assertEqual(control.freeze().category, 'rejected')
+            identity.assert_called_once_with()
+            save.assert_not_called()
+            send.assert_not_called()
+
+    def test_generic_component_rejection_has_no_native_diagnostic(self):
+        control = self.control(docker._FixedRoleProcessControl)
+        with patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=dict(control._selected, members=[])):
+            with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+                control._guard(123)
+        self.assertFalse(hasattr(caught.exception, '_scheduler_identity_checks'))
 
 
 class SchedulerImageIdentity(unittest.TestCase):

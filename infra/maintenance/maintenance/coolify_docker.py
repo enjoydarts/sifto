@@ -2096,6 +2096,18 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         _require(self._context('scheduler-context-check') == self._context_observation, 'startup_state')
         return pins
 
+    def _guard(self, deadline):
+        _require(self._read_pins() == self._pins, 'startup_state')
+        current = self._identity()
+        if current != self._selected:
+            failure = DockerError('startup_state')
+            # Only fixed booleans from the SAME rejected snapshots; no reread
+            # or private process/context payload enters this PUBLIC diagnostic.
+            failure._scheduler_identity_checks = {key: current[key] == self._selected[key] for key in (
+                'scope', 'role', 'task_tokens', 'boot', 'process', 'parent', 'init', 'members', 'executable_sha256')}
+            raise failure
+        self._final_guard(deadline)
+
     @staticmethod
     def _request_snapshot(fd):
         info = os.fstat(fd)

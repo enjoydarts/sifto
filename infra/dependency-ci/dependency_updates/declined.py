@@ -185,8 +185,10 @@ def native_history(api, repo_id):
             # A stale gate is idle, but its PR still consumed a native request.
             # Bind the exception to this fresh inventory and the same complete
             # authority proof; never exempt an arbitrary waiting history row.
+            # active_approval already compared two fresh snapshots. One more
+            # complete snapshot must match them; a fourth repeats the REST cost.
             proof = stale_proofs.get(row['id'])
-            require(proof is not None and pipeline.stale_waiting(api, row) == proof,
+            require(proof is not None and pipeline.stale_waiting_snapshot(api, row) == proof,
                     'Waiting native request proof changed during history readback')
             waiting.add(row['id'])
         else:

@@ -355,6 +355,53 @@ class DeclinedTests(unittest.TestCase):
         self.assertEqual(self.requests, [('PATCH', '/pulls/58', {'state': 'closed'})])
         self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
 
+    def test_nine_stale_requests_keep_three_fresh_cleanup_boundaries_within_rest_budget(self):
+        self.stale_waiting()
+        responses, runs = {}, []
+        for index in range(9):
+            run_id, number = 80 + index, 9 + index
+            run = copy.deepcopy(self.runs[0])
+            run.update(id=run_id, run_number=17 + index,
+                       display_title='Dependency PR %d %s %s' % (number, OLD, BASE))
+            runs.append(run)
+            jobs = copy.deepcopy(self.stale_jobs)
+            for job_index, job in enumerate(jobs):
+                job.update(id=run_id * 10 + job_index, run_id=run_id)
+            prefix = '/actions/runs/' + str(run_id)
+            responses.update({prefix: run, prefix + '/jobs': {'jobs': jobs, 'total_count': len(jobs)},
+                              prefix + '/approvals': [], prefix + '/pending_deployments': self.stale_pending,
+                              '/pulls/' + str(number): self.pr(number, HEAD, 'open', '2026-10-12T00:00:00Z')})
+        self.runs = runs
+        original = self.api.transport
+        def transport(method, path, body):
+            endpoint = path.split('?')[0]
+            if method == 'GET' and endpoint in responses:
+                self.reads.append(path)
+                return copy.deepcopy(responses[endpoint])
+            return original(method, path, body)
+        self.api.transport = transport
+        history, boundaries = self.module.native_history, []
+        def fresh_history(api, repo_id):
+            before = len(self.reads)
+            rows = history(api, repo_id)
+            boundaries.append(self.reads[before:])
+            return rows
+        with patch.object(self.module, 'native_history', side_effect=fresh_history):
+            self.clean()
+        self.assertEqual(self.requests, [('PATCH', '/pulls/58', {'state': 'closed'})])
+        self.deleted.assert_called_once_with(self.api, 'renovate-ci/python', HEAD)
+        total = len(self.reads) + len(self.requests)
+        print('Nine-stale-request cleanup REST calls: %d (GET=%d, PATCH=%d)' % (
+            total, len(self.reads), len(self.requests)))
+        self.assertLess(total, 1000, 'Three-boundary cleanup exceeds the repository token hourly REST budget')
+        self.assertEqual(len(boundaries), 3)
+        for reads in boundaries:
+            for run_id in range(80, 89):
+                prefix = '/actions/runs/' + str(run_id)
+                self.assertGreaterEqual(reads.count(prefix + '/approvals'), 2)
+                self.assertGreaterEqual(sum(path.startswith(prefix + '/jobs?') for path in reads), 2)
+                self.assertGreaterEqual(reads.count(prefix + '/pending_deployments'), 2)
+
     def test_previously_requested_stale_waiting_proposal_remains_protected(self):
         self.stale_waiting(58)
         try: self.clean()

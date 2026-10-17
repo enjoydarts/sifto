@@ -1909,6 +1909,14 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         value = strict_json(self._docker(['container', 'inspect', '--format=' + template, self._cid]))
         _require(type(value) is dict and value['Id'] == self._cid and value['Running'] is True
                  and value['OOM'] is False and type(value['Pid']) is int and value['Pid'] > 0, 'container_identity')
+        mounts = value['Mounts']
+        _require(type(mounts) is list and 0 < len(mounts) <= 32
+                 and all(type(row) is dict and type(row.get('Destination')) is str
+                         and row['Destination'].startswith('/') and len(row['Destination']) <= 4096 for row in mounts)
+                 and len({row['Destination'] for row in mounts}) == len(mounts), 'container_identity')
+        # Older Docker versions emit MountPoints in Go map iteration order.
+        # Preserve each complete row; only list order has no identity meaning.
+        value['Mounts'] = sorted(mounts, key=lambda row: row['Destination'])
         return value
 
     @classmethod
@@ -2169,20 +2177,28 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         return sorted(values)
 
     def _placement(self, selected, parent, init):
-        _require(self._inspect_fixture() == self._container and _start_token(self._initpid) == self._init_token
-                 and os.readlink('ns/time', dir_fd=self._initfd) == self._time_namespace
-                 and os.readlink('ns/time', dir_fd=self._procfd) == self._time_namespace
-                 and init['ids']['NSpid'] == [str(self._initpid), '1']
-                 and selected['cgroup'] == parent['cgroup'] == init['cgroup'] == self._cgroup
-                 and selected['namespaces'] == parent['namespaces'] == init['namespaces']
-                 and selected['namespaces'][0] != os.readlink('/proc/self/ns/pid')
-                 and all(row['ids']['Uid'] == row['ids']['Gid'] == ['9999'] * 4 for row in (selected, parent, init))
-                 and selected['argv'] == [part.hex() for part in (b'php', b'artisan', b'schedule:work')]
-                 and parent['argv'] == [part.hex() for part in (b's6-supervise', b'scheduler-worker')]
-                 and parent['parent'] == self._initpid
-                 and selected['exe'] == list(_metadata(os.stat('usr/local/bin/php', dir_fd=self._rootfd)))
-                 and parent['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-supervise', dir_fd=self._rootfd)))
-                 and init['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-svscan', dir_fd=self._rootfd))), 'startup_state')
+        checks = dict(
+            container=self._inspect_fixture() == self._container,
+            init_start=_start_token(self._initpid) == self._init_token,
+            init_time=os.readlink('ns/time', dir_fd=self._initfd) == self._time_namespace,
+            selected_time=os.readlink('ns/time', dir_fd=self._procfd) == self._time_namespace,
+            init_nspid=init['ids']['NSpid'] == [str(self._initpid), '1'],
+            cgroup=selected['cgroup'] == parent['cgroup'] == init['cgroup'] == self._cgroup,
+            namespaces=selected['namespaces'] == parent['namespaces'] == init['namespaces'],
+            host_pid_namespace=selected['namespaces'][0] != os.readlink('/proc/self/ns/pid'),
+            credentials=all(row['ids']['Uid'] == row['ids']['Gid'] == ['9999'] * 4 for row in (selected, parent, init)),
+            selected_argv=selected['argv'] == [part.hex() for part in (b'php', b'artisan', b'schedule:work')],
+            parent_argv=parent['argv'] == [part.hex() for part in (b's6-supervise', b'scheduler-worker')],
+            parent_init=parent['parent'] == self._initpid,
+            selected_exe=selected['exe'] == list(_metadata(os.stat('usr/local/bin/php', dir_fd=self._rootfd))),
+            parent_exe=parent['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-supervise', dir_fd=self._rootfd))),
+            init_exe=init['exe'] == list(_metadata(os.stat('package/admin/s6-2.13.2.0/command/s6-svscan', dir_fd=self._rootfd))))
+        if not all(checks.values()):
+            failure = DockerError('startup_state')
+            # Fixed PUBLIC fixture diagnostics only. No process payload, IDs,
+            # paths, argv, namespaces, syscall metadata or authority is public.
+            failure._scheduler_placement_checks = checks
+            raise failure
         _require(self._members() == sorted(int(part) for part in self._membership.read_text().split()), 'resource_isolation')
         return 'owned-public-native-scheduler', self._membership
 

@@ -76,6 +76,7 @@ jobs:
       - env:
           POSTGRES_MOUNT_TEST_PLATFORM: linux/arm64
         run: |
+          make maintenance-coolify-startup-scheduler-native-test
           make dependency-python-locks-check
           make dependency-python-locks-test
           make dependency-contract
@@ -86,7 +87,6 @@ jobs:
           make maintenance-bootstrap-test
           make maintenance-backup-test
           make maintenance-postgres-data-mount-test
-          make maintenance-coolify-startup-scheduler-native-test
           make image-security-test
       - if: always()
         run: make dependency-clean

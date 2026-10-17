@@ -19,7 +19,7 @@ import cryptography
 
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
-from maintenance.coolify_docker import (_SchedulerHostProcessControl, _SchedulerDrain, strict_json,
+from maintenance.coolify_docker import (_SchedulerHostProcessControl, _SchedulerDrain, DockerError, strict_json,
     _SCHEDULER_IMAGE_PINS, _scheduler_image_format, _scheduler_image_identity)
 from maintenance.coolify_rehearsal import clone_env
 
@@ -132,8 +132,17 @@ class Fixture:
         private = self.root / ('private-' + service + '-' + name)
         private.mkdir(mode=0o700)
         started = time.monotonic()
-        control = _SchedulerHostProcessControl._for_public_fixture(
-            service=service, run=self.run, root=self.root, private=private)
+        try:
+            control = _SchedulerHostProcessControl._for_public_fixture(
+                service=service, run=self.run, root=self.root, private=private)
+        except DockerError as failure:
+            checks = getattr(failure, '_scheduler_placement_checks', None)
+            if checks is not None:
+                check(type(checks) is dict and len(checks) == 15
+                      and all(type(value) is bool for value in checks.values()), 'fixed mapping diagnostic')
+                self.record('mapping-rejected', dict(category='native_mapping_rejected', checks=checks,
+                            startup_registered=False, production_eligible=False))
+            raise
         self.controls.append(control)
         self.record('mapped', dict(case=name, version=service, category='owned_native_mapping',
             elapsed_ms=int((time.monotonic() - started) * 1000),
@@ -286,6 +295,7 @@ class Fixture:
             _scheduler_image_identity(reference, actual)
         info = strict_json(self.command(['info', '--format', '{"driver":{{json .CgroupDriver}},"version":{{json .CgroupVersion}},"os":{{json .OSType}},"arch":{{json .Architecture}}}']))
         self.record('preflight', dict(category='native_preflight', kernel=platform.release(), **info,
+            docker_version=self.command(['version', '--format={{.Server.Version}}'], limit=128).decode().strip(),
             pidfd=hasattr(os, 'pidfd_open'), python=platform.python_version(), cryptography=cryptography.__version__,
             startup_registered=False, production_eligible=False))
         check(info['version'] == '2' and info['driver'] in ('systemd', 'cgroupfs')

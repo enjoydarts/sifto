@@ -262,11 +262,11 @@ class DependencyAutomationContract(unittest.TestCase):
                 # conditionals, ignored exits, or a replacement with syntax checks.
                 commands = [line.strip() for line in step['run'].splitlines() if line.strip()]
                 self.assertEqual(commands, [f'make {name}' for name in [
+                    'maintenance-coolify-startup-scheduler-native-test',
                     'dependency-python-locks-check', 'dependency-python-locks-test',
                     'dependency-contract', 'dependency-renovate-validate', 'dependency-audio',
                     'maintenance-test', 'maintenance-syntax', 'maintenance-bootstrap-test',
                     'maintenance-backup-test', 'maintenance-postgres-data-mount-test',
-                    'maintenance-coolify-startup-scheduler-native-test',
                     'image-security-test',
                 ]])
                 for command in commands:

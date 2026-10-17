@@ -87,6 +87,71 @@ class SchedulerImageIdentity(unittest.TestCase):
             self.assertEqual(docker._scheduler_image_identity(reference, value), value['engine_id'])
 
 
+class NativeMappingSnapshot(unittest.TestCase):
+    def inspect(self, mounts):
+        control = object.__new__(docker._SchedulerHostProcessControl)
+        control._cid = 'c' * 64
+        value = dict(Id=control._cid, Running=True, OOM=False, Pid=12, Mounts=mounts)
+        control._docker = lambda args: json.dumps(value).encode()
+        return control._inspect_fixture()
+
+    def rows(self):
+        return [dict(Destination='/z', Source='/owned/z', Type='bind', RW=False, Mode='ro'),
+                dict(Destination='/a', Source='/owned/a', Type='bind', RW=True, Mode='rw')]
+
+    def test_mount_permutation_preserves_the_complete_snapshot(self):
+        rows = self.rows()
+        self.assertEqual(self.inspect(rows), self.inspect(list(reversed(rows))))
+        self.assertEqual(rows[0]['Destination'], '/z')
+
+    def test_duplicate_destinations_are_rejected(self):
+        rows = self.rows()
+        for duplicate in (rows[0], dict(rows[0], Source='/foreign')):
+            with self.assertRaisesRegex(docker.DockerError, '^container_identity$'):
+                self.inspect(rows + [duplicate])
+
+    def test_every_mount_field_remains_identity_bound(self):
+        rows = self.rows()
+        original = self.inspect(rows)
+        for change in (dict(Source='/foreign'), dict(RW=True), dict(Mode='rw'),
+                       dict(Type='volume'), dict(Propagation='rshared'), dict(extra='retained')):
+            with self.subTest(change=change):
+                self.assertNotEqual(original, self.inspect([dict(rows[0], **change), rows[1]]))
+
+    def test_malformed_mount_inventory_is_rejected(self):
+        for rows in (None, {}, [], [None], [dict(Destination=1)], [dict(Destination='relative')]):
+            with self.subTest(rows=rows), self.assertRaisesRegex(docker.DockerError, '^container_identity$'):
+                self.inspect(rows)
+
+    def test_failed_native_placement_exposes_only_fixed_predicate_booleans(self):
+        # Synthetic guard component only; this does not prove native mapping.
+        control = object.__new__(docker._SchedulerHostProcessControl)
+        control._container = {'fixed': True}
+        control._inspect_fixture = lambda: {'fixed': False}
+        control._initpid, control._init_token = 12, b'123'
+        control._initfd, control._procfd, control._rootfd = 100, 101, 102
+        control._time_namespace, control._cgroup = 'time:[1]', 'owned'
+        metadata = os.stat(__file__)
+        def row(argv):
+            return dict(ids={'Uid': ['9999'] * 4, 'Gid': ['9999'] * 4, 'NSpid': ['12', '1']},
+                        cgroup='owned', namespaces=['pid:[2]', 'mnt:[3]', 'net:[4]'],
+                        argv=[part.hex() for part in argv], parent=12, exe=list(docker._metadata(metadata)))
+        selected = row((b'php', b'artisan', b'schedule:work'))
+        parent = row((b's6-supervise', b'scheduler-worker'))
+        init = row((b's6-svscan',))
+        with patch.object(docker, '_start_token', return_value=b'123'), \
+             patch.object(docker.os, 'readlink', side_effect=lambda name, **kwargs: 'time:[1]' if name == 'ns/time' else 'pid:[9]'), \
+             patch.object(docker.os, 'stat', return_value=metadata):
+            with self.assertRaisesRegex(docker.DockerError, '^startup_state$') as caught:
+                control._placement(selected, parent, init)
+        checks = getattr(caught.exception, '_scheduler_placement_checks', None)
+        self.assertIsInstance(checks, dict)
+        self.assertEqual(len(checks), 15)
+        self.assertTrue(all(type(value) is bool for value in checks.values()))
+        self.assertFalse(checks['container'])
+        self.assertTrue(all(value for key, value in checks.items() if key != 'container'))
+
+
 class SchedulerDrain(unittest.TestCase):
     setUp = process_control.ProcessKernel.setUp
     tearDown = process_control.ProcessKernel.tearDown
@@ -185,11 +250,20 @@ class SchedulerDrain(unittest.TestCase):
         control = self.control(child)
         drain = self.drain(control)
         self.assertEqual(control.freeze().category, 'frozen')
+        _, membership = control._placement(control._selected['process'], control._selected['parent'],
+                                            control._selected['init'])
         with gate.open('wb', buffering=0) as output:
             output.write(b'q')
         deadline = time.monotonic() + 1
-        while descendant in [pid for pid, _ in control._identity()['members']]:
-            self.assertLess(time.monotonic(), deadline)
+        with membership.open('rb') as group:
+            while True:
+                group.seek(0)
+                members = group.read(8193)
+                self.assertLessEqual(len(members), 8192)
+                self.assertLess(time.monotonic(), deadline)
+                if str(descendant).encode() not in members.split():
+                    break
+                time.sleep(.001)
         # Linux removes cgroup membership before exit_notify publishes Z.
         # Await that independent precondition on the already retained procfd.
         procfd = drain._known[descendant][0]

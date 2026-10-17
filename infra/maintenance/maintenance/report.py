@@ -156,6 +156,7 @@ def ai_advice(plan, key, model=DEFAULT_AI_MODEL):
 
 def render(result, advice, coolify=None):
     plan = result.get("plan")
+    standard = bool(plan and plan.get('action') == 'coolify_update')
     lines = ["# ホストメンテナンス確認", "", "状態: " + result["status"],
              "理由コード: " + result["reason"], "",
              "バックアップ条件: DB有効化・24時間以内の別ホスト保存と検証・30日以内の隔離復元試験が必要。",
@@ -175,7 +176,8 @@ def render(result, advice, coolify=None):
                   "公開時刻 (Unix UTC): " + str(coolify.get("release_published_at")),
                   "patch 候補の確認開始時刻・公開後7日 (Unix UTC): " + str(coolify.get("review_after")),
                   "候補確認判定: " + coolify.get("candidate_review", "unavailable"),
-                  "この情報はレポート専用です。Coolify の更新は別途手動で確認・承認する必要があります。APT 計画には含まれません。"]
+                  ("署名済みの専用 Coolify 計画を GitHub Actions で所有者が承認すると標準更新を実行します。" if standard else
+                   "この情報はレポート専用です。Coolify の更新は別途手動で確認・承認する必要があります。APT 計画には含まれません。")]
         if coolify["release_url"]:
             lines += ["公式リリース: " + coolify["release_url"]]
     if plan:
@@ -188,6 +190,21 @@ def render(result, advice, coolify=None):
                   "期待する実行中バージョン: " + json.dumps(plan["expected_runtime"], ensure_ascii=False),
                   "", "依存関係を含む固定トランザクション:"]
         lines += ["- " + x["name"] + ": " + (x["installed"] or "未導入") + " → " + x["target"] for x in plan["packages"]]
+        if standard:
+            action = plan['coolify_update']
+            lines += ['', 'Coolify 標準更新: ' + action['from_version'] + ' → ' + action['to_version'],
+                      '公式 release commit: ' + action['release_commit'],
+                      '公式 upgrade.sh SHA256: ' + action['upgrade_sha256'],
+                      '固定 helper: ' + action['helper_version'] + ' / registry: ' + action['registry'],
+                      '公開後7日を経過した同一系列の安定 patch。APT・ホスト再起動は含みません。',
+                      'GitHub Actions Environment で実際の所有者が承認した署名・期限・一度限りの計画だけを実行します。',
+                      '実行前に24時間以内の別ホスト保存・取得検証と隔離DB復元の証跡を要求し、直前に新しいローカル dump/config を作成します。',
+                      '直前のローカル snapshot と日次の offhost 検証証跡は別です。新しいローカル snapshot の offhost 保存・復元検証は主張しません。',
+                      '公式標準 script は可変 CDN 設定を取得します。全 artifact・全 image digest の固定は保証しません。',
+                      'dashboard は短時間停止し、Terminal 接続・進行中操作が切断される可能性があります。',
+                      '稼働中 deployment/backup/upgrade と自動更新有効時は拒否します。事前確認後の手動操作との競合は完全には排除できません。',
+                      '終了コード0だけで成功とは扱いません。実版・制御系health・アプリidentityを検証します。',
+                      '中断・timeout・部分成功は計画を消費したまま未解決です。自動再試行・自動復元は行いません。']
     elif result.get("changes"):
         lines += ["", "承認されていない変更候補 (依存関係を含む):"]
         lines += ["- " + x["name"] + ": " + (x["installed"] or "未導入") + " → " + x["target"] for x in result["changes"]]

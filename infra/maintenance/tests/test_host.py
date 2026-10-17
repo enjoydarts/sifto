@@ -447,7 +447,7 @@ class HostTests(unittest.TestCase):
         self.config.update(host_role="database", database_enabled=False, backup_readiness=self.readiness())
         inventory = self.agent.run("scan", {})
         self.assertIn("maintenance_policy", inventory)
-        self.assertEqual(inventory["maintenance_policy"], {"host_role": "database", "database_enabled": False,
+        self.assertEqual(inventory["maintenance_policy"], {"host_role": "database", "database_enabled": False, 'coolify_standard_enabled': False,
                                                          "backup_ready": True,
                                                          "allowed_restart_services": self.config["allowed_restart_services"],
                                                          "database_restart_services": self.config["database_restart_services"]})

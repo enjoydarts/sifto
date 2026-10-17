@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:6145ffe0650d8dcdef48ab08442dc01b066d6450e1f6df9e3cd8efacadbb0064",
+    "size": 37164
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167",
+      "size": 4183037
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:c5a2841823df44ee75d91eadbca48b9a5087d845d0502ae651ee7c3642c5811f",
+      "size": 6257372
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:51ec15aaabab5bc36313afb01062656ecf78b9d9b9bc440fecd5204dba04355a",
+      "size": 933
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:f8d7eafd682737f58dd0f65999afdcc67633bf57b296cdb67a9a0e1efb6dc3df",
+      "size": 215
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4f0fb40f2468b8a5aa162c06e22439fad94dd166d75848e1c799b66b5e4bb8d5",
+      "size": 13782377
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:13fbb32a018123b8636432e34fd47ce4a6d84b2021710f04e5063259d6740e89",
+      "size": 487
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:8aa89a2334a89f6576195021f8b5467dde4f2bbea66109bf3f145cb0c7955ab4",
+      "size": 14892789
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:8bdec4c71ac8a7d91e61282da4cfa53e4d112d559b6fa55a44d6e6fe415f8d8e",
+      "size": 2447
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:817344582caa96803be314d77f8170e73a87ad36aec7109e30515ae5f030654e",
+      "size": 22191
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:92b0e7dd3837671795573a653b02be6e2d552ec930bfce7556d288277cbe1176",
+      "size": 22205
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+      "size": 32
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:dd8370e82fe7fcba7b81fdbd27155876c660fd0cb84e667e6b5dc2b914e38f3a",
+      "size": 9265
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:6a994a314ec46b47987442002a99079caebed960efbe211f57d1b8092146c39e",
+      "size": 36981
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:d339cbb63a7a8184e6a9c403faac573be10d3f39643acb88b01ca9118ceb3422",
+      "size": 4112
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:019dc37d4e9c361777cc4fd28781e17d30c1f3e41e9f52515e67a63167c6645b",
+      "size": 904
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:94aeabddedbd401cfef74c6acf7fe107e4aed87fd09ec84c04345cdb089955d9",
+      "size": 2916406
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:2a2348e37a6711651436fbdd90dc4218b3a02c8f9ca440ed124691c8b005dcbf",
+      "size": 2175
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:7a54382a6041361867dc425ea39f9bfb08ee363349b6bf2cefac69775d2c9452",
+      "size": 198
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:5b181bad3a8dbb7b1709fcdc232f71de2534272da94354f9a63f1625e5d3f59b",
+      "size": 183
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:1e1eb4983c0ae4e0cce2a33653e02f269e3a7de01851731dd4b204bbe0beca21",
+      "size": 184
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:0ba432e9df7a7e14dd61d69833314681e82ea64f9a4e4a4b42359bc73e72e5cb",
+      "size": 242
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:79b262ef23d301acb5c08e63836bd18f47b7cc48b919a8214c225f20cb04eaed",
+      "size": 565
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:1751a11663646161901248c28d20e488d647dc7bc27ef952b7cb1087e7be749c",
+      "size": 6561500
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:82bb6c3a898af2d13f460468caf2752a1142ea985bc35811d94a1bc672d0bf2e",
+      "size": 4097
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:d2d39efae7827a827b8a852b9ec8d3895650a2a6fbbc8f235b6092446b8985b9",
+      "size": 4941
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:5437ae277e8be25819a2a3203f3283ce6ebba82ecadef00bb205cc25dcd1303b",
+      "size": 878495
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:d53dd829472f7f841b8d54af07b2167705fa83efc53d491602294dee4ab8f35d",
+      "size": 8004
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:bd9ddc54bea929a22b334e73e026d4136e5b73f5cc29942896c72e4ece69b13d",
+      "size": 34
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:bd9ddc54bea929a22b334e73e026d4136e5b73f5cc29942896c72e4ece69b13d",
+      "size": 34
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+      "size": 32
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:84da1ec6d6f2df6adc76747ccfc60cbb21a8d3d86571fac6aba6829a2f33c762",
+      "size": 1754630
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:e111d8b235fd6aa55c6310216c873b0892f25b29e217f51230c585616ef02479",
+      "size": 8639
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:d22215b620d4a796a98656ba569e3cfdd455e0d26086d7a6f4b20af22710a79c",
+      "size": 5523418
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:3f93030370c9188595da54c0fbd67063a02e3e890da0783a77f75010c53a8500",
+      "size": 51372896
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:9591941a7603b2aaaf57c09ca244dd0917a12d0d0102ee2d0eae06b55c5a4c3b",
+      "size": 292643
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:7b03288ada2e45f6c7d1bf65e1d44741a9a0f92559508c730c023b6cd62be6bb",
+      "size": 520
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:bc56c3ff3943d7de0d0c917b7b4fcdec5df171f3fce2c765d1041edea072bf35",
+      "size": 17736310
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:a2533cdd30c74d14eae53356fd52ec5237084a301f67ff8ffffb1d403af87a60",
+      "size": 403
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:d1ee8b64b828dee342be090f6e35e954907aa88bd42dda1ae8abdea9c39e6cfc",
+      "size": 325
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4e85047aba79a00b04a68f6d8b68b082b557019fdb032ecb635926794cee32eb",
+      "size": 15716569
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:f5735481c4334da6b09ebb4853498bc0ba1284b2367f0152a648de1207177288",
+      "size": 1232210
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:db5b453503f1a2133f34b87fa1823deb9c85df866ead07d206d7d5235f193310",
+      "size": 72525
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4fd84971a7ef1631f15d9335b6bb06d76df5d4340e20d34427d9dee931191024",
+      "size": 1129882
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:96dd21d0cee20bf7e67ab94ab37bd07f3d63b3c84b43f4147fc2ee2dc3943d4c",
+      "size": 143063
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:f7838739f2feaf3a6f8ae1142f4c7582339e8cc5d7c98d41036cfd7b14cdf223",
+      "size": 26416
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:299475740b75c77f55568bfc2dbc145764b3cd9b51638b3861ab27ce1b5e5d18",
+      "size": 88694
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:2ddcd657150347245d316798a871f83fb331c6f52ea0931cb42f98fae2b3e522",
+      "size": 18613
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:2a1b8dc96e0d36689387dfb39e0db204ed3766ac2344a29895a448da53847c6e",
+      "size": 10415553
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:ae80578ff58e6a42005fdbb28c7b549c71c742b7a8816e8cf3f994f6c4893b98",
+      "size": 11667
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:462e71c32fefb4be04a245eacba7633826e2dc299980a8dab48e749d4991860e",
+      "size": 538
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:9918bbac63d05533784cff8c7b9b8d4d024a2dd72e13f812252abbbf1b7ea96c",
+      "size": 711558
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:0ccaac711c4e616a61e46a1c4dd2842f28047890c2cef081ce98d8bc7aafac53",
+      "size": 528429
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:2d6e843d4b0b61d13455ed362fefca8fed529fa198af3e2465f8aef238aa3be6",
+      "size": 896
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:cb735ce81ead2dab534d5b79f3f9c47933aaf4e1121e174958c87dd2cae7828c",
+      "size": 42915
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:aae6d20571e7add197305faf186d8e270b65e8df33d5f3f0b4e94c4c6c25122e",
+      "size": 215
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:921f4b90171cfb4144f170ebfe5cb3bf1b558e172834bebede9380f0414acde6",
+      "size": 284637
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:c4994143896818cb0fa0bea45bfeeb6c943e4087612c2f326d94613f3e1ee6ef",
+      "size": 3135535
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:35dbbab2c92c6551b90399e88d585a7ff2e2bb7f604f9114cc9f2afc6d8043c4",
+      "size": 412
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:81249a624ab4592fc82eda1ab9b5e7e6facf9348708fec6ab551ecda57d25061",
+      "size": 709
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:58860a7c2639a8057c36b671a8982228ce01454a24405135245002d53ef5c8b4",
+      "size": 1787
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:0207858947df5430c2299f9e7be341f4d24931d35f2caabd1e7fe22779d169df",
+      "size": 2654
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4e91dc4b47cec6ec1c13334e7d8cdeac17aeeaa3ff79ad729b0ef2c65a979075",
+      "size": 28098245
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+      "size": 32
+    }
+  ]
+}

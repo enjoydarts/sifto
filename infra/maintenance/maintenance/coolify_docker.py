@@ -1827,6 +1827,50 @@ class _FixedRoleProcessControl:
             fcntl.flock(self._lockfd, fcntl.LOCK_UN)
 
 
+# PUBLIC fixture only. Exact raw leaf manifests in tests/fixtures/scheduler-images
+# cryptographically bind these reviewed config IDs to the pinned references.
+# Docker's classic store reports the config ID; containerd reports the target
+# manifest ID and its Descriptor. Neither shape changes the fixed image pins.
+_SCHEDULER_IMAGE_PINS = (
+    ('old', 'docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960', 'sha256:6145ffe0650d8dcdef48ab08442dc01b066d6450e1f6df9e3cd8efacadbb0064', 'application/vnd.oci.image.manifest.v1+json'),
+    ('target', 'docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5', 'sha256:292e1d3e300d6eab9598e14a017bfa2e35bd89f78597916c179c24e099e40156', 'application/vnd.oci.image.manifest.v1+json'),
+    ('postgres', 'docker.io/library/postgres@sha256:91a22c143801df42c2e4a8f9926eab5e48f39f40beb5220b7c29d4478263c341', 'sha256:00f747f11f25a40d61020089b8cafd867de9f8716fd054ea661a2f6a5b7c4f76', 'application/vnd.oci.image.manifest.v1+json'),
+    ('redis', 'docker.io/library/redis@sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85', 'sha256:ec4f171e9ff071bb2a1c936057d3be00206069b028b6c0d61df2477e1dd02c42', 'application/vnd.oci.image.manifest.v1+json'),
+)
+
+
+def _scheduler_image_format():
+    from .coolify_host import SELECTED_IMAGE_FORMAT
+    return SELECTED_IMAGE_FORMAT[:-1] + ',"repo_digests":{{json .RepoDigests}}}'
+
+
+def _scheduler_image_identity(reference, value, *, container_image=()):
+    """Exact fixed PUBLIC leaf/config/platform join across the two Docker stores."""
+    pins = [row for row in _SCHEDULER_IMAGE_PINS if row[1] == reference]
+    _require(len(pins) == 1 and type(value) is dict
+             and set(value) == {'engine_id', 'os', 'architecture', 'descriptor', 'repo_digests'}, 'image_identity')
+    _, _, config, media = pins[0]
+    manifest = reference.split('@')[1]
+    _require(value['os'] == 'linux' and value['architecture'] == 'arm64'
+             and type(value['engine_id']) is str and value['engine_id'] in (config, manifest), 'image_identity')
+    # Docker Hub familiar names are the only normalization; no foreign repo or
+    # index digest can stand in for this exact pinned platform leaf.
+    repos = value['repo_digests']
+    aliases = (reference, reference.removeprefix('docker.io/'),
+               reference.removeprefix('docker.io/library/'))
+    _require(type(repos) is list and 0 < len(repos) <= 16
+             and all(type(row) is str and len(row) <= 256 for row in repos)
+             and any(row in aliases for row in repos), 'image_identity')
+    descriptor = value['descriptor']
+    _require(descriptor is None or type(descriptor) is dict
+             and set(descriptor) == {'digest', 'mediaType'}
+             and descriptor['digest'] == manifest and descriptor['mediaType'] == media, 'image_identity')
+    _require(value['engine_id'] != manifest or descriptor is not None, 'image_identity')
+    _require(container_image == () or type(container_image) is str
+             and container_image == value['engine_id'], 'image_identity')
+    return value['engine_id']
+
+
 class _SchedulerHostProcessControl(_FixedRoleProcessControl):
     """Private fixed PUBLIC-owner join, never production registration.
 
@@ -1896,10 +1940,12 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         self._fds = []
         try:
             observed = self._inspect_fixture()
-            from .coolify_startup import _IMAGES, RESOURCE_SHA256
-            _, reference, image = next(row for row in _IMAGES if row[0] == service)
+            from .coolify_startup import RESOURCE_SHA256
+            _, reference, _, _ = next(row for row in _SCHEDULER_IMAGE_PINS if row[0] == service)
+            image = strict_json(cls._docker(['image', 'inspect', '--format=' + _scheduler_image_format(), reference]))
+            _scheduler_image_identity(reference, image, container_image=observed['Image'])
             labels = observed['Labels']
-            _require(observed['Reference'] == reference and observed['Image'] == image
+            _require(observed['Reference'] == reference
                      and labels['sifto.owner'] == 'startup-scheduler-public-fixture-v1'
                      and labels['sifto.scheduler.run'] == run
                      and labels['com.docker.compose.project'] == cls._project

@@ -19,16 +19,11 @@ import cryptography
 
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
-from maintenance.coolify_docker import _SchedulerHostProcessControl, _SchedulerDrain, strict_json
+from maintenance.coolify_docker import (_SchedulerHostProcessControl, _SchedulerDrain, strict_json,
+    _SCHEDULER_IMAGE_PINS, _scheduler_image_format, _scheduler_image_identity)
 from maintenance.coolify_rehearsal import clone_env
 
 PROJECT = 'sifto-startup-scheduler-public'
-IMAGES = (
-    ('docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960', 'sha256:6145ffe0650d8dcdef48ab08442dc01b066d6450e1f6df9e3cd8efacadbb0064'),
-    ('docker.io/coollabsio/coolify@sha256:f4ef1eb69daa265057ab700646485bd78bb43bcf96c691d65094947acb7f50a5', 'sha256:292e1d3e300d6eab9598e14a017bfa2e35bd89f78597916c179c24e099e40156'),
-    ('docker.io/library/postgres@sha256:91a22c143801df42c2e4a8f9926eab5e48f39f40beb5220b7c29d4478263c341', 'sha256:00f747f11f25a40d61020089b8cafd867de9f8716fd054ea661a2f6a5b7c4f76'),
-    ('docker.io/library/redis@sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85', 'sha256:ec4f171e9ff071bb2a1c936057d3be00206069b028b6c0d61df2477e1dd02c42'),
-)
 
 
 def check(condition, message):
@@ -278,13 +273,17 @@ class Fixture:
         quota = (scope / 'cpu.max').read_text().split()
         check(len(quota) == 2 and quota[0].isdigit() and quota[1].isdigit()
               and 4 * int(quota[0]) == int(quota[1]) > 0, 'observer CPU scope bound')
-        for reference, expected in IMAGES:
+        for name, reference, expected, _ in _SCHEDULER_IMAGE_PINS:
             result = subprocess.run(['/usr/bin/docker', 'image', 'inspect', '--format={{.Id}}', reference],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env, check=False)
             if result.returncode:
                 self.command(['pull', '--platform=linux/arm64', reference], timeout=300)
-            actual = self.command(['image', 'inspect', '--format={{.Id}} {{.Os}}/{{.Architecture}}', reference]).strip()
-            check(actual == (expected + ' linux/arm64').encode(), 'fixed fixture image identity')
+            actual = strict_json(self.command(['image', 'inspect', '--format=' + _scheduler_image_format(), reference]))
+            # Safe PUBLIC image fields are recorded before validation so a
+            # failing store shape remains distinguishable from its diagnosis.
+            self.record('image-' + name, dict(category='image_observation', reference=reference,
+                        expected_config=expected, **actual))
+            _scheduler_image_identity(reference, actual)
         info = strict_json(self.command(['info', '--format', '{"driver":{{json .CgroupDriver}},"version":{{json .CgroupVersion}},"os":{{json .OSType}},"arch":{{json .Architecture}}}']))
         self.record('preflight', dict(category='native_preflight', kernel=platform.release(), **info,
             pidfd=hasattr(os, 'pidfd_open'), python=platform.python_version(), cryptography=cryptography.__version__,

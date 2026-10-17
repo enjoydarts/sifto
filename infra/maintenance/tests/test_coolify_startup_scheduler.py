@@ -16,6 +16,76 @@ from maintenance import coolify_startup as startup
 from tests import test_coolify_startup_process_control as process_control
 
 
+class SchedulerImageIdentity(unittest.TestCase):
+    reference = 'docker.io/coollabsio/coolify@' + startup._IMAGES[0][1]
+    config = startup._IMAGES[0][2]
+    manifest = reference.split('@')[1]
+    media = 'application/vnd.oci.image.manifest.v1+json'
+
+    def observed(self, containerd=False):
+        return dict(engine_id=self.manifest if containerd else self.config, os='linux',
+                    architecture='arm64', repo_digests=[self.reference.removeprefix('docker.io/')],
+                    descriptor=dict(digest=self.manifest, mediaType=self.media) if containerd else None)
+
+    def identity(self, value, **kwargs):
+        self.assertTrue(hasattr(docker, '_scheduler_image_identity'), 'strict scheduler image binding missing')
+        return docker._scheduler_image_identity(self.reference, value, **kwargs)
+
+    def test_classic_config_id_with_exact_repo_and_platform(self):
+        self.assertEqual(self.identity(self.observed()), self.config)
+
+    def test_containerd_manifest_id_with_exact_leaf_descriptor(self):
+        self.assertEqual(self.identity(self.observed(True)), self.manifest)
+
+    def test_container_image_must_join_the_validated_daemon_id(self):
+        for containerd in (False, True):
+            value = self.observed(containerd)
+            self.assertEqual(self.identity(value, container_image=value['engine_id']), value['engine_id'])
+            with self.assertRaisesRegex(docker.DockerError, '^image_identity$'):
+                self.identity(value, container_image=self.config if containerd else self.manifest)
+
+    def test_wrong_platform_repo_config_or_descriptor_is_rejected(self):
+        for containerd in (False, True):
+            good = self.observed(containerd)
+            defects = [dict(good, os='windows'), dict(good, architecture='amd64'),
+                       dict(good, engine_id='sha256:' + '0' * 64),
+                       dict(good, repo_digests=[]), dict(good, repo_digests=['foreign/repo@' + self.manifest]),
+                       dict(good, descriptor=dict(digest='sha256:' + '0' * 64, mediaType=self.media)),
+                       dict(good, descriptor=dict(digest=self.manifest, mediaType='application/vnd.oci.image.index.v1+json'))]
+            if containerd:
+                defects.append(dict(good, descriptor=None))
+            for value in defects:
+                with self.subTest(value=value), self.assertRaisesRegex(docker.DockerError, '^image_identity$'):
+                    self.identity(value)
+
+    def test_malformed_or_unbounded_selected_metadata_is_rejected(self):
+        good = self.observed(True)
+        for value in (None, [], dict(good, extra=True), dict(good, repo_digests='bad'),
+                      dict(good, repo_digests=[self.reference] * 17),
+                      dict(good, descriptor={'digest': self.manifest}),
+                      dict(good, descriptor=dict(good['descriptor'], extra=True))):
+            with self.subTest(value=value), self.assertRaisesRegex(docker.DockerError, '^image_identity$'):
+                self.identity(value)
+
+    def test_fixed_public_leaf_bytes_bind_every_config_pin(self):
+        self.assertTrue(hasattr(docker, '_SCHEDULER_IMAGE_PINS'), 'fixed scheduler image pins missing')
+        self.assertEqual(tuple((name, reference.split('@')[1], config)
+                               for name, reference, config, _ in docker._SCHEDULER_IMAGE_PINS[:2]), startup._IMAGES)
+        for name, reference, config, media in docker._SCHEDULER_IMAGE_PINS:
+            # Git's final newline encodes the public registry bytes, which have none.
+            raw = (Path(__file__).parent / 'fixtures/scheduler-images' / (name + '.json')).read_bytes().removesuffix(b'\n')
+            self.assertLessEqual(len(raw), 65536)
+            self.assertEqual('sha256:' + hashlib.sha256(raw).hexdigest(), reference.split('@')[1])
+            manifest = docker.strict_json(raw)
+            self.assertEqual(manifest['schemaVersion'], 2)
+            self.assertEqual(manifest['mediaType'], media)
+            self.assertEqual(manifest['config']['digest'], config)
+            self.assertEqual(manifest['config']['mediaType'], 'application/vnd.oci.image.config.v1+json')
+            value = dict(engine_id=reference.split('@')[1], os='linux', architecture='arm64',
+                         repo_digests=[reference], descriptor=dict(digest=reference.split('@')[1], mediaType=media))
+            self.assertEqual(docker._scheduler_image_identity(reference, value), value['engine_id'])
+
+
 class SchedulerDrain(unittest.TestCase):
     setUp = process_control.ProcessKernel.setUp
     tearDown = process_control.ProcessKernel.tearDown

@@ -105,7 +105,7 @@ def roles(runtime):
         require(len(found) == 1, 'Coolify role missing or ambiguous')
         item = found[0]
         identity = item['recreation_identity']
-        require(identity.get('compose') == {'project': 'coolify', 'service': role}
+        require(identity.get('compose') == {'project': 'source', 'service': role}
                 and isinstance(item.get('image'), str)
                 and re.fullmatch(ROLE_IMAGES[role] + r'(?:@sha256:[0-9a-f]{64})?', item['image'])
                 and item.get('status') == 'running' and item.get('health') == 'healthy', 'unhealthy or unknown Coolify role')

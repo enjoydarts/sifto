@@ -184,8 +184,12 @@ require (
   assert.equal(directConfig.groupName, '{{manager}} minor and patch dependencies');
   const rangeStrategy = getRangeStrategy(directConfig);
   assert.equal(rangeStrategy, 'replace');
-  const update = await generateUpdate(directConfig, direct.currentValue, getVersioning('pep440'), rangeStrategy, direct.lockedVersion, 'minor', { version: '2.13.5' }, new Set([direct.lockedVersion, '2.13.5']));
-  assert.equal(update.newValue, '==2.13.5');
+  // Keep this an upgrade after the real repository pin advances.
+  assert.match(direct.lockedVersion, /^\d+\.\d+\.\d+$/);
+  const [major, minor] = direct.lockedVersion.split('.').map(Number);
+  const nextVersion = `${major}.${minor + 1}.0`;
+  const update = await generateUpdate(directConfig, direct.currentValue, getVersioning('pep440'), rangeStrategy, direct.lockedVersion, 'minor', { version: nextVersion }, new Set([direct.lockedVersion, nextVersion]));
+  assert.equal(update.newValue, `==${nextVersion}`);
   assert.notEqual(update.isLockfileUpdate, true);
   const header = extractHeaderCommand(readFileSync('/fixtures/worker/requirements.txt', 'utf8'), 'worker/requirements.txt');
   const command = constructPipCompileCmd(header, [update].filter((dep) => dep.isLockfileUpdate));

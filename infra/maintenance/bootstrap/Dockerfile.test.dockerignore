@@ -4,6 +4,7 @@
 !maintenance/__init__.py
 !maintenance/plan.py
 !maintenance/host.py
+!maintenance/coolify_standard.py
 !bootstrap/
 !bootstrap/install-host.sh
 !bootstrap/test-install.sh

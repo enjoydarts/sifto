@@ -20,7 +20,8 @@ import cryptography
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 from maintenance.coolify_docker import (_SchedulerHostProcessControl, _SchedulerDrain, DockerError, strict_json,
-    _SCHEDULER_IMAGE_PINS, _scheduler_image_format, _scheduler_image_identity)
+    _SCHEDULER_IMAGE_PINS, _scheduler_image_format, _scheduler_image_identity,
+    _SCHEDULER_RESTORE_FIELDS, _SCHEDULER_RESTORE_STAGES, _SCHEDULER_RESTORE_CATEGORIES)
 from maintenance.coolify_rehearsal import clone_env
 
 PROJECT = 'sifto-startup-scheduler-public'
@@ -194,8 +195,23 @@ class Fixture:
         started = time.monotonic()
         restored = control.restore()
         self.record('restore', dict(image_version=service, case=name, **asdict(restored),
-            elapsed_ms=int((time.monotonic() - started) * 1000)))
+            elapsed_ms=int((time.monotonic() - started) * 1000), **self.restore_diagnostic(control)))
         check(restored.category in ('restored', 'unchanged'), 'exact native launcher restore failed')
+
+    @staticmethod
+    def restore_diagnostic(control):
+        value = getattr(control, '_scheduler_restore_failure', None)
+        if value is None:
+            return {}
+        check(type(value) is dict and set(value) == {'stage', 'cont_sent', 'restored_saved',
+            'failure_category', 'identity_checks'} and value['stage'] in _SCHEDULER_RESTORE_STAGES
+            and value['failure_category'] in _SCHEDULER_RESTORE_CATEGORIES
+            and type(value['cont_sent']) is bool and type(value['restored_saved']) is bool,
+            'fixed restore diagnostic')
+        checks = value['identity_checks']
+        check(checks is None or (type(checks) is dict and set(checks) == set(_SCHEDULER_RESTORE_FIELDS)
+              and all(type(item) is bool for item in checks.values())), 'fixed restore diagnostic')
+        return {'restore_diagnostic': value}
 
     def matrix(self, service):
         self.app(service, 'hold')
@@ -331,28 +347,89 @@ class Fixture:
     def cleanup(self):
         # Release only these PUBLIC synthetic fixture gates. Draining product
         # code never terminates work or drops the launcher's Process objects.
-        for mode in ('normal', 'detached', 'pipefull'):
-            if (self.state / mode).is_dir():
-                self.release(mode)
-                if mode == 'normal':
-                    self.release(mode, 'release-late')
-        for drain in self.drains:
-            drain.close()
-        for control in self.controls:
-            # Any live acknowledged STOP obligation is compensated before
-            # teardown; errors never become a green cleanup/completion result.
+        failures = []
+        def attempt(category, operation):
+            try:
+                operation()
+            except BaseException:
+                if category not in failures:
+                    failures.append(category)
+
+        def restore(control):
             if control._intent and control._intent['restore_required']:
                 restored = control.restore()
                 check(restored.category == 'restored', 'owned exact cleanup restore failed')
-            control.close()
-        if self.started:
+
+        def diagnostic(control):
+            value = self.restore_diagnostic(control)
+            if value:
+                self.record('cleanup-restore', dict(category='owned_restore_failure_observed', **value,
+                    startup_registered=False, production_eligible=False))
+
+        def release_gates(mode):
+            if (self.state / mode).is_dir():
+                attempt('gate_release_failed', lambda: self.release(mode))
+                if mode == 'normal':
+                    attempt('gate_release_failed', lambda: self.release(mode, 'release-late'))
+
+        def markers():
             for mode, marker in (('normal', 'done'), ('detached', 'done'), ('pipefull', 'first-finished')):
                 if self.marker(mode, 'ready').exists():
-                    self.wait(mode, marker, 10)
-            self.compose(['down', '--volumes', '--timeout', '10'])
-            self.empty()
+                    attempt('marker_wait_failed', lambda: self.wait(mode, marker, 10))
+
+        try:
+            for mode in ('normal', 'detached', 'pipefull'):
+                attempt('gate_release_failed', lambda: release_gates(mode))
+            for drain in self.drains:
+                attempt('drain_close_failed', drain.close)
+            for control in self.controls:
+                # Compensation is distinct from fixture destruction. Neither
+                # failed restoration nor destruction proves work completion.
+                try:
+                    attempt('exact_restore_failed', lambda: restore(control))
+                finally:
+                    attempt('restore_diagnostic_failed', lambda: diagnostic(control))
+                    attempt('control_close_failed', control.close)
+            if self.started:
+                attempt('marker_wait_failed', markers)
+        finally:
+            if self.started:
+                try:
+                    attempt('compose_down_failed', lambda: self.compose(['down', '--volumes', '--timeout', '10']))
+                finally:
+                    attempt('absence_verification_failed', self.empty)
+        if failures:
+            self.record('cleanup', dict(category='owned_cleanup_failed', failures=failures,
+                startup_registered=False, production_eligible=False))
+            raise RuntimeError('owned fixture cleanup failed')
+        if self.started:
             self.record('cleanup', dict(category='owned_cleanup_verified', startup_registered=False,
-                                        production_eligible=False))
+                production_eligible=False))
+
+
+def run_native(fixture):
+    try:
+        try:
+            fixture.run_all()
+        except BaseException:
+            try:
+                fixture.record('failure', dict(category='native_fixture_failed',
+                    startup_registered=False, production_eligible=False))
+            except BaseException:
+                pass  # Evidence I/O must not replace the original failure.
+            raise
+    finally:
+        original = sys.exc_info()[1]
+        try:
+            fixture.cleanup()
+        except BaseException:
+            try:
+                fixture.record('cleanup-failure', dict(category='native_cleanup_failed',
+                    startup_registered=False, production_eligible=False))
+            except BaseException:
+                pass
+            if original is None:
+                raise
 
 
 def main():
@@ -362,17 +439,7 @@ def main():
     elif len(sys.argv) == 3 and sys.argv[1] == 'native':
         check(platform.system() == 'Linux' and os.geteuid() == 0, 'native Linux root host observer required')
         fixture = Fixture(Path(sys.argv[2]).resolve())
-        status = 0
-        try:
-            fixture.run_all()
-        except BaseException as failure:
-            status = 1
-            fixture.record('failure', dict(category='native_fixture_failed', failure_type=type(failure).__name__,
-                startup_registered=False, production_eligible=False))
-            raise
-        finally:
-            fixture.cleanup()
-        sys.exit(status)
+        run_native(fixture)
     else:
         raise SystemExit('fixed scheduler fixture operation required')
 

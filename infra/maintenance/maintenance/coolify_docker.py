@@ -1786,33 +1786,50 @@ class _FixedRoleProcessControl:
         finally:
             fcntl.flock(self._lockfd, fcntl.LOCK_UN)
 
+    def _restore_observe(self, stage, failure=None):
+        # Native PUBLIC diagnostics only; K0 authority and results are unchanged.
+        pass
+
     def _restore_locked(self):
         import signal
         limit = time.monotonic() + 1  # one budget starts BEFORE any journal I/O
+        self._restore_observe('start')
         try:
+            self._restore_observe('journal')
             self._journal_matches()
+            self._restore_observe('original_state')
             _require(self._original is not None, 'startup_state')
             if all(state == 'T' for _, state in self._original):
                 _require(self._tasks() == self._original, 'startup_state')
                 self._restoration_guard(limit)
+                self._restore_observe('complete')
                 return self._result('unchanged')
             # An intent alone or a restarted object cannot assert that its STOP
             # succeeded. Only this live attempt's acknowledged syscall may CONT.
             _require(self._sent and self._intent['restore_required'], 'startup_state')
+            self._restore_observe('task_identity')
             _require([tid for tid, _ in self._tasks()] == [tid for tid, _ in self._original], 'startup_state')
             self._restoration_guard(limit)
+            self._restore_observe('cont_signal')
             signal.pidfd_send_signal(self._pidfd, signal.SIGCONT)
+            self._restore_observe('cont_sent')
             while time.monotonic() < limit:
                 self._restoration_guard(limit)
+                self._restore_observe('task_state')
                 tasks = self._tasks()
                 if ([tid for tid, _ in tasks] == [tid for tid, _ in self._original]
                         and all(state in ('R', 'S', 'D', 'I') for _, state in tasks)):
+                    self._restore_observe('restored_save')
                     self._save('restored', False)
+                    self._restore_observe('restored_saved')
                     self._restoration_guard(limit)
+                    self._restore_observe('complete')
                     return self._result('restored')
                 time.sleep(.001)
-        except BaseException:
-            pass
+            self._restore_observe('restore_deadline')
+            self._restore_observe('failure', DockerError('command_timeout'))
+        except BaseException as failure:
+            self._restore_observe('failure', failure)
         return self._result('held')
 
     def restore(self):
@@ -1869,6 +1886,15 @@ def _scheduler_image_identity(reference, value, *, container_image=()):
     _require(container_image == () or type(container_image) is str
              and container_image == value['engine_id'], 'image_identity')
     return value['engine_id']
+
+
+_SCHEDULER_RESTORE_FIELDS = ('scope', 'role', 'task_tokens', 'boot', 'process', 'parent', 'init', 'executable_sha256')
+_SCHEDULER_RESTORE_STAGES = ('journal', 'original_state', 'task_identity', 'pins_context', 'identity_read',
+    'identity_compare', 'final_guard', 'phase_validation', 'phase_deadline', 'cont_signal', 'cont_sent',
+    'task_state', 'restored_save', 'restored_saved', 'restore_deadline')
+_SCHEDULER_RESTORE_CATEGORIES = ('startup_state', 'command_timeout', 'command_failed', 'output_bound',
+    'resource_isolation', 'container_identity', 'container_spec', 'source_closure', 'os_error',
+    'interrupted', 'unexpected_failure')
 
 
 class _SchedulerHostProcessControl(_FixedRoleProcessControl):
@@ -2108,6 +2134,49 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
             raise failure
         self._final_guard(deadline)
 
+    def _restore_observe(self, stage, failure=None):
+        if stage == 'start':
+            self._scheduler_restore_attempt = dict(stage='journal', cont_sent=False, restored_saved=False,
+                failure_category=None, identity_checks=None)
+            return
+        attempt = getattr(self, '_scheduler_restore_attempt', None)
+        if attempt is None:
+            return
+        if stage == 'failure':
+            category = str(failure) if isinstance(failure, DockerError) else (
+                'os_error' if isinstance(failure, OSError) else
+                'interrupted' if isinstance(failure, (KeyboardInterrupt, SystemExit)) else 'unexpected_failure')
+            attempt['failure_category'] = category if category in _SCHEDULER_RESTORE_CATEGORIES else 'unexpected_failure'
+            # A cleanup compensation attempt must never replace the first
+            # failed restoration's bounded observation, even if it succeeds.
+            if not hasattr(self, '_scheduler_restore_failure'):
+                self._scheduler_restore_failure = dict(attempt)
+            self._scheduler_restore_attempt = None
+        elif stage == 'complete':
+            self._scheduler_restore_attempt = None
+        else:
+            attempt['stage'] = stage
+            if stage == 'cont_sent':
+                attempt['cont_sent'] = True
+            elif stage == 'restored_saved':
+                attempt['restored_saved'] = True
+
+    def _restoration_guard(self, deadline):
+        self._restore_observe('pins_context')
+        _require(self._read_pins() == self._pins, 'startup_state')
+        self._restore_observe('identity_read')
+        current = self._identity()
+        self._restore_observe('identity_compare')
+        if ({key: value for key, value in current.items() if key != 'members'}
+                != {key: value for key, value in self._selected.items() if key != 'members'}):
+            attempt = getattr(self, '_scheduler_restore_attempt', None)
+            if attempt is not None:
+                attempt['identity_checks'] = {key: current[key] == self._selected[key]
+                                             for key in _SCHEDULER_RESTORE_FIELDS}
+            raise DockerError('startup_state')
+        self._restore_observe('final_guard')
+        self._final_guard(deadline)
+
     @staticmethod
     def _request_snapshot(fd):
         info = os.fstat(fd)
@@ -2148,11 +2217,13 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         # A Docker bind may keep its old inode after the source pathname is
         # replaced. Both source and mounted paths must still name the original
         # root-owned phase file; a matching mounted projection alone is stale.
+        self._restore_observe('phase_validation')
         for index, fd in enumerate((self._request_source_fd, self._request_mount_fd)):
             _require(self._request_snapshot(fd) == self._request_pins[index], 'startup_state')
         _require(list(_metadata(os.stat(self._request_source_path, follow_symlinks=False))) == self._request_pins[0][0]
                  and list(_metadata(os.stat('probe/scheduler.request.json', dir_fd=self._rootfd,
                      follow_symlinks=False))) == self._request_pins[1][0], 'startup_state')
+        self._restore_observe('phase_deadline')
         _require(time.monotonic_ns() < self._request_data['deadline_ns'], 'command_timeout')
 
     def _final_guard(self, deadline):
@@ -2160,6 +2231,7 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
         # The inherited post-I/O original deadline and pidfd check remain last;
         # this does not renew either the drain or separate restoration budget.
         self._request_guard()
+        self._restore_observe('final_guard')
         super()._final_guard(deadline)
 
     def _proc_identity(self, fd):

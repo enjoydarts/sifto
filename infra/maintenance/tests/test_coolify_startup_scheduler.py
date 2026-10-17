@@ -27,6 +27,7 @@ class SchedulerFixtureRecord(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('scheduler_public_fixture', path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        self.module = module
         self.fixture = object.__new__(module.Fixture)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -59,6 +60,17 @@ class SchedulerFixtureRecord(unittest.TestCase):
             self.assertEqual(record['category'], 'restored')
             self.assertFalse(record['restore_required'])
             self.assertGreaterEqual(record['elapsed_ms'], 0)
+
+    def test_restore_record_includes_only_the_first_bounded_failure_diagnostic(self):
+        diagnostic = dict(stage='restored_save', cont_sent=True, restored_saved=False,
+                          failure_category='os_error', identity_checks=None)
+        result = startup.parse_process_control_result(json.dumps(dict(version=1, role='scheduler-worker',
+            category='held', task_count=1, restore_required=True,
+            maintenance_held=True, identity_hmac='a' * 64)).encode())
+        control = SimpleNamespace(restore=lambda: result, _scheduler_restore_failure=diagnostic)
+        with self.assertRaisesRegex(RuntimeError, '^exact native launcher restore failed$'):
+            self.fixture.restore('old', 'pipe-backpressure-timeout', control)
+        self.assertEqual(self.records()[0].get('restore_diagnostic'), diagnostic)
 
     def rejected_control(self, failure):
         self.fixture.root = self.fixture.public
@@ -103,6 +115,247 @@ class SchedulerFixtureRecord(unittest.TestCase):
                 self.assertEqual(str(caught.exception), 'fixed identity diagnostic')
                 self.assertEqual(self.output, '')
                 self.assertFalse((self.fixture.public / 'native-observations.jsonl').exists())
+
+    def cleanup_fixture(self):
+        self.fixture.state = self.fixture.public / 'state'
+        self.fixture.state.mkdir()
+        self.fixture.drains = []
+        self.fixture.controls = []
+        self.fixture.started = True
+        return self.fixture
+
+    def test_cleanup_restoration_failure_still_closes_every_owner_down_and_verifies_absence(self):
+        fixture = self.cleanup_fixture()
+        calls = []
+        fixture.drains = [SimpleNamespace(close=lambda: (_ for _ in ()).throw(RuntimeError('PRIVATE')))]
+        fixture.controls = [SimpleNamespace(_intent={'restore_required': True},
+            restore=lambda: SimpleNamespace(category='held'), close=lambda: calls.append('close-first')),
+            SimpleNamespace(_intent=None, close=lambda: calls.append('close-second'))]
+        with patch.object(fixture, 'compose', side_effect=lambda args: calls.append(args)), \
+             patch.object(fixture, 'empty', side_effect=lambda: calls.append('empty')):
+            with self.assertRaisesRegex(RuntimeError, '^owned fixture cleanup failed$'):
+                fixture.cleanup()
+        self.assertEqual(calls, ['close-first', 'close-second', ['down', '--volumes', '--timeout', '10'], 'empty'])
+        self.assertEqual(self.records()[-1]['category'], 'owned_cleanup_failed')
+        self.assertEqual(self.records()[-1]['failures'], ['drain_close_failed', 'exact_restore_failed'])
+        self.assertNotIn('PRIVATE', json.dumps(self.records()))
+
+    def test_marker_and_down_failure_still_queries_absence_without_green_cleanup(self):
+        fixture = self.cleanup_fixture()
+        (fixture.state / 'normal').mkdir()
+        (fixture.state / 'normal' / 'ready').touch()
+        calls = []
+        with patch.object(fixture, 'release', side_effect=RuntimeError('PRIVATE')), \
+             patch.object(fixture, 'wait', side_effect=RuntimeError('PRIVATE')), \
+             patch.object(fixture, 'compose', side_effect=RuntimeError('PRIVATE')) as down, \
+             patch.object(fixture, 'empty', side_effect=lambda: calls.append('empty')):
+            with self.assertRaisesRegex(RuntimeError, '^owned fixture cleanup failed$'):
+                fixture.cleanup()
+        down.assert_called_once_with(['down', '--volumes', '--timeout', '10'])
+        self.assertEqual(calls, ['empty'])
+        self.assertEqual(self.records()[-1]['failures'], ['gate_release_failed', 'marker_wait_failed', 'compose_down_failed'])
+        self.assertFalse(any(row['category'] == 'owned_cleanup_verified' for row in self.records()))
+
+    def test_original_failure_survives_cleanup_failure_and_both_are_recorded(self):
+        original = RuntimeError('PRIVATE original')
+        with patch.object(self.fixture, 'run_all', side_effect=original), \
+             patch.object(self.fixture, 'cleanup', side_effect=RuntimeError('PRIVATE cleanup')):
+            with self.assertRaises(RuntimeError) as caught:
+                self.module.run_native(self.fixture)
+        self.assertIs(caught.exception, original)
+        self.assertEqual([row['category'] for row in self.records()], ['native_fixture_failed', 'native_cleanup_failed'])
+        self.assertNotIn('PRIVATE', json.dumps(self.records()))
+
+    def test_original_failure_survives_evidence_write_failure_and_cleanup_still_runs(self):
+        original = RuntimeError('PRIVATE original')
+        with patch.object(self.fixture, 'run_all', side_effect=original), \
+             patch.object(self.fixture, 'record', side_effect=OSError('PRIVATE evidence')), \
+             patch.object(self.fixture, 'cleanup', side_effect=RuntimeError('PRIVATE cleanup')) as cleanup:
+            with self.assertRaises(RuntimeError) as caught:
+                self.module.run_native(self.fixture)
+        self.assertIs(caught.exception, original)
+        cleanup.assert_called_once_with()
+
+    def test_cleanup_control_close_and_absence_failure_are_nonzero_after_down(self):
+        fixture = self.cleanup_fixture()
+        fixture.controls = [SimpleNamespace(_intent=None,
+            close=lambda: (_ for _ in ()).throw(RuntimeError('PRIVATE')))]
+        with patch.object(fixture, 'compose') as down, \
+             patch.object(fixture, 'empty', side_effect=RuntimeError('PRIVATE')) as empty:
+            with self.assertRaisesRegex(RuntimeError, '^owned fixture cleanup failed$'):
+                fixture.cleanup()
+        down.assert_called_once_with(['down', '--volumes', '--timeout', '10'])
+        empty.assert_called_once_with()
+        self.assertEqual(self.records()[-1]['failures'], ['control_close_failed', 'absence_verification_failed'])
+
+    def test_cleanup_exception_alone_propagates_nonzero(self):
+        failure = RuntimeError('PRIVATE cleanup')
+        with patch.object(self.fixture, 'run_all'), patch.object(self.fixture, 'cleanup', side_effect=failure):
+            with self.assertRaises(RuntimeError) as caught:
+                self.module.run_native(self.fixture)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(self.records()[-1]['category'], 'native_cleanup_failed')
+
+    def test_cleanup_emits_retained_first_restore_failure_after_successful_compensation(self):
+        for required in (False, True):
+            with self.subTest(required=required):
+                fixture = self.fixture
+                fixture.state = fixture.public / 'state'
+                fixture.drains = []
+                fixture.started = False
+                diagnostic = dict(stage='final_guard', cont_sent=True, restored_saved=not required,
+                                  failure_category='command_timeout', identity_checks=None)
+                control = SimpleNamespace(_intent={'restore_required': required},
+                    restore=lambda: SimpleNamespace(category='restored'), close=lambda: None,
+                    _scheduler_restore_failure=diagnostic)
+                fixture.controls = [control]
+                fixture.cleanup()
+                self.assertTrue((fixture.public / 'native-observations.jsonl').exists(), 'retained diagnostic not emitted')
+                self.assertEqual(self.records()[-1], dict(category='owned_restore_failure_observed',
+                    restore_diagnostic=diagnostic, startup_registered=False, production_eligible=False))
+
+    def test_restore_diagnostic_refuses_non_allowlisted_content(self):
+        valid = dict(stage='cont_signal', cont_sent=False, restored_saved=False,
+                     failure_category='startup_state', identity_checks=None)
+        for defect in (dict(valid, stage='PRIVATE'), dict(valid, failure_category='PRIVATE'),
+                       dict(valid, cont_sent=1), dict(valid, identity_checks={'private': True}),
+                       dict(valid, extra='PRIVATE')):
+            with self.subTest(defect=defect), self.assertRaisesRegex(RuntimeError, '^fixed restore diagnostic$'):
+                self.fixture.restore_diagnostic(SimpleNamespace(_scheduler_restore_failure=defect))
+
+
+class SchedulerRestoreDiagnostic(unittest.TestCase):
+    fields = tuple(key for key in ('scope', 'role', 'task_tokens', 'boot', 'process', 'parent', 'init',
+                                  'executable_sha256'))
+
+    def component(self):
+        control = object.__new__(docker._SchedulerHostProcessControl)
+        control._pins = ['PRIVATE']
+        control._selected = {key: ['PRIVATE'] for key in (*self.fields, 'members')}
+        control._original = [[101, 'S']]
+        control._intent = {'restore_required': True}
+        control._sent = True
+        control._pidfd = 123456789
+        control._role = 'scheduler-worker'
+        control._key = b'PUBLIC component diagnostic key'
+        return control
+
+    def restore_with_fault(self, point):
+        control = self.component()
+        guards = [0]
+        def final(deadline):
+            guards[0] += 1
+            if (point == 'before_cont' and guards[0] == 1) or (point == 'after_cont' and guards[0] == 2) or (point == 'after_save' and guards[0] == 3):
+                raise docker.DockerError('command_timeout')
+        def save(*args):
+            if point == 'save':
+                raise OSError('PRIVATE')
+            control._intent = {'restore_required': False}
+        with patch.object(control, '_journal_matches'), \
+             patch.object(control, '_tasks', return_value=[[101, 'S']]), \
+             patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=copy.deepcopy(control._selected)) as identity, \
+             patch.object(control, '_final_guard', side_effect=final), \
+             patch.object(control, '_save', side_effect=save), patch.object(signal, 'pidfd_send_signal') as send:
+            result = control._restore_locked()
+        return control, result, identity.call_count, send.call_count
+
+    def test_first_failure_stages_cont_and_durable_save_are_bounded_and_preserved(self):
+        for point, stage, sent, saved, reads in (
+                ('before_cont', 'final_guard', False, False, 1),
+                ('after_cont', 'final_guard', True, False, 2),
+                ('save', 'restored_save', True, False, 2),
+                ('after_save', 'final_guard', True, True, 3)):
+            with self.subTest(point=point):
+                control, result, count, signals = self.restore_with_fault(point)
+                self.assertEqual(result.category, 'held')
+                self.assertTrue(result.restore_required)
+                diagnostic = getattr(control, '_scheduler_restore_failure', None)
+                self.assertEqual(diagnostic, dict(stage=stage, cont_sent=sent, restored_saved=saved,
+                    failure_category='os_error' if point == 'save' else 'command_timeout', identity_checks=None))
+                self.assertEqual(count, reads)
+                self.assertEqual(signals, int(sent))
+                with patch.object(control, '_journal_matches', side_effect=RuntimeError('PRIVATE')):
+                    control._restore_locked()
+                self.assertEqual(control._scheduler_restore_failure, diagnostic)
+                self.assertLess(len(json.dumps(diagnostic)), 1024)
+                self.assertNotIn('PRIVATE', json.dumps(diagnostic))
+                self.assertNotIn('123456789', json.dumps(diagnostic))
+
+    def test_restoration_compares_exact_snapshot_except_members_once(self):
+        for field in (*self.fields, 'members', 'extra'):
+            with self.subTest(field=field):
+                control = self.component()
+                current = copy.deepcopy(control._selected)
+                current[field] = ['CHANGED']
+                control._restore_observe('start')
+                with patch.object(control, '_read_pins', return_value=control._pins) as pins, \
+                     patch.object(control, '_identity', return_value=current) as identity, \
+                     patch.object(control, '_final_guard') as final:
+                    if field == 'members':
+                        control._restoration_guard(123)
+                        final.assert_called_once_with(123)
+                    else:
+                        with self.assertRaises(docker.DockerError) as caught:
+                            control._restoration_guard(123)
+                        control._restore_observe('failure', caught.exception)
+                        self.assertEqual(control._scheduler_restore_failure['stage'], 'identity_compare')
+                        self.assertEqual(control._scheduler_restore_failure['identity_checks'],
+                                         {key: key != field for key in self.fields})
+                        final.assert_not_called()
+                pins.assert_called_once_with()
+                identity.assert_called_once_with()
+
+    def test_failed_pins_and_identity_reads_have_distinct_stages_and_fixed_categories(self):
+        for operation, stage, failure, category in (
+                ('_read_pins', 'pins_context', docker.DockerError('command_failed'), 'command_failed'),
+                ('_identity', 'identity_read', RuntimeError('PRIVATE'), 'unexpected_failure')):
+            control = self.component()
+            control._restore_observe('start')
+            with patch.object(control, '_read_pins', return_value=control._pins), \
+                 patch.object(control, '_identity', return_value=control._selected), \
+                 patch.object(control, operation, side_effect=failure):
+                with self.assertRaises(type(failure)) as caught:
+                    control._restoration_guard(123)
+            control._restore_observe('failure', caught.exception)
+            self.assertEqual(control._scheduler_restore_failure['stage'], stage)
+            self.assertEqual(control._scheduler_restore_failure['failure_category'], category)
+
+    def test_successful_compensation_keeps_first_failure_and_the_same_exact_budget(self):
+        control, _, _, _ = self.restore_with_fault('before_cont')
+        first = dict(control._scheduler_restore_failure)
+        with patch.object(control, '_journal_matches'), \
+             patch.object(control, '_tasks', return_value=[[101, 'S']]), \
+             patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=control._selected) as identity, \
+             patch.object(control, '_final_guard') as final, patch.object(control, '_save'), \
+             patch.object(signal, 'pidfd_send_signal') as send, patch.object(time, 'monotonic', return_value=123):
+            self.assertEqual(control._restore_locked().category, 'restored')
+        self.assertEqual(control._scheduler_restore_failure, first)
+        self.assertEqual(identity.call_count, 3)
+        self.assertEqual(final.call_args_list, [unittest.mock.call(124)] * 3)
+        send.assert_called_once_with(control._pidfd, signal.SIGCONT)
+
+    def test_restore_journal_io_cannot_renew_the_preexisting_one_second_budget(self):
+        control = self.component()
+        clock = [123]
+        deadlines = []
+        def journal():
+            clock[0] = 125
+        def final(deadline):
+            deadlines.append(deadline)
+            docker._require(time.monotonic() < deadline, 'command_timeout')
+        with patch.object(control, '_journal_matches', side_effect=journal), \
+             patch.object(control, '_tasks', return_value=[[101, 'S']]), \
+             patch.object(control, '_read_pins', return_value=control._pins), \
+             patch.object(control, '_identity', return_value=control._selected) as identity, \
+             patch.object(control, '_final_guard', side_effect=final), \
+             patch.object(time, 'monotonic', side_effect=lambda: clock[0]), \
+             patch.object(signal, 'pidfd_send_signal') as send:
+            self.assertEqual(control._restore_locked().category, 'held')
+        self.assertEqual(deadlines, [124])
+        identity.assert_called_once_with()
+        send.assert_not_called()
 
 
 class SchedulerIdentityGuard(unittest.TestCase):
@@ -595,6 +848,32 @@ class NativePhaseGuard(unittest.TestCase):
 
     def test_request_io_cannot_renew_separate_restore_budget(self):
         self.assert_request_io_cannot_renew_budget(True)
+
+    def assert_restore_phase_diagnostic(self, expired):
+        control = self.native_guard()
+        self.assertEqual(control.freeze().category, 'frozen')
+        if expired:
+            control._request_data['deadline_ns'] = time.monotonic_ns() - 1
+        snapshots = control._request_snapshot
+        with patch.object(control, '_request_snapshot', wraps=snapshots) as reads, \
+             patch.object(control, '_identity', return_value=control._selected) as identity, \
+             patch.object(signal, 'pidfd_send_signal') as send:
+            if not expired:
+                reads.side_effect = docker.DockerError('startup_state')
+            self.assertEqual(control.restore().category, 'held')
+        self.assertEqual(reads.call_count, 2 if expired else 1)
+        identity.assert_called_once_with()
+        send.assert_not_called()
+        diagnostic = control._scheduler_restore_failure
+        self.assertEqual(diagnostic['stage'], 'phase_deadline' if expired else 'phase_validation')
+        self.assertEqual(diagnostic['failure_category'], 'command_timeout' if expired else 'startup_state')
+        self.assertFalse(diagnostic['cont_sent'])
+
+    def test_restore_phase_validation_failure_has_no_extra_request_reads(self):
+        self.assert_restore_phase_diagnostic(False)
+
+    def test_restore_phase_expiry_has_no_extra_request_reads(self):
+        self.assert_restore_phase_diagnostic(True)
 
 
 class SchedulerEvidence(unittest.TestCase):

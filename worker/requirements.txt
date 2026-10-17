@@ -26,9 +26,9 @@ backoff==2.2.1 \
     --hash=sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba \
     --hash=sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8
     # via langfuse
-bgutil-ytdlp-pot-provider==1.3.1 \
-    --hash=sha256:130635912e2450757438f72068b900076ac1a62d9f26a00afbe6f2ab258e8b25 \
-    --hash=sha256:e62b21f9b2e4479d59af87a8900387c34892e8d7fdb223f266749a90e0be22de
+bgutil-ytdlp-pot-provider==2.0.2 \
+    --hash=sha256:4f488008d25a715837df79472aad06ea052d20e14ad3a02609bbb0fbd746b8be \
+    --hash=sha256:a127b20c4757edb33f88061afb01220829d1b340638cf638a293065577a000b4
     # via -r requirements.in
 boto3==1.39.13 \
     --hash=sha256:8e62c5724dc06a1934fde155a2eb48cb851cc17ad0b5142da9eb9e46fe0355d3 \
@@ -765,9 +765,9 @@ mutagen==1.47.0 \
     --hash=sha256:719fadef0a978c31b4cf3c956261b3c58b6948b32023078a2117b1de09f0fc99 \
     --hash=sha256:edd96f50c5907a9539d8e5bba7245f62c9f520aef333d13392a79a4f70aca719
     # via -r requirements.in
-openai==3.29.0 \
-    --hash=sha256:860d3bad424c5d38cd9ba0a0a2050d558b58ce027596a39f9ccbc0f51a2090b7 \
-    --hash=sha256:bc70a46d97b70ba64daedfcb3227f610a395f297ec68d39f735676190a92be94
+openai==3.28.0 \
+    --hash=sha256:1ea40a084ffe2f9f16fd3bea6e870f757853b536b18d8e737c518ef849a2920c \
+    --hash=sha256:cf0509d32d7bd8eb6a3db02417957cb455212b6629d071826b9ea1f61659e2a4
     # via langfuse
 opentelemetry-api==1.45.1 \
     --hash=sha256:aa38ed19bcc084ba42782a73255b3582283eced7ad6dddbd6695189e69adfb75 \

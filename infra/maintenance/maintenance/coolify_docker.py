@@ -7,6 +7,7 @@ The injected test adapter never confers production eligibility.
 """
 from dataclasses import dataclass
 from enum import Enum
+import errno
 import hashlib
 import json
 import os
@@ -1605,32 +1606,50 @@ class _FixedRoleProcessControl:
                      for name in ('pid', 'mnt', 'net')], 'startup_state')
         return 'same-pid-namespace-component', Path('/sys/fs/cgroup/cgroup.procs')
 
+    def _identity_observe(self, substep, member_pid=None, parent_pid=None):
+        # Native PUBLIC diagnostics only; no reads or K0 observation state.
+        pass
+
     def _identity(self):
+        self._identity_observe('selected_proc')
         selected = self._proc_identity(self._procfd)
+        self._identity_observe('parent_proc')
         parentfd = os.open('/proc/' + str(selected['parent']), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             parent = self._proc_identity(parentfd)
         finally:
             os.close(parentfd)
+        self._identity_observe('init_proc')
         init = self._proc_identity(self._initfd)
         # No assumption that UID 9999 defines membership; include EVERY member.
+        self._identity_observe('placement')
         scope, membership = self._placement(selected, parent, init)
+        self._identity_observe('selected_start_token')
         _require(_start_token(self._pid).decode('ascii') == selected['start'], 'startup_state')
+        self._identity_observe('membership_read')
         members = sorted(int(part) for part in membership.read_text().split())
         _require(0 < len(members) <= 256 and self._pid in members
                  and all(pid > 0 for pid in members), 'startup_state')
-        member_tokens = [[pid, _start_token(pid).decode('ascii')] for pid in members]
+        member_tokens = []
+        for pid in members:
+            self._identity_observe('member_token', pid, selected['parent'])
+            member_tokens.append([pid, _start_token(pid).decode('ascii')])
+        self._identity_observe('membership_recheck')
         _require(members == sorted(int(part) for part in membership.read_text().split()),
                  'startup_state')
+        self._identity_observe('executable_node')
         executable_limit = self._executable_limit()
         _require(list(_metadata(os.fstat(self._exefd))) == selected['exe']
                  and 0 < os.fstat(self._exefd).st_size <= executable_limit, 'startup_state')
+        self._identity_observe('task_tokens')
         task_tokens = []
         for tid, _ in self._tasks():
             raw = self._proc_read(self._procfd, 'task/' + str(tid) + '/stat', 8192)
             task_tokens.append([tid, raw[raw.rfind(b')') + 2:].split()[19].decode('ascii')])
-        return dict(scope=scope, role=self._role, task_tokens=task_tokens,
-                    boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+        self._identity_observe('boot_token')
+        boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        self._identity_observe('executable_hash')
+        return dict(scope=scope, role=self._role, task_tokens=task_tokens, boot=boot,
                     process=selected, parent=parent, init=init, members=member_tokens,
                     executable_sha256=self._executable_hash(executable_limit))
 
@@ -1895,6 +1914,11 @@ _SCHEDULER_RESTORE_STAGES = ('journal', 'original_state', 'task_identity', 'pins
 _SCHEDULER_RESTORE_CATEGORIES = ('startup_state', 'command_timeout', 'command_failed', 'output_bound',
     'resource_isolation', 'container_identity', 'container_spec', 'source_closure', 'os_error',
     'interrupted', 'unexpected_failure')
+_SCHEDULER_IDENTITY_SUBSTEPS = ('selected_proc', 'parent_proc', 'init_proc', 'placement',
+    'selected_start_token', 'membership_read', 'member_token', 'membership_recheck',
+    'executable_node', 'task_tokens', 'boot_token', 'executable_hash')
+_SCHEDULER_MEMBER_ROLES = ('selected', 'parent', 'init', 'other')
+_SCHEDULER_OS_ERRORS = ('missing_process', 'access_denied', 'interrupted', 'other_os_error')
 
 
 class _SchedulerHostProcessControl(_FixedRoleProcessControl):
@@ -2137,7 +2161,8 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
     def _restore_observe(self, stage, failure=None):
         if stage == 'start':
             self._scheduler_restore_attempt = dict(stage='journal', cont_sent=False, restored_saved=False,
-                failure_category=None, identity_checks=None)
+                failure_category=None, identity_checks=None, identity_substep=None,
+                member_role=None, os_error_category=None)
             return
         attempt = getattr(self, '_scheduler_restore_attempt', None)
         if attempt is None:
@@ -2147,6 +2172,11 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
                 'os_error' if isinstance(failure, OSError) else
                 'interrupted' if isinstance(failure, (KeyboardInterrupt, SystemExit)) else 'unexpected_failure')
             attempt['failure_category'] = category if category in _SCHEDULER_RESTORE_CATEGORIES else 'unexpected_failure'
+            if isinstance(failure, OSError):
+                attempt['os_error_category'] = (
+                    'missing_process' if failure.errno in (errno.ENOENT, errno.ESRCH) else
+                    'access_denied' if failure.errno in (errno.EACCES, errno.EPERM) else
+                    'interrupted' if failure.errno == errno.EINTR else 'other_os_error')
             # A cleanup compensation attempt must never replace the first
             # failed restoration's bounded observation, even if it succeeds.
             if not hasattr(self, '_scheduler_restore_failure'):
@@ -2156,10 +2186,22 @@ class _SchedulerHostProcessControl(_FixedRoleProcessControl):
             self._scheduler_restore_attempt = None
         else:
             attempt['stage'] = stage
+            attempt['identity_substep'] = None
+            attempt['member_role'] = None
             if stage == 'cont_sent':
                 attempt['cont_sent'] = True
             elif stage == 'restored_saved':
                 attempt['restored_saved'] = True
+
+    def _identity_observe(self, substep, member_pid=None, parent_pid=None):
+        attempt = getattr(self, '_scheduler_restore_attempt', None)
+        if attempt is None or attempt['stage'] != 'identity_read':
+            return
+        attempt['identity_substep'] = substep
+        attempt['member_role'] = (None if substep != 'member_token' else
+            'selected' if member_pid == self._pid else
+            'parent' if member_pid == parent_pid else
+            'init' if member_pid == getattr(self, '_initpid', None) else 'other')
 
     def _restoration_guard(self, deadline):
         self._restore_observe('pins_context')

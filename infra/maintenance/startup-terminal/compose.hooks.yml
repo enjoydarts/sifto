@@ -1,0 +1,27 @@
+services:
+  hooks:
+    image: docker.io/coollabsio/coolify@sha256:a323ce1dfb54101b0c30d8bd5c92b0e4166c3b403a164316f8876be653204960
+    pull_policy: never
+    entrypoint: [node, --experimental-vm-modules, --test, /src/tests/terminal_hooks.test.mjs]
+    working_dir: /src
+    user: '9999:9999'
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    network_mode: none
+    volumes:
+      - ./accounting.mjs:/src/startup-terminal/accounting.mjs:ro
+      - ./instrument-terminal.mjs:/src/startup-terminal/instrument-terminal.mjs:ro
+      - ./terminal-hooks.mjs:/src/startup-terminal/terminal-hooks.mjs:ro
+      - ../tests/terminal_hooks.test.mjs:/src/tests/terminal_hooks.test.mjs:ro
+      - ../tests/terminal_hooks_fixture.mjs:/src/tests/terminal_hooks_fixture.mjs:ro
+      - ${PUBLIC_TERMINAL_SOURCE_DIR:?PUBLIC_TERMINAL_SOURCE_DIR required}/old-extra-attempt-01.tar:/src/old-extra-attempt-01.tar:ro
+      - ${PUBLIC_TERMINAL_SOURCE_DIR:?PUBLIC_TERMINAL_SOURCE_DIR required}/target-extra-attempt-01.tar:/src/target-extra-attempt-01.tar:ro
+    tmpfs:
+      - /tmp:uid=9999,gid=9999,mode=0700,size=16777216
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    labels:
+      sifto.owner: terminal-hooks-component-public-v1

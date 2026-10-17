@@ -21,7 +21,8 @@ PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 from maintenance.coolify_docker import (_SchedulerHostProcessControl, _SchedulerDrain, DockerError, strict_json,
     _SCHEDULER_IMAGE_PINS, _scheduler_image_format, _scheduler_image_identity,
-    _SCHEDULER_RESTORE_FIELDS, _SCHEDULER_RESTORE_STAGES, _SCHEDULER_RESTORE_CATEGORIES)
+    _SCHEDULER_RESTORE_FIELDS, _SCHEDULER_RESTORE_STAGES, _SCHEDULER_RESTORE_CATEGORIES,
+    _SCHEDULER_IDENTITY_SUBSTEPS, _SCHEDULER_MEMBER_ROLES, _SCHEDULER_OS_ERRORS)
 from maintenance.coolify_rehearsal import clone_env
 
 PROJECT = 'sifto-startup-scheduler-public'
@@ -204,10 +205,17 @@ class Fixture:
         if value is None:
             return {}
         check(type(value) is dict and set(value) == {'stage', 'cont_sent', 'restored_saved',
-            'failure_category', 'identity_checks'} and value['stage'] in _SCHEDULER_RESTORE_STAGES
+            'failure_category', 'identity_checks', 'identity_substep', 'member_role', 'os_error_category'}
+            and value['stage'] in _SCHEDULER_RESTORE_STAGES
             and value['failure_category'] in _SCHEDULER_RESTORE_CATEGORIES
             and type(value['cont_sent']) is bool and type(value['restored_saved']) is bool,
             'fixed restore diagnostic')
+        check((value['identity_substep'] is None or (value['stage'] == 'identity_read'
+                and value['identity_substep'] in _SCHEDULER_IDENTITY_SUBSTEPS))
+              and (value['member_role'] in _SCHEDULER_MEMBER_ROLES if value['identity_substep'] == 'member_token'
+                   else value['member_role'] is None)
+              and (value['os_error_category'] in _SCHEDULER_OS_ERRORS if value['failure_category'] == 'os_error'
+                   else value['os_error_category'] is None), 'fixed restore diagnostic')
         checks = value['identity_checks']
         check(checks is None or (type(checks) is dict and set(checks) == set(_SCHEDULER_RESTORE_FIELDS)
               and all(type(item) is bool for item in checks.values())), 'fixed restore diagnostic')

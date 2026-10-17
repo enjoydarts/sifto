@@ -1,6 +1,7 @@
 """Scheduler kernel evidence; these are NOT actual Laravel/native-host proofs."""
 import json
 import copy
+import errno
 import hashlib
 import importlib.util
 import io
@@ -63,7 +64,8 @@ class SchedulerFixtureRecord(unittest.TestCase):
 
     def test_restore_record_includes_only_the_first_bounded_failure_diagnostic(self):
         diagnostic = dict(stage='restored_save', cont_sent=True, restored_saved=False,
-                          failure_category='os_error', identity_checks=None)
+                          failure_category='os_error', identity_checks=None, identity_substep=None,
+                          member_role=None, os_error_category='other_os_error')
         result = startup.parse_process_control_result(json.dumps(dict(version=1, role='scheduler-worker',
             category='held', task_count=1, restore_required=True,
             maintenance_held=True, identity_hmac='a' * 64)).encode())
@@ -204,7 +206,8 @@ class SchedulerFixtureRecord(unittest.TestCase):
                 fixture.drains = []
                 fixture.started = False
                 diagnostic = dict(stage='final_guard', cont_sent=True, restored_saved=not required,
-                                  failure_category='command_timeout', identity_checks=None)
+                                  failure_category='command_timeout', identity_checks=None,
+                                  identity_substep=None, member_role=None, os_error_category=None)
                 control = SimpleNamespace(_intent={'restore_required': required},
                     restore=lambda: SimpleNamespace(category='restored'), close=lambda: None,
                     _scheduler_restore_failure=diagnostic)
@@ -216,12 +219,43 @@ class SchedulerFixtureRecord(unittest.TestCase):
 
     def test_restore_diagnostic_refuses_non_allowlisted_content(self):
         valid = dict(stage='cont_signal', cont_sent=False, restored_saved=False,
-                     failure_category='startup_state', identity_checks=None)
+                     failure_category='startup_state', identity_checks=None,
+                     identity_substep=None, member_role=None, os_error_category=None)
         for defect in (dict(valid, stage='PRIVATE'), dict(valid, failure_category='PRIVATE'),
                        dict(valid, cont_sent=1), dict(valid, identity_checks={'private': True}),
-                       dict(valid, extra='PRIVATE')):
+                       dict(valid, identity_substep='PRIVATE'), dict(valid, member_role='PRIVATE'),
+                       dict(valid, os_error_category='PRIVATE'), dict(valid, extra='PRIVATE'),
+                       dict(valid, identity_substep='selected_proc'),
+                       dict(valid, os_error_category='missing_process'),
+                       dict(valid, stage='identity_read', identity_substep='member_token'),
+                       dict(valid, stage='identity_read', identity_substep='selected_proc', member_role='other'),
+                       dict(valid, failure_category='os_error')):
             with self.subTest(defect=defect), self.assertRaisesRegex(RuntimeError, '^fixed restore diagnostic$'):
                 self.fixture.restore_diagnostic(SimpleNamespace(_scheduler_restore_failure=defect))
+
+    def test_restore_identity_checks_accept_only_all_eight_fixed_boolean_fields(self):
+        valid = dict(stage='identity_compare', cont_sent=True, restored_saved=False,
+            failure_category='startup_state', identity_checks=dict.fromkeys(SchedulerRestoreDiagnostic.fields, True),
+            identity_substep=None, member_role=None, os_error_category=None)
+        self.assertEqual(self.fixture.restore_diagnostic(SimpleNamespace(_scheduler_restore_failure=valid)),
+                         {'restore_diagnostic': valid})
+        for field in SchedulerRestoreDiagnostic.fields:
+            for bad in (1, 'PRIVATE', None):
+                defect = dict(valid, identity_checks=dict(valid['identity_checks'], **{field: bad}))
+                with self.subTest(field=field, bad=bad), self.assertRaisesRegex(RuntimeError, '^fixed restore diagnostic$'):
+                    self.fixture.restore_diagnostic(SimpleNamespace(_scheduler_restore_failure=defect))
+
+    def test_restore_read_schema_accepts_only_allowlisted_substeps_roles_and_errno_categories(self):
+        valid = dict(stage='identity_read', cont_sent=True, restored_saved=False,
+            failure_category='os_error', identity_checks=None, identity_substep=None,
+            member_role=None, os_error_category='missing_process')
+        for substep in docker._SCHEDULER_IDENTITY_SUBSTEPS:
+            for role in (docker._SCHEDULER_MEMBER_ROLES if substep == 'member_token' else (None,)):
+                for category in docker._SCHEDULER_OS_ERRORS:
+                    diagnostic = dict(valid, identity_substep=substep, member_role=role, os_error_category=category)
+                    with self.subTest(substep=substep, role=role, category=category):
+                        self.assertEqual(self.fixture.restore_diagnostic(
+                            SimpleNamespace(_scheduler_restore_failure=diagnostic)), {'restore_diagnostic': diagnostic})
 
 
 class SchedulerRestoreDiagnostic(unittest.TestCase):
@@ -272,7 +306,9 @@ class SchedulerRestoreDiagnostic(unittest.TestCase):
                 self.assertTrue(result.restore_required)
                 diagnostic = getattr(control, '_scheduler_restore_failure', None)
                 self.assertEqual(diagnostic, dict(stage=stage, cont_sent=sent, restored_saved=saved,
-                    failure_category='os_error' if point == 'save' else 'command_timeout', identity_checks=None))
+                    failure_category='os_error' if point == 'save' else 'command_timeout', identity_checks=None,
+                    identity_substep=None, member_role=None,
+                    os_error_category='other_os_error' if point == 'save' else None))
                 self.assertEqual(count, reads)
                 self.assertEqual(signals, int(sent))
                 with patch.object(control, '_journal_matches', side_effect=RuntimeError('PRIVATE')):
@@ -356,6 +392,165 @@ class SchedulerRestoreDiagnostic(unittest.TestCase):
         self.assertEqual(deadlines, [124])
         identity.assert_called_once_with()
         send.assert_not_called()
+
+
+class SchedulerIdentityReadDiagnostic(unittest.TestCase):
+    """Owned kernel processes, not actual native mapping or CI root cause."""
+    setUp = process_control.ProcessKernel.setUp
+    tearDown = process_control.ProcessKernel.tearDown
+    child = process_control.ProcessKernel.child
+    control = process_control.ProcessKernel.control
+
+    def diagnostic_control(self, component=None):
+        component = component or self.control()
+        control = object.__new__(docker._SchedulerHostProcessControl)
+        control.__dict__.update(component.__dict__)
+        control._initpid = 1
+        # Exercise native diagnostics with K0's owned same-namespace placement;
+        # this does not authenticate Docker/S6 or manufacture native authority.
+        for method in ('_placement', '_read_pins', '_final_guard'):
+            setattr(control, method, getattr(docker._FixedRoleProcessControl, method).__get__(control))
+        return control
+
+    def test_other_member_reaped_after_cont_before_its_token_read_still_holds(self):
+        other = self.child()
+        control = self.diagnostic_control()
+        self.assertEqual(control.freeze().category, 'frozen')
+        start_token = docker._start_token
+        released = []
+        def reap_at_existing_read(pid):
+            attempt = getattr(control, '_scheduler_restore_attempt', None)
+            if pid == other.pid and attempt is not None and attempt['cont_sent']:
+                self.assertFalse(released)
+                self.assertEqual(attempt['identity_substep'], 'member_token')
+                other.stdin.write('quit\n')
+                other.stdin.flush()
+                self.assertEqual(other.wait(timeout=2), 0)
+                released.append(True)
+            return start_token(pid)
+        with patch.object(docker, '_start_token', side_effect=reap_at_existing_read), \
+             patch.object(signal, 'pidfd_send_signal', wraps=signal.pidfd_send_signal) as send:
+            result = control.restore()
+        self.assertEqual(released, [True])
+        self.assertEqual(result.category, 'held')
+        self.assertTrue(result.restore_required)
+        send.assert_called_once_with(control._pidfd, signal.SIGCONT)
+        self.assertTrue(all(state != 'T' for _, state in control._tasks()))
+        private = json.loads((self.root / 'scheduler-worker.json').read_bytes())
+        self.assertEqual(private['stage'], 'applied')
+        self.assertTrue(private['restore_required'])
+        diagnostic = control._scheduler_restore_failure
+        self.assertEqual(diagnostic, dict(stage='identity_read', cont_sent=True, restored_saved=False,
+            failure_category='os_error', identity_checks=None, identity_substep='member_token',
+            member_role='other', os_error_category='missing_process'))
+        self.assertNotIn(str(other.pid), json.dumps(diagnostic))
+        first = dict(diagnostic)
+        self.assertEqual(control.restore().category, 'restored')
+        self.assertEqual(control._scheduler_restore_failure, first)
+
+    def test_owned_same_pid_restore_without_reaping_remains_restored(self):
+        control = self.diagnostic_control()
+        self.assertEqual(control.freeze().category, 'frozen')
+        self.assertEqual(control.restore().category, 'restored')
+        self.assertFalse(hasattr(control, '_scheduler_restore_failure'))
+
+    def test_selected_parent_init_reads_have_distinct_substeps_and_errno_categories(self):
+        component = self.control()
+        for index, substep in enumerate(('selected_proc', 'parent_proc', 'init_proc'), 1):
+            for code, category in ((errno.ENOENT, 'missing_process'), (errno.ESRCH, 'missing_process'),
+                    (errno.EACCES, 'access_denied'), (errno.EPERM, 'access_denied'),
+                    (errno.EINTR, 'interrupted'), (errno.EIO, 'other_os_error')):
+                with self.subTest(substep=substep, category=category, code=code):
+                    control = self.diagnostic_control(component)
+                    original = control._proc_identity
+                    calls = []
+                    failure = OSError(code, 'PRIVATE /private/PATH 123456789')
+                    def fault(fd):
+                        calls.append(fd)
+                        if len(calls) == index:
+                            raise failure
+                        return original(fd)
+                    control._restore_observe('start')
+                    with patch.object(control, '_proc_identity', side_effect=fault):
+                        with self.assertRaises(OSError) as caught:
+                            control._restoration_guard(time.monotonic() + 1)
+                    self.assertIs(caught.exception, failure)
+                    control._restore_observe('failure', caught.exception)
+                    diagnostic = control._scheduler_restore_failure
+                    self.assertEqual(diagnostic.get('identity_substep'), substep)
+                    self.assertEqual(diagnostic.get('os_error_category'), category)
+                    self.assertIsNone(diagnostic.get('member_role'))
+                    self.assertEqual(len(calls), index)
+                    self.assertNotIn('PRIVATE', json.dumps(diagnostic))
+                    self.assertNotIn('123456789', json.dumps(diagnostic))
+
+    def test_remaining_identity_substeps_classify_existing_reads_without_resnapshot(self):
+        component = self.control()
+        membership = Path('/sys/fs/cgroup/cgroup.procs')
+        boot = Path('/proc/sys/kernel/random/boot_id')
+        for substep, operation in (('placement', '_placement'), ('selected_start_token', '_start_token'),
+                ('membership_read', 'path'), ('membership_recheck', 'path'),
+                ('executable_node', '_executable_limit'), ('task_tokens', '_tasks'),
+                ('boot_token', 'path'), ('executable_hash', '_executable_hash')):
+            with self.subTest(substep=substep):
+                control = self.diagnostic_control(component)
+                failure = OSError(errno.ENOENT, 'PRIVATE')
+                reads = []
+                if operation == 'path':
+                    original = Path.read_text
+                    def read(path, *args, **kwargs):
+                        if path == membership:
+                            reads.append('membership')
+                        if ((substep == 'membership_read' and path == membership)
+                                or (substep == 'membership_recheck' and path == membership and len(reads) == 2)
+                                or (substep == 'boot_token' and path == boot)):
+                            raise failure
+                        return original(path, *args, **kwargs)
+                    fault = patch.object(Path, 'read_text', read)
+                else:
+                    target = docker if operation == '_start_token' else control
+                    fault = patch.object(target, operation, side_effect=failure)
+                control._restore_observe('start')
+                with fault:
+                    with self.assertRaises(OSError) as caught:
+                        control._restoration_guard(time.monotonic() + 1)
+                self.assertIs(caught.exception, failure)
+                control._restore_observe('failure', caught.exception)
+                diagnostic = control._scheduler_restore_failure
+                self.assertEqual(diagnostic['identity_substep'], substep)
+                self.assertEqual(diagnostic['os_error_category'], 'missing_process')
+                self.assertIsNone(diagnostic['member_role'])
+                if operation == 'path':
+                    self.assertEqual(len(reads), 1 if substep == 'membership_read' else 2)
+
+    def test_member_token_roles_use_only_fixed_selected_parent_init_other_classes(self):
+        for role in ('selected', 'parent', 'init', 'other'):
+            with self.subTest(role=role):
+                other = self.child()
+                control = self.diagnostic_control()
+                selected = control._selected
+                pid = {'selected': control._pid, 'parent': selected['process']['parent'],
+                       'init': 1, 'other': other.pid}[role]
+                # K0's parent can also be init: selected/parent precedence is
+                # intentional; a separate existing member exercises init.
+                if role == 'init' and pid == selected['process']['parent']:
+                    control._initpid = other.pid
+                    pid = other.pid
+                original = docker._start_token
+                seen = []
+                def fault(value):
+                    attempt = control._scheduler_restore_attempt
+                    if value == pid and attempt.get('identity_substep') == 'member_token':
+                        seen.append(True)
+                        raise OSError(errno.ENOENT, 'PRIVATE')
+                    return original(value)
+                control._restore_observe('start')
+                with patch.object(docker, '_start_token', side_effect=fault):
+                    with self.assertRaises(OSError) as caught:
+                        control._restoration_guard(time.monotonic() + 1)
+                control._restore_observe('failure', caught.exception)
+                self.assertEqual(seen, [True])
+                self.assertEqual(control._scheduler_restore_failure.get('member_role'), role)
 
 
 class SchedulerIdentityGuard(unittest.TestCase):

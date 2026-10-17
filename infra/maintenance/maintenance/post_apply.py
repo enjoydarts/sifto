@@ -10,7 +10,7 @@ from .cli import github
 from .host import RECREATED_CONTAINER_IMAGE, strict_json
 from . import recreation_identity_matches
 from .plan import (HASH, SHA, MaintenanceError, canonical_json, matches, parse_simulation,
-                   plan_sha256, require, validate_approval, validate_plan)
+                   plan_sha256, require, state_sha256, validate_approval, validate_plan)
 from .ssh import Client, parse_hosts
 from .store import GitStore, private_write, repo_url, validate_ref
 
@@ -128,6 +128,9 @@ def validate_observation(plan, envelope, host, inventory, history):
             and isinstance(x.get('version'), str) for x in packages), 'observed_packages_invalid')
     actual = {x['name']: x['version'] for x in packages}
     require(len(actual) == len(packages) and all(actual.get(x['name']) == x['target'] for x in plan['packages']), 'installed_targets_mismatch')
+    if plan.get('action') == 'coolify_update':
+        require(state_sha256({**inventory, 'runtime': before}) == plan['state_sha256'],
+                'Coolify unchanged package and platform scope mismatch')
     require(isinstance(before.get('boot_id'), str) and isinstance(runtime.get('boot_id'), str), 'boot_identity_missing')
     boot_matches = runtime['boot_id'] != before['boot_id'] if plan.get('action') == 'reboot' else runtime['boot_id'] == before['boot_id']
     require(all(runtime.get(key) == value for key, value in plan['expected_runtime'].items()) and boot_matches, 'runtime_mismatch')
@@ -141,7 +144,21 @@ def validate_observation(plan, envelope, host, inventory, history):
     current = {x.get('id'): x for x in containers}
     require(len(current) == len(containers) and len({x.get('id') for x in originals}) == len(originals), 'container_identity_ambiguous')
     recreated = []
+    control_ids = set()
+    if plan.get('action') == 'coolify_update':
+        from . import coolify_standard as standard
+        require(host['role'] == 'application', 'Coolify role mismatch')
+        standard.verify_containers(before, runtime, plan['coolify_update'])
+        old_roles, new_roles = standard.roles(before), standard.roles(runtime)
+        control_ids = {item['id'] for item in old_roles.values()}
+        for role, original in old_roles.items():
+            observed = new_roles[role]
+            if any(original.get(key) != observed.get(key) for key in ('id', 'image', 'image_id', 'recreation_identity')):
+                recreated.append({'original_id': original['id'], 'replacement_id': observed['id'],
+                                  'image': observed['image'], 'image_id': observed['image_id'], 'role': role})
     for original in originals:
+        if original.get('id') in control_ids:
+            continue
         observed = current.get(original.get('id'))
         if observed is None:
             # Recognition of the exact receipt already VERIFIED by native root,

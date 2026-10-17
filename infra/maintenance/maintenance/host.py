@@ -27,6 +27,7 @@ import base64
 import codecs
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,7 @@ import re
 import selectors
 import stat
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -115,6 +117,11 @@ def load_config(path="/etc/sifto-maintenance/config.json"):
     require(matches(SHA, config["approved_workflow_sha"]), "invalid pinned executor SHA")
     require(type(config["database_enabled"]) is bool, "invalid database flag")
     require(config["host_role"] in ("application", "database"), "invalid host role")
+    standard = config.setdefault('coolify_standard', {'enabled': False})
+    require(type(standard) is dict and set(standard) <= {'enabled', 'wait_seconds'}
+            and type(standard.get('enabled')) is bool
+            and type(standard.get('wait_seconds', 1200)) is int and 0 <= standard.get('wait_seconds', 1200) <= 1800
+            and (not standard['enabled'] or config['host_role'] == 'application'), 'invalid Coolify standard root policy')
     recreated_images = config.setdefault("allowed_recreated_container_images", [])
     require(type(recreated_images) is list and len(recreated_images) <= 8
             and all(matches(RECREATED_CONTAINER_IMAGE, image) for image in recreated_images)
@@ -457,7 +464,8 @@ class HostAgent:
                 "maintenance_policy": {"host_role": "database" if self._database_host(packages) else "application",
                                        "database_enabled": self.config["database_enabled"], "backup_ready": self._backup_ready(),
                                        "allowed_restart_services": self.config["allowed_restart_services"],
-                                       "database_restart_services": self.config.get("database_restart_services", [])},
+                                       "database_restart_services": self.config.get("database_restart_services", []),
+                                       'coolify_standard_enabled': self.config.get('coolify_standard', {}).get('enabled') is True},
                 "collected_at": int(self.clock()), "simulation": simulated, "simulation_available": simulation_available,
                 "simulation_error": simulation_error, "metadata": self._metadata(),
                 "apt_locks": locks, "reboot_required": bool(self.read_file("/var/run/reboot-required")),
@@ -624,6 +632,8 @@ class HostAgent:
         require(state_sha256(before) == plan["state_sha256"], "host state drifted since plan")
         require(plan["expected_runtime"] == expected_runtime(before, plan["packages"], plan.get("action", "apt_upgrade"), plan["restart_services"]),
                 "approved runtime targets do not match transaction")
+        if plan.get('action') == 'coolify_update':
+            return self._apply_coolify(request, plan, before, record_path)
         self._policy(plan, before)
         self._health(before)
         require(not self.lock_probe(), "apt/dpkg is busy")
@@ -681,6 +691,134 @@ class HostAgent:
             raise
         return {"plan_id": plan["plan_id"], "status": record["status"]}
 
+    @contextlib.contextmanager
+    def _producer_locks(self, *, existing_only=False):
+        descriptors = []
+        try:
+            for name in ('backup.lock', 'coolify-backup.lock'):
+                path = self.state / name
+                try:
+                    fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | (0 if existing_only else os.O_CREAT), 0o600)
+                except FileNotFoundError as exc:
+                    raise MaintenanceError('backup producer lock not provisioned') from exc
+                descriptors.append(fd)
+                info = os.fstat(fd)
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                        and info.st_mode & 0o077 == 0, 'invalid backup producer lock')
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError as exc:
+                    raise MaintenanceError('backup producer active') from exc
+            yield
+        finally:
+            for fd in reversed(descriptors):
+                os.close(fd)
+
+    def _coolify_preflight(self, inventory, version, *, check_producers=True):
+        from . import coolify_standard as standard
+        source = Path('/data/coolify/source')
+        # Permission failures and symlinks are unknown; never infer idle from cat failure.
+        require(source.is_dir() and not source.is_symlink(), 'Coolify source unavailable')
+        source.stat()
+        require(not (source / '.upgrade-status').exists() and not (source / '.upgrade-status').is_symlink(),
+                'Coolify upgrade active or unresolved')
+        processes = self.runner(['ps', '-eo', 'args='], timeout=30)
+        require(bool(processes.strip()) and not re.search(r'(?:^|[ /])(?:upgrade|upgrade-postgres)\.sh(?:\s|$)', processes, re.MULTILINE),
+                'Coolify upgrade process active or unknown')
+        if check_producers:
+            with self._producer_locks(existing_only=True):
+                pass
+        standard.probe(self.runner, inventory['runtime'], version)
+
+    def _coolify_backup(self):
+        secure_path('/opt/sifto-maintenance/backup/coolify-backup.sh')
+        self.runner(['/bin/bash', '/opt/sifto-maintenance/backup/coolify-backup.sh'], timeout=600)
+        directory = self.state / 'backups'
+        info = directory.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0,
+                'invalid local backup directory')
+        created = (directory / 'created_at').read_text().strip()
+        require(created.isdecimal() and 0 <= int(self.clock()) - int(created) <= 300, 'local backup not fresh')
+        hashes = {}
+        for name in ('coolify.dump', 'coolify-config.tar.gz'):
+            fd = os.open(directory / name, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, 'rb') as stream:
+                info = os.fstat(stream.fileno())
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid()
+                        and info.st_mode & 0o077 == 0 and info.st_size > 0, 'invalid local snapshot')
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                    digest.update(chunk)
+                hashes[name] = digest.hexdigest()
+        return {'created_at': int(created), 'sha256': hashes, 'offhost_verified': False}
+
+    def _wait_coolify(self, before_runtime, action):
+        from . import coolify_standard as standard
+        deadline = self.monotonic() + self.config.get('coolify_standard', {}).get('wait_seconds', 1200)
+        while True:
+            try:
+                after = self.inventory(simulation=False)
+                require(after['runtime']['boot_id'] == before_runtime['boot_id'], 'unapproved boot change during Coolify update')
+                self._health(after)
+                standard.verify_containers(before_runtime, after['runtime'], action)
+                self._coolify_preflight(after, action['to_version'], check_producers=False)
+                return after
+            except MaintenanceError:
+                if self.monotonic() >= deadline:
+                    raise
+                self.sleeper(min(2, max(0, deadline - self.monotonic())))
+
+    def _apply_coolify(self, request, plan, before, record_path):
+        from . import coolify_standard as standard
+        require(self.config.get('coolify_standard', {}).get('enabled') is True
+                and self.config['host_role'] == 'application', 'Coolify standard update disabled')
+        require(self._backup_ready(), 'verified offhost backup and isolated restore evidence required')
+        require(not self.lock_probe(), 'apt/dpkg is busy')
+        self._policy(plan, before)
+        self._health(before)
+        self._coolify_preflight(before, plan['coolify_update']['from_version'])
+        verify_envelope(request['envelope'], self.config['trusted_public_key'], self.config['host_id'],
+                        self.config['approved_workflow_sha'], now=int(self.clock()))
+        if request.get('dry_run', False):
+            return {'plan_id': plan['plan_id'], 'status': 'preflight_passed'}
+        record = {'plan': plan, 'approval': request['envelope']['approval'], 'status': 'started',
+                  'started_at': int(self.clock()), 'before_runtime': before['runtime'],
+                  'offhost_backup_proof': self.config.get('backup_readiness')}
+        self._write(record_path, record, exclusive=True)
+        try:
+            record['local_backup'] = self._coolify_backup()
+            self._write(record_path, record)
+            with self._producer_locks(), tempfile.TemporaryDirectory(prefix='coolify-standard.', dir=self.state) as directory:
+                script = standard.fetch_script(plan['coolify_update']['release_commit'])
+                require(hashlib.sha256(script).hexdigest() == plan['coolify_update']['upgrade_sha256'], 'official upgrade script hash mismatch')
+                path = Path(directory) / 'upgrade.sh'
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, 'wb') as stream:
+                    stream.write(script)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                verify_envelope(request['envelope'], self.config['trusted_public_key'], self.config['host_id'],
+                                self.config['approved_workflow_sha'], now=int(self.clock()))
+                ready = self.inventory(simulation=False)
+                require(state_sha256(ready) == plan['state_sha256'], 'host state changed during backup')
+                require(not self.lock_probe(), 'apt/dpkg became busy')
+                require(self._backup_ready(), 'offhost backup proof expired during preflight')
+                self._health(ready)
+                self._coolify_preflight(ready, plan['coolify_update']['from_version'], check_producers=False)
+                # Do not kill a mutating upstream script during its pull/backoff
+                # phase. A disconnect leaves this plan consumed for diagnosis.
+                self.runner(standard.upgrade_argv(path, plan['coolify_update']), timeout=None)
+                after = self._wait_coolify(before['runtime'], plan['coolify_update'])
+                require(after['packages'] == before['packages'], 'unexpected package change during Coolify update')
+                self._runtime_targets(plan, after)
+            record.update(status='completed', completed_at=int(self.clock()))
+            self._write(record_path, record)
+        except Exception:
+            record.update(status='failed', failed_at=int(self.clock()))
+            self._write(record_path, record)
+            raise
+        return {'plan_id': plan['plan_id'], 'status': record['status']}
+
     def verify(self, request):
         require(set(request) == {"plan_id"}, "invalid verify request fields")
         path = self._record_path(request["plan_id"])
@@ -688,7 +826,11 @@ class HostAgent:
         record = strict_json(path.read_bytes())
         require(record["status"] in ("completed", "reboot_scheduled", "verified"), "failed or interrupted plan requires operator investigation")
         before = {"runtime": record["before_runtime"]}
-        after = self._wait_healthy(before)
+        after = (self._wait_coolify(before['runtime'], record['plan']['coolify_update'])
+                 if record['plan'].get('action') == 'coolify_update' else self._wait_healthy(before))
+        if record['plan'].get('action') == 'coolify_update':
+            require(state_sha256({**after, 'runtime': before['runtime']}) == record['plan']['state_sha256'],
+                    'Coolify unchanged package and platform scope mismatch')
         if record["plan"].get("action") == "reboot":
             require(after["runtime"]["boot_id"] != before["runtime"]["boot_id"], "reboot has not completed")
         actual = {x["name"]: x["version"] for x in after["packages"]}

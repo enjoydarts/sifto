@@ -71,6 +71,20 @@ def assess(inventory, executor, *, now=None):
 REPROPOSAL_COOLDOWN = 86400
 
 
+def coolify_fallback(result, inventory, observation, executor):
+    """At most one plan per host; APT/reboot and unresolved history take priority."""
+    if result.get('status') != 'current' or result.get('plan') is not None:
+        return result
+    if not isinstance(inventory, dict) or inventory.get('maintenance_policy', {}).get('coolify_standard_enabled') is not True:
+        return result
+    try:
+        from .coolify_standard import build_candidate
+        plan = build_candidate(inventory, observation, executor)
+        return {**result, 'status': 'eligible', 'reason': 'coolify_patch_human_approval_required', 'plan': plan}
+    except Exception:
+        return {**result, 'coolify_candidate': 'unavailable_or_waiting'}
+
+
 def candidate_fingerprint(plan):
     stable = {key: value for key, value in plan.items() if key not in ("plan_id", "created_at", "expires_at")}
     return hashlib.sha256(canonical_json(stable)).hexdigest()
@@ -293,15 +307,18 @@ def scan(executor, repo, inputs, store):
         except Exception:
             # Transport diagnostics remain on the private filesystem only.
             result["reason"] = "collection_or_refresh_failed"
+        coolify = observe_coolify(collected)
+        result = coolify_fallback(result, collected, coolify, executor)
         counts[result["status"]] += 1
         roles[host["role"]][result["status"]] += 1
         plan = result["plan"]
-        coolify = observe_coolify(collected)
         files[prefix + "/coolify-observation.json"] = coolify
         files[prefix + "/coolify-runtime.json"] = summarize_runtime(collected)
         advice = ai_advice(plan, Path("/secrets/anthropic_key").read_text().strip(),
-                           os.environ.get("MAINTENANCE_AI_MODEL") or DEFAULT_AI_MODEL) if plan else {
+                           os.environ.get("MAINTENANCE_AI_MODEL") or DEFAULT_AI_MODEL) if plan and plan.get('action') != 'coolify_update' else {
                            "status": "unavailable", "warning_ja": "承認可能な計画がありません。AI 解析は実施していません。"}
+        if plan and plan.get('action') == 'coolify_update':
+            advice = {'status': 'unavailable', 'warning_ja': 'Coolify 標準更新は署名済みの確定情報を確認してください。AI 解析は実施していません。'}
         files[prefix + "/assessment.json"] = result
         files[prefix + "/report.md"] = render(result, advice, coolify).encode()
         if plan and reserve_candidate(ledger, plan, store, parent, force=inputs["force_request"]):

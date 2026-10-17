@@ -14,6 +14,66 @@ except ImportError:
     s = None
 
 
+class StandardComposeProjectTests(unittest.TestCase):
+    def setUp(self):
+        # Selected installation: official /data/coolify/source Compose metadata.
+        self.runtime = {'containers': [
+            {'id': str(index) * 64, 'image': image, 'status': 'running', 'health': 'healthy',
+             'recreation_identity': {'name': name, 'compose': {'project': 'source', 'service': role}}}
+            for index, (role, name, image) in enumerate([
+                ('coolify', '/coolify', 'docker.io/coollabsio/coolify:4.4.2'),
+                ('postgres', '/coolify-db', 'postgres:15-alpine'),
+                ('redis', '/coolify-redis', 'redis:7-alpine')], 1)]}
+
+    def test_official_source_directory_selects_all_three_roles(self):
+        try:
+            selected = s.roles(self.runtime)
+        except p.MaintenanceError as exc:
+            self.fail(f'official source-directory Compose roles rejected: {exc}')
+        self.assertEqual(selected, dict(zip(['coolify', 'postgres', 'redis'], self.runtime['containers'])))
+
+    def test_other_or_missing_projects_are_rejected(self):
+        for project in ('coolify', 'other', '', None):
+            changed = copy.deepcopy(self.runtime)
+            for item in changed['containers']:
+                item['recreation_identity']['compose']['project'] = project
+            with self.subTest(project=project), self.assertRaises(p.MaintenanceError):
+                s.roles(changed)
+
+    def test_wrong_or_missing_services_are_rejected_for_each_role(self):
+        for index in range(3):
+            for service in ('other', '', None):
+                changed = copy.deepcopy(self.runtime)
+                changed['containers'][index]['recreation_identity']['compose']['service'] = service
+                with self.subTest(index=index, service=service), self.assertRaises(p.MaintenanceError):
+                    s.roles(changed)
+
+    def test_mixed_project_roles_are_rejected(self):
+        for index in range(3):
+            changed = copy.deepcopy(self.runtime)
+            changed['containers'][index]['recreation_identity']['compose']['project'] = 'coolify'
+            with self.subTest(index=index), self.assertRaises(p.MaintenanceError):
+                s.roles(changed)
+
+    def test_name_image_health_status_and_unique_role_guards_remain_strict(self):
+        for index in range(3):
+            for fault in ('name', 'image', 'health', 'status', 'missing', 'duplicate', 'shared_id'):
+                changed = copy.deepcopy(self.runtime)
+                item = changed['containers'][index]
+                if fault == 'name':
+                    item['recreation_identity']['name'] = '/other'
+                elif fault == 'missing':
+                    changed['containers'].pop(index)
+                elif fault == 'duplicate':
+                    changed['containers'].append(copy.deepcopy(item))
+                elif fault == 'shared_id':
+                    item['id'] = changed['containers'][(index + 1) % 3]['id']
+                else:
+                    item[fault] = {'image': 'private.invalid/other:1', 'health': 'unhealthy', 'status': 'exited'}[fault]
+                with self.subTest(index=index, fault=fault), self.assertRaises(p.MaintenanceError):
+                    s.roles(changed)
+
+
 class StandardUpdateTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(s, 'standard update implementation missing')
@@ -23,7 +83,7 @@ class StandardUpdateTests(unittest.TestCase):
         app['recreation_identity']['name'] = '/app'
         self.inventory['runtime']['containers'].insert(0, app)
         for item, role in zip(self.inventory['runtime']['containers'][1:], ['coolify', 'postgres', 'redis']):
-            item['recreation_identity']['compose'] = {'project': 'coolify', 'service': role}
+            item['recreation_identity']['compose'] = {'project': 'source', 'service': role}
         self.inventory['maintenance_policy']['coolify_standard_enabled'] = True
         self.inventory['maintenance_policy']['backup_ready'] = True
         self.observation = {'status': 'update_available', 'candidate_review': 'eligible_patch_review',

@@ -1,6 +1,7 @@
 """Scheduler kernel evidence; these are NOT actual Laravel/native-host proofs."""
 import json
 import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import select
@@ -8,12 +9,54 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from maintenance import coolify_docker as docker
 from maintenance import coolify_startup as startup
 from tests import test_coolify_startup_process_control as process_control
+
+
+class SchedulerFixtureRecord(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).resolve().parents[1] / 'startup-scheduler/check.py'
+        spec = importlib.util.spec_from_file_location('scheduler_public_fixture', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.fixture = object.__new__(module.Fixture)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.fixture.public = Path(directory.name)
+
+    def records(self):
+        return [json.loads(raw) for raw in (self.fixture.public / 'native-observations.jsonl').read_bytes().splitlines()]
+
+    def test_actual_case_serialization_preserves_schema_and_image_versions(self):
+        result = startup.parse_scheduler_result(json.dumps(dict(version=1, category='quiescent', live_count=0,
+            finished_count=0, failed_count=0, unknown_count=0, restore_required=True,
+            maintenance_held=True, identity_hmac='a' * 64)).encode())
+        for service in ('old', 'target'):
+            self.fixture.observe_case(service, 'idle', result)
+        for service, record in zip(('old', 'target'), self.records()):
+            self.assertEqual(record['version'], 1)
+            self.assertEqual(record['image_version'], service)
+            self.assertEqual(record['category'], 'quiescent')
+            self.assertTrue(record['restore_required'])
+
+    def test_actual_restore_serialization_preserves_schema_and_image_versions(self):
+        result = startup.parse_process_control_result(json.dumps(dict(version=1, role='scheduler-worker',
+            category='restored', task_count=1, restore_required=False,
+            maintenance_held=True, identity_hmac='a' * 64)).encode())
+        for service in ('old', 'target'):
+            self.fixture.restore(service, 'idle', SimpleNamespace(restore=lambda: result))
+        for service, record in zip(('old', 'target'), self.records()):
+            self.assertEqual(record['version'], 1)
+            self.assertEqual(record['image_version'], service)
+            self.assertEqual(record['category'], 'restored')
+            self.assertFalse(record['restore_required'])
+            self.assertGreaterEqual(record['elapsed_ms'], 0)
 
 
 class SchedulerImageIdentity(unittest.TestCase):

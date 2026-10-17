@@ -144,7 +144,7 @@ class Fixture:
                             startup_registered=False, production_eligible=False))
             raise
         self.controls.append(control)
-        self.record('mapped', dict(case=name, version=service, category='owned_native_mapping',
+        self.record('mapped', dict(case=name, image_version=service, category='owned_native_mapping',
             elapsed_ms=int((time.monotonic() - started) * 1000),
             process_count=len(control._selected['members']), driver=control._driver,
             production_eligible=False, startup_registered=False))
@@ -179,13 +179,13 @@ class Fixture:
         self.app(service, 'hold')
 
     def observe_case(self, service, name, result):
-        self.record('case', dict(case=name, version=service, **asdict(result),
+        self.record('case', dict(case=name, image_version=service, **asdict(result),
             production_eligible=False, startup_registered=False))
 
     def restore(self, service, name, control):
         started = time.monotonic()
         restored = control.restore()
-        self.record('restore', dict(version=service, case=name, **asdict(restored),
+        self.record('restore', dict(image_version=service, case=name, **asdict(restored),
             elapsed_ms=int((time.monotonic() - started) * 1000)))
         check(restored.category in ('restored', 'unchanged'), 'exact native launcher restore failed')
 
@@ -347,22 +347,27 @@ class Fixture:
                                         production_eligible=False))
 
 
-if sys.argv[1:] == ['generate']:
-    sys.stdout.buffer.write(clone_env((PACKAGE / 'startup/public.env').read_bytes()).replace(
-        b'SCHEDULER_ENABLED=false\n', b'SCHEDULER_ENABLED=true\n'))
-elif len(sys.argv) == 3 and sys.argv[1] == 'native':
-    check(platform.system() == 'Linux' and os.geteuid() == 0, 'native Linux root host observer required')
-    fixture = Fixture(Path(sys.argv[2]).resolve())
-    status = 0
-    try:
-        fixture.run_all()
-    except BaseException as failure:
-        status = 1
-        fixture.record('failure', dict(category='native_fixture_failed', failure_type=type(failure).__name__,
-            startup_registered=False, production_eligible=False))
-        raise
-    finally:
-        fixture.cleanup()
-    sys.exit(status)
-else:
-    raise SystemExit('fixed scheduler fixture operation required')
+def main():
+    if sys.argv[1:] == ['generate']:
+        sys.stdout.buffer.write(clone_env((PACKAGE / 'startup/public.env').read_bytes()).replace(
+            b'SCHEDULER_ENABLED=false\n', b'SCHEDULER_ENABLED=true\n'))
+    elif len(sys.argv) == 3 and sys.argv[1] == 'native':
+        check(platform.system() == 'Linux' and os.geteuid() == 0, 'native Linux root host observer required')
+        fixture = Fixture(Path(sys.argv[2]).resolve())
+        status = 0
+        try:
+            fixture.run_all()
+        except BaseException as failure:
+            status = 1
+            fixture.record('failure', dict(category='native_fixture_failed', failure_type=type(failure).__name__,
+                startup_registered=False, production_eligible=False))
+            raise
+        finally:
+            fixture.cleanup()
+        sys.exit(status)
+    else:
+        raise SystemExit('fixed scheduler fixture operation required')
+
+
+if __name__ == '__main__':
+    main()

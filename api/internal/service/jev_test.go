@@ -43,7 +43,7 @@ func TestJevClientRejectsAnswersWithUnexpectedDimensionNames(t *testing.T) {
 	}
 }
 
-func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
+func TestD1ClientUsesDecisionEndpointAndCurrentCatalogPricing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/decisions/v1/systemone" || r.Header.Get("Authorization") != "Bearer liquid_test" {
 			t.Errorf("request path=%q authorization=%q", r.URL.Path, r.Header.Get("Authorization"))
@@ -55,11 +55,11 @@ func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Error(err)
 		}
-		if payload.Model != "d1:free" || len(payload.Questions) != 7 {
+		if payload.Model != "d1" || len(payload.Questions) != 7 {
 			t.Errorf("payload=%#v", payload)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"model":"d1:free","answers":{"source_support":{"type":"score","score":4,"confidence":1},"contradiction_free":{"type":"score","score":4,"confidence":1},"coverage":{"type":"score","score":4,"confidence":1},"inference_control":{"type":"score","score":4,"confidence":1},"specificity":{"type":"score","score":4,"confidence":1},"has_unsupported_fact":{"type":"noul","noul":0},"has_contradiction":{"type":"noul","noul":0}},"usage":{"input_tokens":20,"output_tokens":0}}`))
+		_, _ = w.Write([]byte(`{"model":"d1","answers":{"source_support":{"type":"score","score":4,"confidence":1},"contradiction_free":{"type":"score","score":4,"confidence":1},"coverage":{"type":"score","score":4,"confidence":1},"inference_control":{"type":"score","score":4,"confidence":1},"specificity":{"type":"score","score":4,"confidence":1},"has_unsupported_fact":{"type":"noul","noul":0},"has_contradiction":{"type":"noul","noul":0}},"usage":{"input_tokens":1000000,"output_tokens":0}}`))
 	}))
 	defer server.Close()
 	catalog, err := LoadD1Catalog()
@@ -75,7 +75,7 @@ func TestD1ClientUsesDecisionEndpointAndFreeCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evaluation.Model != "d1:free" || evaluation.Usage.InputTokens != 20 || evaluation.Usage.EstimatedCostUSD != 0 {
+	if evaluation.RequestedModel != "d1" || evaluation.Model != "d1" || evaluation.Usage.InputTokens != 1_000_000 || evaluation.Usage.EstimatedCostUSD != 0.02 || evaluation.Usage.PricingSource != "liquid_d1_official_2026_10_17" {
 		t.Fatalf("evaluation=%#v", evaluation)
 	}
 }

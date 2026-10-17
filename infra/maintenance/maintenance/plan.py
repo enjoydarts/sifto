@@ -126,7 +126,7 @@ def state_sha256(inventory):
 
 def validate_plan(plan):
     require(type(plan) is dict and PLAN_FIELDS <= set(plan)
-            and set(plan) <= PLAN_FIELDS | {"action"}, "invalid plan fields")
+            and set(plan) <= PLAN_FIELDS | {"action", "coolify_update"}, "invalid plan fields")
     require(type(plan["schema_version"]) is int and plan["schema_version"] == 1, "unsupported plan schema")
     try:
         require(str(uuid.UUID(plan["plan_id"])) == plan["plan_id"], "invalid plan ID")
@@ -164,14 +164,21 @@ def validate_plan(plan):
         require(package["installed"] != package["target"], "unchanged package")
         names.add(package["name"])
     action = plan.get("action", "apt_upgrade")
-    require(action in ("apt_upgrade", "reboot"), "invalid action")
-    if action == "reboot":
+    require(action in ("apt_upgrade", "reboot", "coolify_update"), "invalid action")
+    if action == 'coolify_update':
+        from .coolify_standard import validate_action
+        validate_action(plan.get('coolify_update'))
+        require(plan['coolify_update']['release_published_at'] + 7 * 86400 <= plan['created_at'], 'Coolify release must age seven days')
+        require(not plan['packages'] and not plan['allow_reboot'] and not plan['allow_service_restarts']
+                and not plan['restart_services'] and plan['restart_scope'] == 'none', 'Coolify cannot mix APT or reboot authority')
+    elif action == "reboot":
         require(plan["allow_reboot"] and not plan["packages"] and not plan["restart_services"], "invalid reboot plan")
         require(plan["restart_scope"] == "none", "reboot cannot approve package-script restarts")
     else:
         require(plan["restart_scope"] == "package_scripts_and_listed_services", "apt maintainer-script restart scope must be explicit")
         require(not plan["packages"] or plan["allow_service_restarts"], "apt scripts require service restart approval")
         require(not plan["allow_reboot"], "reboot requires a separate explicit reboot plan")
+    require(action == 'coolify_update' or 'coolify_update' not in plan, 'unexpected Coolify scope')
     canonical_json(plan)
     return plan
 
@@ -260,7 +267,7 @@ def critical_restart_services(packages, policy):
     return sorted(required)
 
 
-def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboot=False, *, now=None, action="apt_upgrade"):
+def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboot=False, *, now=None, action="apt_upgrade", coolify_update=None):
     now = int(time.time()) if now is None else now
     require(inventory["platform"] == {"id": "ubuntu", "version": "24.04", "architecture": "arm64"}, "unsupported platform")
     dpkg_state = inventory.get("dpkg_state", {"ready": True})
@@ -276,6 +283,8 @@ def build_plan(inventory, workflow_sha, allow_service_restarts=True, allow_reboo
             "allow_service_restarts": allow_service_restarts, "allow_reboot": allow_reboot,
             "restart_services": restart_services,
             "restart_scope": "package_scripts_and_listed_services" if action == "apt_upgrade" else "none", "action": action}
+    if coolify_update is not None:
+        plan['coolify_update'] = coolify_update
     return validate_plan(plan)
 
 

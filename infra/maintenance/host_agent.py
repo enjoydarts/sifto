@@ -22,7 +22,8 @@ def validate_installed_sources():
     installed = Path("/opt/sifto-maintenance")
     if Path(__file__).absolute() != installed / "host_agent.py" or os.geteuid() != 0:
         raise ValueError("agent must run as root from trusted installation")
-    for source in ("host_agent.py", "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py"):
+    for source in ("host_agent.py", "maintenance/__init__.py", "maintenance/host.py", "maintenance/plan.py",
+                   "maintenance/coolify_standard.py"):
         path = installed / source
         for candidate in [path, *path.parents]:
             info = candidate.lstat()

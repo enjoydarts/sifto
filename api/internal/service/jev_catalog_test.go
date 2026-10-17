@@ -2,6 +2,24 @@ package service
 
 import "testing"
 
+func TestD1CatalogKeepsPaidAndLegacyFreePricingSeparate(t *testing.T) {
+	catalog, err := LoadD1Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if catalog.DefaultModel != "d1" {
+		t.Errorf("DefaultModel = %q, want d1", catalog.DefaultModel)
+	}
+	paid, ok := catalog.ResolvePricing("d1", "d1")
+	if !ok || paid.ID != "d1" || paid.InputPerMTokUSD != 0.02 || paid.OutputPerMTokUSD != 0 || paid.PricingSource != "liquid_d1_official_2026_10_17" {
+		t.Errorf("paid pricing = %#v, %v", paid, ok)
+	}
+	legacy, ok := catalog.ResolvePricing("d1:free", "d1:free")
+	if !ok || legacy.ID != "d1:free" || legacy.InputPerMTokUSD != 0 || legacy.OutputPerMTokUSD != 0 || legacy.PricingSource != "liquid_d1_free_2026_09" {
+		t.Errorf("legacy free pricing = %#v, %v", legacy, ok)
+	}
+}
+
 func TestJevCatalogResolvesConcreteModelBeforeAliasAndPrefix(t *testing.T) {
 	catalog := JevCatalog{
 		DefaultModel: "jev-latest",

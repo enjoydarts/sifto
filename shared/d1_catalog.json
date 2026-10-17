@@ -1,7 +1,10 @@
 {
   "schema_version": 1,
-  "default_model": "d1:free",
-  "models": [{"id": "d1:free", "match_exact": ["d1:free"], "match_prefix": [], "pricing_source": "liquid_d1_free_2026_09", "input_per_mtok_usd": 0, "output_per_mtok_usd": 0}],
+  "default_model": "d1",
+  "models": [
+    {"id": "d1", "match_exact": ["d1"], "match_prefix": [], "pricing_source": "liquid_d1_official_2026_10_17", "input_per_mtok_usd": 0.02, "output_per_mtok_usd": 0},
+    {"id": "d1:free", "match_exact": ["d1:free"], "match_prefix": [], "pricing_source": "liquid_d1_free_2026_09", "input_per_mtok_usd": 0, "output_per_mtok_usd": 0}
+  ],
   "gate_policy": {
     "version": "d1-shadow-v1",
     "aggregate_threshold": 0.75,

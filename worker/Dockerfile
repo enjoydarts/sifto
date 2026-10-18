@@ -3,7 +3,7 @@ FROM python:3.12.15-slim AS base
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY worker/requirements.txt .
@@ -26,7 +26,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 FROM base AS dev
 
 FROM base AS runner
-RUN groupadd --gid 10001 sifto \
+RUN python -m pip uninstall --yes pip \
+    && groupadd --gid 10001 sifto \
     && useradd --uid 10001 --gid sifto --create-home --home-dir /home/sifto sifto \
     && mkdir -p /home/sifto/.cache \
     && chown 10001:10001 /home/sifto/.cache

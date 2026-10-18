@@ -1,4 +1,4 @@
-FROM golang:1.27.1-alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 ARG APP_COMMIT_SHA=unknown
 
 WORKDIR /src
@@ -9,7 +9,7 @@ WORKDIR /src/api
 RUN go mod download && \
     go build -o /out/server ./cmd/server
 
-FROM golang:1.27.1-alpine AS dev
+FROM golang:1.27.2-alpine AS dev
 
 WORKDIR /app
 
@@ -28,6 +28,7 @@ FROM alpine:latest AS runner
 ARG APP_COMMIT_SHA=unknown
 
 RUN apk add --no-cache ca-certificates && \
+    apk upgrade --no-cache zlib && \
     addgroup -g 10001 sifto && \
     adduser -D -u 10001 -G sifto -h /home/sifto sifto
 

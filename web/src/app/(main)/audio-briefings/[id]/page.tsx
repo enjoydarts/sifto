@@ -171,13 +171,17 @@ function audioBriefingMessageLabel(status: string | null | undefined, t: (key: s
 }
 
 export default function AudioBriefingDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  return <AudioBriefingDetail key={id} id={id} />;
+}
+
+function AudioBriefingDetail({ id }: { id: string }) {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const player = useSharedAudioPlayer();
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
   const latestSessionsQuery = useQuery({
     queryKey: ["latest-playback-sessions"],
     queryFn: () => api.getLatestPlaybackSessions(),
@@ -198,8 +202,6 @@ export default function AudioBriefingDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     api
       .getAudioBriefing(id)
       .then((next) => {

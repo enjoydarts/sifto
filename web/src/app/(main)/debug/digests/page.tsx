@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Bug } from "lucide-react";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
@@ -264,7 +264,7 @@ export default function DebugDigestsPage() {
   const [searchBackfillLimit, setSearchBackfillLimit] = useState("500");
   const [searchBackfillAll, setSearchBackfillAll] = useState(false);
   const [busySearchBackfill, setBusySearchBackfill] = useState(false);
-  const [busySearchBackfillRuns, setBusySearchBackfillRuns] = useState(false);
+  const [busySearchBackfillRuns, setBusySearchBackfillRuns] = useState(true);
   const [busySearchBackfillClear, setBusySearchBackfillClear] = useState(false);
   const [searchBackfillResult, setSearchBackfillResult] = useState<SearchBackfillResponse | null>(null);
   const [searchBackfillRuns, setSearchBackfillRuns] = useState<SearchBackfillRun[]>([]);
@@ -274,7 +274,7 @@ export default function DebugDigestsPage() {
   const [busySystemHealth, setBusySystemHealth] = useState(false);
   const [systemHealth, setSystemHealth] = useState<DebugSystemStatusResponse | null>(null);
   const [webHealth, setWebHealth] = useState<{ status: number; latency_ms: number; body: unknown } | null>(null);
-  const [busyOneSignalDebug, setBusyOneSignalDebug] = useState(false);
+  const [busyOneSignalDebug, setBusyOneSignalDebug] = useState(true);
   const [oneSignalDebug, setOneSignalDebug] = useState<OneSignalDebugState | null>(null);
   const [busyPushTest, setBusyPushTest] = useState(false);
   const [pushTestSubscriptionId, setPushTestSubscriptionId] = useState("");
@@ -282,6 +282,8 @@ export default function DebugDigestsPage() {
   const [pushTestMessage, setPushTestMessage] = useState("デバッグ画面からのテスト通知です。");
   const [pushTestResult, setPushTestResult] = useState<PushTestResponse | null>(null);
   const [activeSection, setActiveSection] = useState<DebugSection>("system");
+  const oneSignalRequestIdRef = useRef(0);
+  const previousSubscriptionIdRef = useRef<string | null>(null);
 
   const helperText = useMemo(
     () =>
@@ -292,36 +294,39 @@ export default function DebugDigestsPage() {
     () => searchBackfillRuns.some((run) => run.status === "completed" || run.status === "failed" || run.status === "partial_failed"),
     [searchBackfillRuns]
   );
-  const loadSearchBackfillRuns = useCallback(async () => {
-    setBusySearchBackfillRuns(true);
-    try {
-      const res = await fetch("/api/debug/search/backfill?limit=12", { cache: "no-store" });
+  const loadSearchBackfillRuns = useCallback((signal?: AbortSignal) => {
+    return fetch("/api/debug/search/backfill?limit=12", { cache: "no-store", signal }).then(async (res) => {
       const text = await res.text();
       if (!res.ok) {
         throw new Error(`${res.status}: ${text || res.statusText}`);
       }
       const data = text ? (JSON.parse(text) as SearchBackfillRunsResponse) : { runs: [] };
+      if (signal?.aborted) return;
       setSearchBackfillRuns(data.runs ?? []);
-    } catch (err) {
+    }).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-    } finally {
-      setBusySearchBackfillRuns(false);
-    }
+      if (!signal?.aborted) setError(message);
+    }).finally(() => {
+      if (!signal?.aborted) setBusySearchBackfillRuns(false);
+    });
   }, []);
 
   useEffect(() => {
-    void loadSearchBackfillRuns();
+    const controller = new AbortController();
+    void loadSearchBackfillRuns(controller.signal);
+    return () => controller.abort();
   }, [loadSearchBackfillRuns]);
 
   useEffect(() => {
     if (!searchBackfillRuns.some((run) => run.status === "queued" || run.status === "running")) {
       return;
     }
+    const controller = new AbortController();
     const timer = window.setInterval(() => {
-      void loadSearchBackfillRuns();
+      setBusySearchBackfillRuns(true);
+      void loadSearchBackfillRuns(controller.signal);
     }, 5000);
-    return () => window.clearInterval(timer);
+    return () => { window.clearInterval(timer); controller.abort(); };
   }, [loadSearchBackfillRuns, searchBackfillRuns]);
 
   const cacheWindowRows = useMemo(() => {
@@ -367,80 +372,86 @@ export default function DebugDigestsPage() {
       }));
   }, [systemHealth]);
 
-  const loadOneSignalDebug = async () => {
-    setBusyOneSignalDebug(true);
+  const externalEmailId = user?.primaryEmailAddress?.emailAddress ?? null;
+  const fetchOneSignalDebug = useCallback(async (signal?: AbortSignal): Promise<OneSignalDebugState> => {
+    const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim() ?? "";
+    const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
+    const registrations = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+    const scopes = registrations.map((r) => r.scope);
+    const swRegistrations = registrations.map((r) => ({
+      scope: r.scope,
+      script_url: r.active?.scriptURL ?? r.waiting?.scriptURL ?? r.installing?.scriptURL ?? null,
+    }));
+    const rawOs = typeof window !== "undefined" ? window.OneSignal : undefined;
+    const os =
+      rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
+        ? rawOs
+        : undefined;
+    const deferredQueue = typeof window !== "undefined" ? window.OneSignalDeferred : undefined;
+    const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
+    const subscriptionIdRaw = sub?.["id"];
+    const subscriptionId = typeof subscriptionIdRaw === "string" && subscriptionIdRaw.length > 0 ? subscriptionIdRaw : null;
+    const optedIn = typeof sub?.["optedIn"] === "boolean" ? (sub?.["optedIn"] as boolean) : null;
+
+    let workerFileReachable: boolean | null = null;
+    let workerUpdaterReachable: boolean | null = null;
     try {
-      const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim() ?? "";
-      const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
-      const registrations = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistrations() : [];
-      const scopes = registrations.map((r) => r.scope);
-      const swRegistrations = registrations.map((r) => ({
-        scope: r.scope,
-        script_url: r.active?.scriptURL ?? r.waiting?.scriptURL ?? r.installing?.scriptURL ?? null,
-      }));
-      const rawOs = typeof window !== "undefined" ? window.OneSignal : undefined;
-      const os =
-        rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
-          ? rawOs
-          : undefined;
-      const deferredQueue = typeof window !== "undefined" ? window.OneSignalDeferred : undefined;
-      const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
-      const subscriptionIdRaw = sub?.["id"];
-      const subscriptionId = typeof subscriptionIdRaw === "string" && subscriptionIdRaw.length > 0 ? subscriptionIdRaw : null;
-      const optedIn = typeof sub?.["optedIn"] === "boolean" ? (sub?.["optedIn"] as boolean) : null;
-
-      let workerFileReachable: boolean | null = null;
-      let workerUpdaterReachable: boolean | null = null;
-      try {
-        const [w1, w2] = await Promise.all([
-          fetch("/onesignal/OneSignalSDKWorker.js", { cache: "no-store" }),
-          fetch("/onesignal/OneSignalSDKUpdaterWorker.js", { cache: "no-store" }),
-        ]);
-        workerFileReachable = w1.ok;
-        workerUpdaterReachable = w2.ok;
-      } catch {
-        workerFileReachable = false;
-        workerUpdaterReachable = false;
-      }
-
-      setOneSignalDebug({
-        checked_at: new Date().toISOString(),
-        app_id_configured: appId.length > 0,
-        app_id_preview: appId ? `${appId.slice(0, 8)}...` : null,
-        script_loading: Boolean(window.__siftoOneSignalLoading),
-        script_loaded: Boolean(window.__siftoOneSignalScriptLoaded),
-        script_error: window.__siftoOneSignalScriptError ?? null,
-        deferred_executed: Boolean(window.__siftoOneSignalDeferredExecuted),
-        init_enqueued_count: window.__siftoOneSignalInitEnqueued ?? 0,
-        sdk_ready: Boolean(window.__siftoOneSignalReady),
-        sdk_loaded: Boolean(os),
-        deferred_queue_length: Array.isArray(deferredQueue) ? deferredQueue.length : 0,
-        init_error: window.__siftoOneSignalInitError ?? null,
-        permission,
-        opted_in: optedIn,
-        login_external_id: user?.primaryEmailAddress?.emailAddress ?? null,
-        subscription_id: subscriptionId,
-        sw_scopes: scopes,
-        sw_registrations: swRegistrations,
-        worker_file_reachable: workerFileReachable,
-        worker_updater_reachable: workerUpdaterReachable,
-      });
-    } catch (e) {
-      showToast(String(e), "error");
-    } finally {
-      setBusyOneSignalDebug(false);
+      const [w1, w2] = await Promise.all([
+        fetch("/onesignal/OneSignalSDKWorker.js", { cache: "no-store", signal }),
+        fetch("/onesignal/OneSignalSDKUpdaterWorker.js", { cache: "no-store", signal }),
+      ]);
+      workerFileReachable = w1.ok;
+      workerUpdaterReachable = w2.ok;
+    } catch {
+      workerFileReachable = false;
+      workerUpdaterReachable = false;
     }
-  };
+
+    return {
+      checked_at: new Date().toISOString(),
+      app_id_configured: appId.length > 0,
+      app_id_preview: appId ? `${appId.slice(0, 8)}...` : null,
+      script_loading: Boolean(window.__siftoOneSignalLoading),
+      script_loaded: Boolean(window.__siftoOneSignalScriptLoaded),
+      script_error: window.__siftoOneSignalScriptError ?? null,
+      deferred_executed: Boolean(window.__siftoOneSignalDeferredExecuted),
+      init_enqueued_count: window.__siftoOneSignalInitEnqueued ?? 0,
+      sdk_ready: Boolean(window.__siftoOneSignalReady),
+      sdk_loaded: Boolean(os),
+      deferred_queue_length: Array.isArray(deferredQueue) ? deferredQueue.length : 0,
+      init_error: window.__siftoOneSignalInitError ?? null,
+      permission,
+      opted_in: optedIn,
+      login_external_id: externalEmailId,
+      subscription_id: subscriptionId,
+      sw_scopes: scopes,
+      sw_registrations: swRegistrations,
+      worker_file_reachable: workerFileReachable,
+      worker_updater_reachable: workerUpdaterReachable,
+    };
+  }, [externalEmailId]);
+
+  const loadOneSignalDebug = useCallback((signal?: AbortSignal) => {
+    const requestId = ++oneSignalRequestIdRef.current;
+    return fetchOneSignalDebug(signal).then((next) => {
+      if (signal?.aborted || requestId !== oneSignalRequestIdRef.current) return;
+      if (next.subscription_id && previousSubscriptionIdRef.current !== next.subscription_id) {
+        setPushTestSubscriptionId(next.subscription_id);
+      }
+      previousSubscriptionIdRef.current = next.subscription_id;
+      setOneSignalDebug(next);
+    }).catch((e) => {
+      if (!signal?.aborted && requestId === oneSignalRequestIdRef.current) showToast(String(e), "error");
+    }).finally(() => {
+      if (!signal?.aborted && requestId === oneSignalRequestIdRef.current) setBusyOneSignalDebug(false);
+    });
+  }, [fetchOneSignalDebug, showToast]);
 
   useEffect(() => {
-    loadOneSignalDebug();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.primaryEmailAddress?.emailAddress]);
-
-  useEffect(() => {
-    if (!oneSignalDebug?.subscription_id) return;
-    setPushTestSubscriptionId(oneSignalDebug.subscription_id);
-  }, [oneSignalDebug?.subscription_id]);
+    const controller = new AbortController();
+    void loadOneSignalDebug(controller.signal);
+    return () => controller.abort();
+  }, [loadOneSignalDebug]);
 
   const onGenerate = async (e: FormEvent) => {
     e.preventDefault();
@@ -503,6 +514,7 @@ export default function DebugDigestsPage() {
       });
       setPushTestResult(res);
       showToast("Push test sent", "success");
+      setBusyOneSignalDebug(true);
       await loadOneSignalDebug();
     } catch (e) {
       setError(String(e));
@@ -658,6 +670,7 @@ export default function DebugDigestsPage() {
       });
       setSearchBackfillResult(res);
       showToast(t("debug.searchBackfill.runDone"), "success");
+      setBusySearchBackfillRuns(true);
       await loadSearchBackfillRuns();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -681,6 +694,7 @@ export default function DebugDigestsPage() {
       }
       const data = text ? (JSON.parse(text) as SearchBackfillClearResponse) : { ok: true, deleted_count: 0 };
       showToast(t("debug.searchBackfill.clearDone").replace("{{count}}", String(data.deleted_count)), "success");
+      setBusySearchBackfillRuns(true);
       await loadSearchBackfillRuns();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -811,7 +825,7 @@ export default function DebugDigestsPage() {
             <h2 className="text-sm font-semibold text-[var(--color-editorial-ink)]">OneSignal Debug</h2>
             <button
               type="button"
-              onClick={loadOneSignalDebug}
+              onClick={() => { setBusyOneSignalDebug(true); void loadOneSignalDebug(); }}
               disabled={busyOneSignalDebug}
               className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
           >
@@ -1319,7 +1333,7 @@ export default function DebugDigestsPage() {
             </button>
             <button
               type="button"
-              onClick={() => void loadSearchBackfillRuns()}
+              onClick={() => { setBusySearchBackfillRuns(true); void loadSearchBackfillRuns(); }}
               disabled={busySearchBackfillRuns}
               className="rounded-full border border-[var(--color-editorial-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
             >

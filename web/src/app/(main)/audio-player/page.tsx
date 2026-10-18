@@ -34,7 +34,7 @@ export default function SummaryAudioPlayerPage() {
   const viewQuery = searchParams.get("view");
   const autoStartedQueueRef = useRef<string | null>(null);
   const queueStartInFlightRef = useRef<string | null>(null);
-  const [showPreprocessedText, setShowPreprocessedText] = useState(false);
+  const [preprocessedDisclosure, setPreprocessedDisclosure] = useState({ key: "", expanded: false });
   const settingsQuery = useQuery({
     ...settingsQueryOptions(),
   });
@@ -42,6 +42,12 @@ export default function SummaryAudioPlayerPage() {
   const summaryAudioSettingsLoaded = settingsQuery.isSuccess;
   const summaryAudioPlaybackBlocked = summaryAudioSettingsLoaded && !summaryAudioReadiness.ready;
   const queueSignature = queueKind === "view" ? `view:${viewQuery ?? ""}` : queueKind;
+  const disclosureKey = JSON.stringify([queueKind, viewQuery, player.summaryQueue.currentItemID]);
+  const showPreprocessedText = preprocessedDisclosure.key === disclosureKey && preprocessedDisclosure.expanded;
+
+  if (preprocessedDisclosure.key !== disclosureKey) {
+    setPreprocessedDisclosure({ key: disclosureKey, expanded: false });
+  }
 
   const requestQueueStart = useEffectEvent(async () => {
     if (!summaryAudioSettingsLoaded) {
@@ -79,16 +85,11 @@ export default function SummaryAudioPlayerPage() {
   useEffect(() => {
     autoStartedQueueRef.current = null;
     queueStartInFlightRef.current = null;
-    setShowPreprocessedText(false);
   }, [queueKind, viewQuery]);
 
   useEffect(() => {
-    setShowPreprocessedText(false);
-  }, [player.summaryQueue.currentItemID]);
-
-  useEffect(() => {
     void requestQueueStart();
-  }, [queueKind, requestQueueStart, summaryAudioSettingsLoaded, summaryAudioReadiness.ready]);
+  }, [queueKind, viewQuery, summaryAudioSettingsLoaded, summaryAudioReadiness.ready]);
 
   const detail = player.summaryQueue.currentItemDetail;
   const hasQueuedItem = player.summaryQueue.queue.length > 0 || Boolean(player.summaryQueue.currentItemID);
@@ -192,7 +193,7 @@ export default function SummaryAudioPlayerPage() {
                 <div className="rounded-[var(--radius-card)] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)]">
                   <button
                     type="button"
-                    onClick={() => setShowPreprocessedText((prev) => !prev)}
+                    onClick={() => setPreprocessedDisclosure({ key: disclosureKey, expanded: !showPreprocessedText })}
                     aria-expanded={showPreprocessedText}
                     className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                   >

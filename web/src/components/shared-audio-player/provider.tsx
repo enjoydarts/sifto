@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,9 +37,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const [audioBriefing, setAudioBriefing] = useState<SharedAudioBriefingPayload | null>(null);
 
   const playback = useAudioPlayback();
+  const { audioRef } = playback;
 
   const modeRef = useRef(mode);
-  modeRef.current = mode;
 
   const settingsQuery = useQuery({
     ...settingsQueryOptions(),
@@ -57,10 +58,6 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const currentTimeGetterRef = useRef<() => number>(() => 0);
   const durationGetterRef = useRef<() => number>(() => 0);
 
-  audioBriefingGetterRef.current = () => audioBriefing;
-  currentTimeGetterRef.current = () => playback.currentTimeSec;
-  durationGetterRef.current = () => playback.durationSec;
-
   const session = useAudioSession(
     () => modeRef.current,
     () => summaryQueueGetterRef.current(),
@@ -71,7 +68,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   const queueHook = useAudioQueue(
     {
-      audioRef: playback.audioRef,
+      audioRef,
       currentAudioRef: playback.currentAudioRef,
       stoppingPlaybackRef: playback.stoppingPlaybackRef,
       setPlaybackState: playback.setPlaybackState,
@@ -84,17 +81,22 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       persistRemoteSession: session.persistRemoteSession,
       interruptRemoteSessionIfNeeded: session.interruptRemoteSessionIfNeeded,
       createSummaryPlaybackSession: session.createSummaryPlaybackSession,
-      remoteSessionIDRef: session.remoteSessionIDRef,
-      lastPersistedPositionSecRef: session.lastPersistedPositionSecRef,
+      resetRemoteSession: session.resetRemoteSession,
     },
-    () => modeRef.current,
+    mode,
     () => summaryAudioSettingsLoaded,
     () => summaryAudioConfigured,
     () => playback.durationSec,
     () => playback.currentTimeSec,
   );
 
-  summaryQueueGetterRef.current = () => queueHook.summaryQueue;
+  useLayoutEffect(() => {
+    modeRef.current = mode;
+    audioBriefingGetterRef.current = () => audioBriefing;
+    currentTimeGetterRef.current = () => playback.currentTimeSec;
+    durationGetterRef.current = () => playback.durationSec;
+    summaryQueueGetterRef.current = () => queueHook.summaryQueue;
+  }, [audioBriefing, mode, playback.currentTimeSec, playback.durationSec, queueHook.summaryQueue]);
 
   const requestSummaryAutoPlay = useEffectEvent(() => {
     void (async () => {
@@ -122,7 +124,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       queueHook.summaryPlaybackPreparingRef.current
     ) return;
     requestSummaryAutoPlay();
-  }, [mode, playback.playbackState, requestSummaryAutoPlay, summaryAudioConfigured, summaryAudioSettingsLoaded, queueHook.summaryQueue.currentItemID, queueHook.summaryQueue.queue]);
+  }, [mode, playback.playbackState, summaryAudioConfigured, summaryAudioSettingsLoaded, queueHook.summaryPlaybackPreparingRef, queueHook.summaryQueue.currentItemID, queueHook.summaryQueue.queue]);
 
   async function startSummaryQueuePlayback(
     queueKind: SummaryAudioQueueKind,
@@ -139,12 +141,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }
 
   async function startAudioBriefingPlayback(payload: SharedAudioBriefingPayload) {
-    const audio = playback.audioRef.current;
+    const audio = audioRef.current;
     if (!audio) return;
     await session.interruptRemoteSessionIfNeeded();
     await queueHook.stopPlaybackInternal();
-    session.remoteSessionIDRef.current = null;
-    session.lastPersistedPositionSecRef.current = 0;
+    session.resetRemoteSession();
     setMode("audio_briefing");
     setExpanded(false);
     queueHook.setSummaryQueue(createEmptySummaryQueue());
@@ -178,7 +179,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }
 
   async function resumePlayback() {
-    const audio = playback.audioRef.current;
+    const audio = audioRef.current;
     if (!audio) return;
     if (mode === "summary_queue") {
       if (!playback.currentAudioRef.current?.itemID || !audio.src) {
@@ -198,11 +199,8 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   async function stopPlayback() {
     await session.persistRemoteSession("interrupt");
     await queueHook.stopPlaybackInternal();
-    queueHook.readProgressSecRef.current = new Map();
-    queueHook.readProgressLastStartedAtRef.current = null;
-    queueHook.readProgressActiveItemIDRef.current = null;
-    session.remoteSessionIDRef.current = null;
-    session.lastPersistedPositionSecRef.current = 0;
+    queueHook.resetReadProgress();
+    session.resetRemoteSession();
     setMode(null);
     queueHook.setSummaryQueue(createEmptySummaryQueue());
     setAudioBriefing(null);
@@ -227,12 +225,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         );
       },
       async (payload, offsetSec) => {
-        const audio = playback.audioRef.current;
+        const audio = audioRef.current;
         if (!audio) return;
         await session.interruptRemoteSessionIfNeeded();
         await queueHook.stopPlaybackInternal();
-        session.remoteSessionIDRef.current = null;
-        session.lastPersistedPositionSecRef.current = 0;
+        session.resetRemoteSession();
         setMode("audio_briefing");
         setExpanded(false);
         queueHook.setSummaryQueue(createEmptySummaryQueue());
@@ -270,16 +267,13 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   const handleAudioPlay = useEffectEvent(() => {
     playback.setPlaybackState("playing");
-    if (mode === "summary_queue" && queueHook.summaryQueue.currentItemID && !queueHook.markedReadIDsRef.current.has(queueHook.summaryQueue.currentItemID)) {
-      queueHook.readProgressActiveItemIDRef.current = queueHook.summaryQueue.currentItemID;
-      queueHook.readProgressLastStartedAtRef.current = Date.now();
-    }
+    if (mode === "summary_queue") queueHook.startReadProgress(queueHook.summaryQueue.currentItemID);
     void session.persistRemoteSession("update");
   });
 
   const handleAudioPause = useEffectEvent(() => {
     if (playback.stoppingPlaybackRef.current) return;
-    if (isNaturalEndingPause(playback.audioRef.current)) return;
+    if (isNaturalEndingPause(audioRef.current)) return;
     if (playback.playbackState !== "idle" && playback.playbackState !== "finished") {
       playback.setPlaybackState("paused");
     }
@@ -289,7 +283,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   const handleAudioTimeUpdate = useEffectEvent(() => {
     if (playback.stoppingPlaybackRef.current) return;
-    const audio = playback.audioRef.current;
+    const audio = audioRef.current;
     if (!audio) return;
     playback.setCurrentTimeSec(audio.currentTime || 0);
     playback.setDurationSec(resolvedAudioDuration(audio));
@@ -321,7 +315,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   });
 
   useEffect(() => {
-    const audio = playback.audioRef.current;
+    const audio = audioRef.current;
     if (!audio) return;
     const onPlay = () => handleAudioPlay();
     const onPause = () => handleAudioPause();
@@ -341,7 +335,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       audio.removeEventListener("loadedmetadata", onTimeUpdate);
       audio.removeEventListener("durationchange", onTimeUpdate);
     };
-  }, []);
+  }, [audioRef]);
 
   const display = useMemo<SharedAudioDisplayMeta>(() => {
     if (mode === "summary_queue") {
@@ -392,7 +386,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   return (
     <SharedAudioPlayerContext.Provider value={value}>
       {children}
-      <audio ref={playback.audioRef} preload="auto" className="hidden" />
+      <audio ref={audioRef} preload="auto" className="hidden" />
     </SharedAudioPlayerContext.Provider>
   );
 }

@@ -2,6 +2,7 @@
 
 import { type ReactNode } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { ItemLLMExecutionAttempt, ItemQualityEvaluation, NavigatorLLM } from "@/lib/api";
 import { qualityEvaluationRoute } from "./quality-evaluation-route";
@@ -328,6 +329,11 @@ function QualityEvaluationCards({
 }
 
 export default function ItemDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  return <ItemDetailContent key={id} />;
+}
+
+function ItemDetailContent() {
   const {
     t,
     locale,

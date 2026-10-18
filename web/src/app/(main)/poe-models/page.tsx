@@ -51,7 +51,7 @@ export default function PoeModelsPage() {
   const [selectedModel, setSelectedModel] = useState<PoeModelSnapshot | null>(null);
   const [activeSection, setActiveSection] = useState<PoeSection>("overview");
   const [usageData, setUsageData] = useState<PoeUsageResponse | null>(null);
-  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageLoading, setUsageLoading] = useState(true);
   const [usageSyncing, setUsageSyncing] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [usageRange, setUsageRange] = useState("30d");
@@ -72,28 +72,43 @@ export default function PoeModelsPage() {
   const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
   const removedModels = useMemo(() => (Array.isArray(data?.removed_models) ? data?.removed_models : []), [data?.removed_models]);
 
-  const loadUsage = useCallback(async () => {
-    setUsageLoading(true);
+  const loadUsage = useCallback(async (signal?: AbortSignal) => {
     try {
       const next = await api.getPoeUsage(usageRange, usageEntryLimit);
+      if (signal?.aborted) return;
       setUsageData(next);
       setUsageError(null);
     } catch (e) {
-      setUsageError(String(e));
+      if (!signal?.aborted) setUsageError(String(e));
     } finally {
-      setUsageLoading(false);
+      if (!signal?.aborted) setUsageLoading(false);
     }
   }, [usageEntryLimit, usageRange]);
 
   useEffect(() => {
     if (activeSection !== "usage") return;
-    loadUsage();
-  }, [activeSection, loadUsage]);
+    let active = true;
+    api.getPoeUsage(usageRange, usageEntryLimit).then(
+      (next) => {
+        if (!active) return;
+        setUsageData(next);
+        setUsageError(null);
+        setUsageLoading(false);
+      },
+      (e) => {
+        if (!active) return;
+        setUsageError(String(e));
+        setUsageLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, [activeSection, usageEntryLimit, usageRange]);
 
   const handleUsageSync = useCallback(async () => {
     setUsageSyncing(true);
     try {
       await api.syncPoeUsage();
+      setUsageLoading(true);
       await loadUsage();
       showToast(t("poeModels.usage.syncCompleted"), "success");
     } catch (e) {
@@ -155,7 +170,7 @@ export default function PoeModelsPage() {
       return result;
     });
     return arr;
-  }, [filtered, sortKey]);
+  }, [filtered, sortKey, t]);
 
   const sortedRemoved = useMemo(() => {
     const arr = [...filteredRemoved];
@@ -172,7 +187,7 @@ export default function PoeModelsPage() {
       return result;
     });
     return arr;
-  }, [filteredRemoved, sortKey]);
+  }, [filteredRemoved, sortKey, t]);
 
   const latestSummary = data?.latest_change_summary ?? null;
   const latestRunLabel = data?.latest_run?.finished_at ? new Date(data.latest_run.finished_at).toLocaleString() : t("poeModels.latestRunEmpty");
@@ -216,7 +231,7 @@ export default function PoeModelsPage() {
       syncingLabel={t("poeModels.syncing")}
       sections={sections}
       activeSection={activeSection}
-      onSectionChange={(k) => setActiveSection(k as PoeSection)}
+      onSectionChange={(k) => { if (k === "usage" && activeSection !== "usage") setUsageLoading(true); setActiveSection(k as PoeSection); }}
       statusContent={statusContent}
       loading={loading}
       error={error}
@@ -426,7 +441,7 @@ export default function PoeModelsPage() {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--color-editorial-ink-soft)]">
               <div className="flex flex-wrap items-center gap-2">
                 <span>{t("poeModels.usage.range")}</span>
-                <select value={usageRange} onChange={(e) => setUsageRange(e.target.value)} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none">
+                <select value={usageRange} onChange={(e) => { setUsageLoading(true); setUsageRange(e.target.value); }} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none">
                   {(usageData?.available_ranges ?? [{ key: "today" }, { key: "yesterday" }, { key: "7d" }, { key: "14d" }, { key: "30d" }, { key: "mtd" }, { key: "prev_month" }]).map((option) => (
                     <option key={option.key} value={option.key}>{t(`poeModels.usage.range.${option.key}`)}</option>
                   ))}
@@ -434,7 +449,7 @@ export default function PoeModelsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span>{t("poeModels.usage.entryLimit")}</span>
-                <select value={usageEntryLimit} onChange={(e) => setUsageEntryLimit(Number(e.target.value))} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none">
+                <select value={usageEntryLimit} onChange={(e) => { setUsageLoading(true); setUsageEntryLimit(Number(e.target.value)); }} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none">
                   {[50, 100, 200].map((value) => (<option key={value} value={value}>{value}</option>))}
                 </select>
               </div>

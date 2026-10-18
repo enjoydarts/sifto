@@ -43,12 +43,6 @@ export default function FishModelsPage() {
   const loadBrowse = useCallback(
     async (mode: "replace" | "append", nextPage: number, nextTab: FishBrowseSort, nextQuery: string) => {
       const requestID = ++requestSeqRef.current;
-      if (mode === "replace") {
-        setLoadingInitial(true);
-        setError(null);
-      } else {
-        setLoadingMore(true);
-      }
       try {
         const resp: FishBrowseResponse = await api.browseFishModels({
           sort: nextTab,
@@ -89,19 +83,45 @@ export default function FishModelsPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setQuery(queryInput.trim());
+      const nextQuery = queryInput.trim();
+      if (nextQuery === query) return;
+      setLoadingInitial(true);
+      setLoadingMore(false);
+      setError(null);
+      setQuery(nextQuery);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [queryInput]);
+  }, [queryInput, query]);
 
   useEffect(() => {
-    void loadBrowse("replace", 1, tab, query);
-  }, [loadBrowse, query, tab]);
+    let active = true;
+    const requestID = ++requestSeqRef.current;
+    api.browseFishModels({ sort: tab, query, page: 1, pageSize: 24 }).then(
+      (resp) => {
+        if (!active || requestID !== requestSeqRef.current) return;
+        setItems(resp.items);
+        setPage(resp.page);
+        setHasMore(resp.has_more);
+        setLoadingInitial(false);
+        setLoadingMore(false);
+      },
+      (err) => {
+        if (!active || requestID !== requestSeqRef.current) return;
+        setItems([]);
+        setHasMore(false);
+        setError(String(err));
+        setLoadingInitial(false);
+        setLoadingMore(false);
+      },
+    );
+    return () => { active = false; };
+  }, [query, tab]);
 
-  async function handleLoadMore() {
+  const handleLoadMore = useCallback(async () => {
     if (loadingInitial || loadingMore || !hasMore) return;
+    setLoadingMore(true);
     await loadBrowse("append", page + 1, tab, query);
-  }
+  }, [hasMore, loadBrowse, loadingInitial, loadingMore, page, query, tab]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -119,7 +139,7 @@ export default function FishModelsPage() {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, loadingInitial, loadingMore, page, tab, query]);
+  }, [handleLoadMore, hasMore, loadingInitial, loadingMore]);
 
   const selectedModelTags = useMemo(() => selectedModel?.tags ?? [], [selectedModel]);
 
@@ -137,7 +157,13 @@ export default function FishModelsPage() {
                 <button
                   key={item}
                   type="button"
-                  onClick={() => setTab(item)}
+                  onClick={() => {
+                    if (item === tab) return;
+                    setLoadingInitial(true);
+                    setLoadingMore(false);
+                    setError(null);
+                    setTab(item);
+                  }}
                   className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                     tab === item
                       ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"

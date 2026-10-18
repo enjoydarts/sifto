@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion, SourcesDailyOverview } from "@/lib/api";
+import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -86,12 +86,7 @@ export function useSourcesPageData() {
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
   const [sourceItemStatsByID, setSourceItemStatsByID] = useState<Record<string, SourceItemStats>>({});
-  const [sourceDailyStatsByID, setSourceDailyStatsByID] = useState<Record<string, SourceDailyStats>>({});
   const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
-  const [sourcesDailyOverview, setSourcesDailyOverview] = useState<SourcesDailyOverview | null>(null);
-  const [loadingDailyStats, setLoadingDailyStats] = useState(false);
-  const [hasLoadedDailyStats, setHasLoadedDailyStats] = useState(false);
-  const [dailyStatsError, setDailyStatsError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,18 +118,44 @@ export function useSourcesPageData() {
   const [exportingOPML, setExportingOPML] = useState(false);
   const [importingOPML, setImportingOPML] = useState(false);
   const [importingInoreader, setImportingInoreader] = useState(false);
-  const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [sourceNavigator, setSourceNavigator] = useState<Awaited<ReturnType<typeof api.getSourceNavigator>>["navigator"] | null>(null);
   const [sourceNavigatorLoading, setSourceNavigatorLoading] = useState(false);
   const [sourceNavigatorError, setSourceNavigatorError] = useState<string | null>(null);
   const [sourceNavigatorOpen, setSourceNavigatorOpen] = useState(false);
   const opmlInputRef = useRef<HTMLInputElement | null>(null);
   const loadSequenceRef = useRef(0);
-  const dailyStatsSequenceRef = useRef(0);
   const settingsQuery = useQuery({
     ...settingsQueryOptions(),
     placeholderData: (prev) => prev,
   });
+  const navigatorPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
+  const dailyStatsQuery = useQuery({
+    queryKey: ["sources-daily-stats", 30],
+    queryFn: () => api.getSourceDailyStats(30),
+    staleTime: Infinity,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+  const sourceDailyStatsByID = useMemo(() => {
+    const next: Record<string, SourceDailyStats> = {};
+    for (const row of dailyStatsQuery.data?.items ?? []) next[row.source_id] = row;
+    return next;
+  }, [dailyStatsQuery.data]);
+  const sourcesDailyOverview = dailyStatsQuery.data?.overview ?? null;
+  const loadingDailyStats = dailyStatsQuery.isFetching;
+  const dailyStatsError = !loadingDailyStats && dailyStatsQuery.error ? String(dailyStatsQuery.error) : null;
+  const { refetch: refetchDailyStats } = dailyStatsQuery;
+  const loadDailyStats = useCallback(async () => {
+    await refetchDailyStats();
+  }, [refetchDailyStats]);
+
+  useEffect(() => {
+    if (dailyStatsError && !loadingDailyStats) {
+      showToast(`${t("common.error")}: ${dailyStatsError}`, "error");
+    }
+  }, [dailyStatsError, loadingDailyStats, showToast, t]);
   const pageSize = 10;
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const normalizeSuggestionReason = useCallback((value: string | null | undefined) => {
@@ -187,16 +208,14 @@ export function useSourcesPageData() {
     [normalizeSuggestionStringList, normalizeSuggestionText]
   );
 
-  const load = useCallback(async () => {
+  const loadSources = useCallback(() => {
     const seq = ++loadSequenceRef.current;
-    try {
-      setSuggestionsError(null);
-      const [data, stats, health, optimization] = await Promise.all([
-        api.getSources(),
-        api.getSourceItemStats().catch(() => ({ items: [] as SourceItemStats[] })),
-        api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
-        api.getSourceOptimization().catch(() => ({ items: [] as SourceOptimizationItem[] })),
-      ]);
+    return Promise.all([
+      api.getSources(),
+      api.getSourceItemStats().catch(() => ({ items: [] as SourceItemStats[] })),
+      api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
+      api.getSourceOptimization().catch(() => ({ items: [] as SourceOptimizationItem[] })),
+    ]).then(([data, stats, health, optimization]) => {
       if (seq !== loadSequenceRef.current) return;
       setSources(data ?? []);
       const statsMap: Record<string, SourceItemStats> = {};
@@ -207,51 +226,24 @@ export function useSourcesPageData() {
       setSourceHealthByID(healthMap);
       setSourceOptimization(optimization.items ?? []);
       setError(null);
-    } catch (e) {
+    }).catch((e) => {
       if (seq !== loadSequenceRef.current) return;
       setError(String(e));
-    } finally {
+    }).finally(() => {
       if (seq !== loadSequenceRef.current) return;
       setLoading(false);
-    }
+    });
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const load = useCallback(async () => {
+    setSuggestionsError(null);
+    await loadSources();
+  }, [loadSources]);
 
   useEffect(() => {
-    setNavigatorPersona(settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor");
-  }, [settingsQuery.data]);
-
-  const loadDailyStats = useCallback(async () => {
-    const seq = ++dailyStatsSequenceRef.current;
-    setLoadingDailyStats(true);
-    setDailyStatsError(null);
-    try {
-      const data = await api.getSourceDailyStats(30);
-      if (seq !== dailyStatsSequenceRef.current) return;
-      const next: Record<string, SourceDailyStats> = {};
-      for (const row of data.items ?? []) next[row.source_id] = row;
-      setSourceDailyStatsByID(next);
-      setSourcesDailyOverview(data.overview ?? null);
-    } catch (e) {
-      if (seq !== dailyStatsSequenceRef.current) return;
-      const message = String(e);
-      setDailyStatsError(message);
-      showToast(`${t("common.error")}: ${message}`, "error");
-    } finally {
-      if (seq !== dailyStatsSequenceRef.current) return;
-      setHasLoadedDailyStats(true);
-      setLoadingDailyStats(false);
-    }
-  }, [showToast, t]);
-
-  useEffect(() => {
-    if (activeSection === "overview" && !loadingDailyStats && !hasLoadedDailyStats) {
-      void loadDailyStats();
-    }
-  }, [activeSection, loadDailyStats, loadingDailyStats, hasLoadedDailyStats]);
+    void loadSources();
+    return () => { loadSequenceRef.current += 1; };
+  }, [loadSources]);
 
   const registerSource = async (feedUrl: string) => {
     if (adding) return;

@@ -152,16 +152,17 @@ export function useSettingsApiKeys({
   // llmProvidersFromData is now actively used to produce data-driven cards (see below)
 
 
+  const azureSpeechAPIKeyInput = getInput("azurespeech");
   const submitAzureSpeechConfig = useCallback(async (event: FormEvent) => {
     event.preventDefault();
     setSavingAzureSpeechConfig(true);
     try {
-      const apiKey = getInput("azurespeech").trim();
+      const apiKey = azureSpeechAPIKeyInput.trim();
       const region = azureSpeechRegionInput.trim();
       if (!apiKey) throw new Error(t("settings.error.enterApiKey"));
       if (!region) throw new Error(t("settings.azureSpeechRegionRequired"));
       await api.setAzureSpeechConfig(apiKey, region);
-      setInputFor("azurespeech")("");
+      setInputs((previous) => ({ ...previous, azurespeech: "" }));
       await reload();
       showToast(t("settings.toast.azureSpeechSaved"), "success");
     } catch (error) {
@@ -169,7 +170,7 @@ export function useSettingsApiKeys({
     } finally {
       setSavingAzureSpeechConfig(false);
     }
-  }, [getInput("azurespeech"), azureSpeechRegionInput, reload, showToast, t]);
+  }, [azureSpeechAPIKeyInput, azureSpeechRegionInput, reload, showToast, t]);
 
   const deleteAzureSpeechConfig = useCallback(async () => {
     if (!(await confirm({

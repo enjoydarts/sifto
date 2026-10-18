@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { NotificationPriorityRule } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -10,12 +10,17 @@ interface OneSignalSettingsProps {
   onSaveRule?: (rule: NotificationPriorityRule) => Promise<void>;
 }
 
+const subscribeToSupport = () => () => {};
+const getPushSupport = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+const getServerPushSupport = () => false;
+
 export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSettingsProps) {
   const { t } = useI18n();
   const { showToast } = useToast();
-  const [supported, setSupported] = useState(false);
+  const supported = useSyncExternalStore(subscribeToSupport, getPushSupport, getServerPushSupport);
   const [enabled, setEnabled] = useState(false);
-  const [permission, setPermission] = useState<string>("default");
+  const [permissionOverride, setPermission] = useState<string | null>(null);
+  const permission = permissionOverride ?? (supported ? Notification.permission : "default");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [sensitivity, setSensitivity] = useState(rule?.sensitivity ?? "medium");
@@ -26,7 +31,10 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
   const [reviewEnabled, setReviewEnabled] = useState(rule?.review_enabled ?? true);
   const [goalMatchEnabled, setGoalMatchEnabled] = useState(rule?.goal_match_enabled ?? true);
 
-  useEffect(() => {
+  const ruleValues = JSON.stringify([rule?.briefing_enabled, rule?.daily_cap, rule?.goal_match_enabled, rule?.immediate_enabled, rule?.review_enabled, rule?.sensitivity, rule?.theme_weight]);
+  const [previousRuleValues, setPreviousRuleValues] = useState(ruleValues);
+  if (previousRuleValues !== ruleValues) {
+    setPreviousRuleValues(ruleValues);
     setSensitivity(rule?.sensitivity ?? "medium");
     setDailyCap(rule?.daily_cap ?? 3);
     setThemeWeight(rule?.theme_weight ?? 1);
@@ -34,14 +42,7 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
     setBriefingEnabled(rule?.briefing_enabled ?? true);
     setReviewEnabled(rule?.review_enabled ?? true);
     setGoalMatchEnabled(rule?.goal_match_enabled ?? true);
-  }, [rule?.briefing_enabled, rule?.daily_cap, rule?.goal_match_enabled, rule?.immediate_enabled, rule?.review_enabled, rule?.sensitivity, rule?.theme_weight]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const canPush = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
-    setSupported(canPush);
-    setPermission(canPush ? Notification.permission : "default");
-  }, []);
+  }
 
   useEffect(() => {
     if (!supported) return;

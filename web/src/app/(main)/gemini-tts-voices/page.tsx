@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { api, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
@@ -15,22 +15,23 @@ export default function GeminiTTSVoicesPage() {
   const [data, setData] = useState<GeminiTTSVoicesResponse | null>(null);
   const [selectedVoiceName, setSelectedVoiceName] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const next = await api.getGeminiTTSVoices();
-      setData(next);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let active = true;
+    api.getGeminiTTSVoices().then(
+      (next) => {
+        if (!active) return;
+        setData(next);
+        setError(null);
+        setLoading(false);
+      },
+      (e) => {
+        if (!active) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, []);
 
   const filteredVoices = useMemo(() => {
     const q = query.trim().toLowerCase();

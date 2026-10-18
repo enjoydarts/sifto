@@ -1,8 +1,8 @@
 "use client";
 
-import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, ArrowLeft, ArrowRight, ArrowUp, ExternalLink } from "lucide-react";
 import { api, Item, TriageBundle, TriageQueueEntry, TriageQueueResponse } from "@/lib/api";
@@ -24,6 +24,50 @@ type TriageMetricEvent = {
 
 const TRIAGE_METRICS_KEY = "triage:metrics:v1";
 const TRIAGE_METRICS_MAX = 300;
+const TRIAGE_METRICS_EVENT = "triage:metrics:updated";
+const emptyMetricsSnapshot = { raw: null as string | null, observedAt: 0 };
+let metricsSnapshot: typeof emptyMetricsSnapshot | null = null;
+
+function getMetricsSnapshot() {
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(TRIAGE_METRICS_KEY);
+  } catch {
+    return metricsSnapshot ?? emptyMetricsSnapshot;
+  }
+  if (!metricsSnapshot || raw !== metricsSnapshot.raw) {
+    metricsSnapshot = { raw, observedAt: Date.now() };
+  }
+  return metricsSnapshot;
+}
+
+function parseMetricEvents(raw: string | null): TriageMetricEvent[] {
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((v) => v && typeof v.ts === "number" && typeof v.elapsed_ms === "number" && ["read", "favorite", "later"].includes(v.action))
+      .slice(-TRIAGE_METRICS_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function subscribeToMetrics(onChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === TRIAGE_METRICS_KEY || event.key === null) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(TRIAGE_METRICS_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(TRIAGE_METRICS_EVENT, onChange);
+  };
+}
+
+function getServerMetricsSnapshot() {
+  return emptyMetricsSnapshot;
+}
 
 function rateTone(rate: number) {
   if (rate >= 80) return "text-green-700";
@@ -61,12 +105,18 @@ export default function TriagePage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [triageMode, setTriageMode] = useState<TriageMode>("quick");
+  const triageMode: TriageMode = searchParams.get("mode") === "all" ? "all" : "quick";
   const [actioned, setActioned] = useState<Record<string, true>>({});
   const [updating, setUpdating] = useState(false);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
-  const [metricEvents, setMetricEvents] = useState<TriageMetricEvent[]>([]);
+  const storedMetrics = useSyncExternalStore(subscribeToMetrics, getMetricsSnapshot, getServerMetricsSnapshot);
+  const [sessionMetrics, setSessionMetrics] = useState<typeof emptyMetricsSnapshot | null>(null);
+  const [metricsOpenedAt] = useState(() => Date.now());
+  const activeMetrics = sessionMetrics && sessionMetrics.observedAt >= storedMetrics.observedAt ? sessionMetrics : storedMetrics;
+  const metricsReferenceTime = Math.max(metricsOpenedAt, activeMetrics.observedAt);
+  const metricEvents = useMemo(() => parseMetricEvents(activeMetrics.raw), [activeMetrics.raw]);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [swipeExit, setSwipeExit] = useState<ActionType | null>(null);
@@ -74,34 +124,7 @@ export default function TriagePage() {
   const [bundleExpanded, setBundleExpanded] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const currentShownAtRef = useRef<{ id: string; shownAtMs: number } | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const applyFromUrl = () => {
-      const mode = new URLSearchParams(window.location.search).get("mode");
-      setTriageMode(mode === "all" ? "all" : "quick");
-    };
-    applyFromUrl();
-    window.addEventListener("popstate", applyFromUrl);
-    return () => window.removeEventListener("popstate", applyFromUrl);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(TRIAGE_METRICS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as TriageMetricEvent[];
-      if (!Array.isArray(parsed)) return;
-      setMetricEvents(
-        parsed
-          .filter((v) => v && typeof v.ts === "number" && typeof v.elapsed_ms === "number" && typeof v.action === "string")
-          .slice(-TRIAGE_METRICS_MAX)
-      );
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
+  const swipeTimerRef = useRef<number | null>(null);
 
   const settingsQuery = useQuery({
     ...settingsQueryOptions(),
@@ -136,6 +159,16 @@ export default function TriagePage() {
   const progress = queue.length > 0 ? Math.round((done / queue.length) * 100) : 0;
   const currentLead = current ? leadItem(current) : null;
   const currentBundle = current?.entry_type === "bundle" ? current.bundle ?? null : null;
+  const currentEntryID = current ? entryKey(current) : "";
+  const [gestureEntryID, setGestureEntryID] = useState(currentEntryID);
+
+  if (gestureEntryID !== currentEntryID) {
+    setGestureEntryID(currentEntryID);
+    setDragOffset({ x: 0, y: 0 });
+    setDragging(false);
+    setSwipeExit(null);
+    setBundleExpanded(false);
+  }
 
   const currentDetailQuery = useQuery({
     queryKey: ["item-detail", currentLead?.id ?? ""],
@@ -145,14 +178,12 @@ export default function TriagePage() {
   });
 
   useEffect(() => {
-    const id = current ? entryKey(current) : "";
-    if (!id) return;
-    currentShownAtRef.current = { id, shownAtMs: Date.now() };
-    setDragOffset({ x: 0, y: 0 });
-    setDragging(false);
-    setSwipeExit(null);
-    setBundleExpanded(false);
-  }, [current]);
+    currentShownAtRef.current = currentEntryID ? { id: currentEntryID, shownAtMs: Date.now() } : null;
+    startRef.current = null;
+    return () => {
+      if (swipeTimerRef.current !== null) window.clearTimeout(swipeTimerRef.current);
+    };
+  }, [currentEntryID]);
 
   const recordMetric = useCallback((entryID: string, action: ActionType) => {
     const shown = currentShownAtRef.current;
@@ -164,16 +195,24 @@ export default function TriagePage() {
       action,
       elapsed_ms: elapsed,
     };
-    setMetricEvents((prev) => {
-      const next = [...prev, event].slice(-TRIAGE_METRICS_MAX);
-      try {
-        localStorage.setItem(TRIAGE_METRICS_KEY, JSON.stringify(next));
-      } catch {
-        // ignore quota errors
-      }
-      return next;
+    const persisted = getMetricsSnapshot();
+    setSessionMetrics((previous) => {
+      const latest = previous && previous.observedAt >= persisted.observedAt ? previous : persisted;
+      const next = [...parseMetricEvents(latest.raw), event].slice(-TRIAGE_METRICS_MAX);
+      return { raw: JSON.stringify(next), observedAt: event.ts };
     });
   }, []);
+
+  useEffect(() => {
+    if (!sessionMetrics) return;
+    try {
+      localStorage.setItem(TRIAGE_METRICS_KEY, sessionMetrics.raw ?? "[]");
+      metricsSnapshot = sessionMetrics;
+      window.dispatchEvent(new Event(TRIAGE_METRICS_EVENT));
+    } catch {
+      // Keep in-memory metrics when localStorage rejects a write.
+    }
+  }, [sessionMetrics]);
 
   const applyAction = useCallback(
     async (item: Item, action: ActionType) => {
@@ -242,8 +281,7 @@ export default function TriagePage() {
   );
 
   const metricSummary = useMemo(() => {
-    const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const oneDayAgo = metricsReferenceTime - 24 * 60 * 60 * 1000;
     const recent24h = metricEvents.filter((v) => v.ts >= oneDayAgo);
     const recent20 = metricEvents.slice(-20);
     const avg24hMs =
@@ -272,7 +310,7 @@ export default function TriagePage() {
       within5sRecent,
       counts,
     };
-  }, [metricEvents]);
+  }, [metricsReferenceTime, metricEvents]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -336,7 +374,8 @@ export default function TriagePage() {
     const animateAndApply = (action: ActionType) => {
       setDragging(false);
       setSwipeExit(action);
-      window.setTimeout(() => {
+      swipeTimerRef.current = window.setTimeout(() => {
+        swipeTimerRef.current = null;
         if (current.entry_type === "bundle" && current.bundle) {
           if (action === "read" || action === "later") {
             void applyBundleAction(current.bundle, action);
@@ -384,7 +423,6 @@ export default function TriagePage() {
   const changeMode = useCallback(
     (nextMode: TriageMode) => {
       if (nextMode === triageMode) return;
-      setTriageMode(nextMode);
       setActioned({});
       const next = nextMode === "all" ? "/triage?mode=all" : "/triage";
       router.replace(next, { scroll: false });

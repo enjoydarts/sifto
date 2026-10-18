@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,9 +25,10 @@ export default function ProviderModelSnapshotsPage() {
   const [providerFilter, setProviderFilter] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProviderModelSnapshotListResponse | null>(null);
+  const requestIdRef = useRef(0);
 
-  const load = useCallback(async (nextPage: number, nextQuery: string, nextProvider: string) => {
-    setLoading(true);
+  const load = useCallback(async (nextPage: number, nextQuery: string, nextProvider: string, signal?: AbortSignal) => {
+    const requestId = ++requestIdRef.current;
     try {
       const next = await api.getProviderModelSnapshots({
         q: nextQuery.trim() || undefined,
@@ -35,18 +36,39 @@ export default function ProviderModelSnapshotsPage() {
         limit: PAGE_SIZE,
         offset: (nextPage - 1) * PAGE_SIZE,
       });
+      if (signal?.aborted || requestId !== requestIdRef.current) return;
       setData(next);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      if (!signal?.aborted && requestId === requestIdRef.current) setError(String(e));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted && requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load(page, query, providerFilter);
-  }, [load, page, providerFilter, query]);
+    let active = true;
+    const requestId = ++requestIdRef.current;
+    api.getProviderModelSnapshots({
+      q: query.trim() || undefined,
+      providers: providerFilter ? [providerFilter] : undefined,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    }).then(
+      (next) => {
+        if (!active || requestId !== requestIdRef.current) return;
+        setData(next);
+        setError(null);
+        setLoading(false);
+      },
+      (e) => {
+        if (!active || requestId !== requestIdRef.current) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, [page, providerFilter, query]);
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const providerOptions = useMemo(() => {
@@ -61,6 +83,7 @@ export default function ProviderModelSnapshotsPage() {
     setSyncing(true);
     try {
       const result = await api.syncProviderModelSnapshots();
+      setLoading(true);
       await load(page, query, providerFilter);
       showToast(
         t("providerModelSnapshots.syncCompleted")
@@ -87,6 +110,7 @@ export default function ProviderModelSnapshotsPage() {
               <select
                 value={providerFilter}
                 onChange={(e) => {
+                  setLoading(true);
                   setPage(1);
                   setProviderFilter(e.target.value);
                 }}
@@ -104,6 +128,7 @@ export default function ProviderModelSnapshotsPage() {
                 <input
                   value={query}
                   onChange={(e) => {
+                    setLoading(true);
                     setPage(1);
                     setQuery(e.target.value);
                   }}
@@ -171,7 +196,7 @@ export default function ProviderModelSnapshotsPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                onClick={() => { setLoading(true); setPage((current) => Math.max(1, current - 1)); }}
                 disabled={page <= 1}
                 className="rounded-xl border border-[color:rgba(148,163,184,0.3)] px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -179,7 +204,7 @@ export default function ProviderModelSnapshotsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                onClick={() => { setLoading(true); setPage((current) => Math.min(totalPages, current + 1)); }}
                 disabled={page >= totalPages}
                 className="rounded-xl border border-[color:rgba(148,163,184,0.3)] px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
               >

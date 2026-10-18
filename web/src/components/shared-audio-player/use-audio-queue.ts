@@ -131,14 +131,13 @@ type SessionDeps = {
     excludedItemIDs: string[],
     offsetSec: number,
   ) => Promise<void>;
-  remoteSessionIDRef: React.MutableRefObject<string | null>;
-  lastPersistedPositionSecRef: React.MutableRefObject<number>;
+  resetRemoteSession: () => void;
 };
 
 export function useAudioQueue(
   playback: PlaybackDeps,
   session: SessionDeps,
-  getMode: () => "summary_queue" | "audio_briefing" | null,
+  mode: "summary_queue" | "audio_briefing" | null,
   getSummaryAudioSettingsLoaded: () => boolean,
   getSummaryAudioConfigured: () => boolean,
   getDurationSec: () => number,
@@ -182,48 +181,44 @@ export function useAudioQueue(
       if (!currentSummaryItemID) throw new Error("missing item id");
       return api.getItem(currentSummaryItemID);
     },
-    enabled: getMode() === "summary_queue" && Boolean(currentSummaryItemID),
+    enabled: mode === "summary_queue" && Boolean(currentSummaryItemID),
   });
 
-  const syncDetailToQueue = useEffectEvent(() => {
-    if (getMode() !== "summary_queue") return;
-    const detail = currentSummaryDetailQuery.data ?? null;
-    setSummaryQueue((prev) => {
-      const nextDetail = detail && detail.id === currentSummaryItemID ? detail : null;
-      if (!nextDetail) return prev;
-      const expectedItemID = prev.currentItemID ?? prev.queue[0]?.id ?? null;
-      if (expectedItemID !== currentSummaryItemID) return prev;
-      if (sameSummaryItemDetail(prev.currentItemDetail as ItemDetail | null, nextDetail as ItemDetail | null)) return prev;
-      return { ...prev, currentItemDetail: nextDetail };
-    });
-  });
+  const [lastDetailData, setLastDetailData] = useState<ItemDetail | undefined>(undefined);
+  const [lastQueueData, setLastQueueData] = useState<Item[] | undefined>(undefined);
 
-  useEffect(() => { syncDetailToQueue(); }, [currentSummaryDetailQuery.data, currentSummaryItemID]);
+  // Reconcile query snapshots before committing so consumers never see a stale
+  // item detail or a queue that still needs an effect-driven render to update.
+  if (currentSummaryDetailQuery.data !== lastDetailData) {
+    const detail = currentSummaryDetailQuery.data;
+    setLastDetailData(detail);
+    if (
+      mode === "summary_queue" && detail?.id === currentSummaryItemID &&
+      (summaryQueue.currentItemID ?? summaryQueue.queue[0]?.id ?? null) === currentSummaryItemID &&
+      !sameSummaryItemDetail(summaryQueue.currentItemDetail as ItemDetail | null, detail)
+    ) {
+      setSummaryQueue({ ...summaryQueue, currentItemDetail: detail });
+    }
+  }
 
-  const syncQueueDataToQueue = useEffectEvent(() => {
-    if (getMode() !== "summary_queue") return;
-    const incoming = summaryQueueQuery.data ?? [];
-    if (incoming.length === 0) return;
-    setSummaryQueue((prev) => {
-      if (!prev.queueKind) return prev;
-      const excluded = new Set(prev.excludedItemIDs);
-      const filteredIncoming = incoming.filter((item) => !excluded.has(item.id));
-      if (filteredIncoming.length === 0) return prev;
-      if (prev.queue.length === 0) {
-        if (prev.currentIndex > 0) return prev;
-        return { ...prev, queue: filteredIncoming.slice(0, PLAYBACK_QUEUE_BUFFER_SIZE) };
+  if (summaryQueueQuery.data !== lastQueueData) {
+    const incoming = summaryQueueQuery.data;
+    setLastQueueData(incoming);
+    if (mode === "summary_queue" && summaryQueue.queueKind && incoming?.length) {
+      const excluded = new Set(summaryQueue.excludedItemIDs);
+      const existing = new Set(summaryQueue.queue.map((item) => item.id));
+      const appended = incoming.filter((item) => !excluded.has(item.id) && !existing.has(item.id));
+      if (appended.length && (summaryQueue.queue.length > 0 || summaryQueue.currentIndex === 0)) {
+        setSummaryQueue((prev) => ({
+          ...prev,
+          queue: [...prev.queue, ...appended].slice(0, PLAYBACK_QUEUE_BUFFER_SIZE),
+        }));
       }
-      const existing = new Set(prev.queue.map((item) => item.id));
-      const appended = filteredIncoming.filter((item) => !existing.has(item.id));
-      if (appended.length === 0) return prev;
-      return { ...prev, queue: [...prev.queue, ...appended].slice(0, PLAYBACK_QUEUE_BUFFER_SIZE) };
-    });
-  });
-
-  useEffect(() => { syncQueueDataToQueue(); }, [summaryQueueQuery.data]);
+    }
+  }
 
   const triggerPrefetchIfNeeded = useEffectEvent(() => {
-    if (getMode() !== "summary_queue") return;
+    if (mode !== "summary_queue") return;
     const ps = playback.playbackState;
     if (ps !== "playing" && ps !== "paused" && ps !== "preparing") return;
     if (summaryQueue.queue.length < 2) return;
@@ -254,6 +249,18 @@ export function useAudioQueue(
       readProgressActiveItemIDRef.current = null;
       readProgressLastStartedAtRef.current = null;
     }
+  }
+
+  function resetReadProgress() {
+    readProgressSecRef.current = new Map();
+    readProgressLastStartedAtRef.current = null;
+    readProgressActiveItemIDRef.current = null;
+  }
+
+  function startReadProgress(itemID: string | null) {
+    if (!itemID || markedReadIDsRef.current.has(itemID)) return;
+    readProgressActiveItemIDRef.current = itemID;
+    readProgressLastStartedAtRef.current = Date.now();
   }
 
   async function flushReadProgress(itemID: string | null) {
@@ -447,8 +454,7 @@ export function useAudioQueue(
     const seededQueue = initialItems ?? await fetchSummaryQueue(queueKind, options?.queueQuery, options?.excludedItemIDs);
     await session.interruptRemoteSessionIfNeeded();
     await stopPlaybackInternal();
-    session.remoteSessionIDRef.current = null;
-    session.lastPersistedPositionSecRef.current = 0;
+    session.resetRemoteSession();
     onModeSet("summary_queue");
     onQueueReset();
     markedReadIDsRef.current = new Set();
@@ -507,7 +513,7 @@ export function useAudioQueue(
 
   async function selectSummaryQueueItem(index: number) {
     const currentState = summaryQueueRef.current;
-    if (getMode() !== "summary_queue") return;
+    if (mode !== "summary_queue") return;
     const nextQueue = currentState.queue.slice(index);
     if (nextQueue.length === 0) return;
     await flushReadProgress(currentState.currentItemID);
@@ -532,7 +538,7 @@ export function useAudioQueue(
 
   async function skipToNext() {
     const currentState = summaryQueueRef.current;
-    if (getMode() !== "summary_queue") {
+    if (mode !== "summary_queue") {
       await stopPlaybackInternal();
       return;
     }
@@ -610,7 +616,7 @@ export function useAudioQueue(
       if (playback.currentAudioRef.current) URL.revokeObjectURL(playback.currentAudioRef.current.objectURL);
       if (prefetchedAudioRef.current) URL.revokeObjectURL(prefetchedAudioRef.current.objectURL);
     };
-  }, []);
+  }, [playback.currentAudioRef]);
 
   return {
     summaryQueue,
@@ -629,5 +635,7 @@ export function useAudioQueue(
     skipToNext,
     flushReadProgress,
     resetReadProgressForItem,
+    resetReadProgress,
+    startReadProgress,
   };
 }

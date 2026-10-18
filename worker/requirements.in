@@ -1,3 +1,4 @@
+pip==26.2.1
 fastapi==0.143.0
 uvicorn[standard]==0.54.0
 trafilatura==2.3.1

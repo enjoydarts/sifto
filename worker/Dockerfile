@@ -3,7 +3,7 @@ FROM python:3.12.15-slim AS base
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY worker/requirements.txt .

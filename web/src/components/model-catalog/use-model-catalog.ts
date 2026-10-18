@@ -21,11 +21,16 @@ export function useModelCatalog<TData>(config: ModelCatalogConfig<TData>) {
   const [query, setQuery] = useState("");
 
   const fetchDataRef = useRef(config.fetchData);
-  fetchDataRef.current = config.fetchData;
   const syncDataRef = useRef(config.syncData);
-  syncDataRef.current = config.syncData;
   const syncSuccessKeyRef = useRef(config.syncSuccessKey);
-  syncSuccessKeyRef.current = config.syncSuccessKey;
+  const requestIdRef = useRef(0);
+  const lifecycleRef = useRef({ active: false });
+
+  useEffect(() => {
+    fetchDataRef.current = config.fetchData;
+    syncDataRef.current = config.syncData;
+    syncSuccessKeyRef.current = config.syncSuccessKey;
+  }, [config.fetchData, config.syncData, config.syncSuccessKey]);
 
   const defaultIsSyncRunning = useMemo(() => (d: TData | null) => {
     const run = (d as Record<string, unknown> | null)?.latest_run as Record<string, unknown> | null | undefined;
@@ -35,46 +40,65 @@ export function useModelCatalog<TData>(config: ModelCatalogConfig<TData>) {
   const isRunning = config.isSyncRunning ?? defaultIsSyncRunning;
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
+    const requestId = ++requestIdRef.current;
     if (!options?.silent) setLoading(true);
     try {
       const next = await fetchDataRef.current();
+      if (!lifecycleRef.current.active || requestId !== requestIdRef.current) return;
       setData(next);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      if (lifecycleRef.current.active && requestId === requestIdRef.current) setError(String(e));
     } finally {
-      if (!options?.silent) setLoading(false);
+      if (lifecycleRef.current.active && requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const lifecycle = { active: true };
+    lifecycleRef.current = lifecycle;
+    const requestId = ++requestIdRef.current;
+    fetchDataRef.current().then(
+      (next) => {
+        if (!lifecycle.active || requestId !== requestIdRef.current) return;
+        setData(next);
+        setError(null);
+        setLoading(false);
+      },
+      (e) => {
+        if (!lifecycle.active || requestId !== requestIdRef.current) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+    return () => { lifecycle.active = false; };
+  }, []);
 
   useEffect(() => {
-    if (!isRunning(data)) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const next = await fetchDataRef.current();
-        setData(next);
-      } catch (e) {
-        setError(String(e));
-      }
-    }, 3000);
+    if (syncing || !isRunning(data)) return;
+    const timer = window.setInterval(() => { void load({ silent: true }); }, 3000);
     return () => window.clearInterval(timer);
-  }, [data, isRunning]);
+  }, [data, isRunning, load, syncing]);
 
   const handleSync = useCallback(async () => {
     if (!syncDataRef.current) return;
+    const requestId = ++requestIdRef.current;
     setSyncing(true);
     try {
       const next = await syncDataRef.current();
+      if (!lifecycleRef.current.active || requestId !== requestIdRef.current) return;
       setData(next);
       setError(null);
+      setLoading(false);
       const key = syncSuccessKeyRef.current;
       if (key) showToast(t(key), "success");
     } catch (e) {
-      showToast(String(e), "error");
+      if (lifecycleRef.current.active) showToast(String(e), "error");
     } finally {
-      setSyncing(false);
+      if (lifecycleRef.current.active) {
+        setSyncing(false);
+        if (requestId === requestIdRef.current) setLoading(false);
+      }
     }
   }, [showToast, t]);
 

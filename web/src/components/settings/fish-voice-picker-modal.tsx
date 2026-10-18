@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { FishBrowseSort, FishBrowseResponse, FishModelSnapshot, api } from "@/lib/api";
+import { FishBrowseSort, FishModelSnapshot, api } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { MarkdownText } from "@/components/ui/markdown-text";
 
@@ -43,14 +44,29 @@ export default function FishVoicePickerModal({
   const [tab, setTab] = useState<FishBrowseSort>("recommended");
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<FishModelSnapshot[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingInitial, setLoadingInitial] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedModelID, setSelectedModelID] = useState<string | null>(null);
-  const requestSeqRef = useRef(0);
+  const browseQuery = useInfiniteQuery({
+    queryKey: ["settings", "fish-voice-picker", tab, query],
+    queryFn: ({ pageParam }) => api.browseFishModels({ sort: tab, query, page: pageParam, pageSize: 24 }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.page + 1 : undefined,
+    enabled: open,
+    retry: false,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  const items = useMemo(() => {
+    const seen = new Set<string>();
+    return (browseQuery.data?.pages ?? []).flatMap((response) => response.items).filter((item) => {
+      if (seen.has(item._id)) return false;
+      seen.add(item._id);
+      return true;
+    });
+  }, [browseQuery.data]);
+  const loadingInitial = browseQuery.isPending;
+  const loadingMore = browseQuery.isFetchingNextPage;
+  const hasMore = browseQuery.hasNextPage;
+  const error = browseQuery.error ? String(browseQuery.error) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -59,41 +75,6 @@ export default function FishVoicePickerModal({
     }, 250);
     return () => window.clearTimeout(timer);
   }, [open, queryInput]);
-
-  useEffect(() => {
-    if (!open) return;
-    const req = ++requestSeqRef.current;
-    setLoadingInitial(true);
-    setError(null);
-    setPage(1);
-    api
-      .browseFishModels({ sort: tab, query, page: 1, pageSize: 24 })
-      .then((resp: FishBrowseResponse) => {
-        if (req !== requestSeqRef.current) return;
-        setItems(resp.items);
-        setHasMore(resp.has_more);
-        setPage(resp.page);
-      })
-      .catch((err) => {
-        if (req !== requestSeqRef.current) return;
-        setItems([]);
-        setHasMore(false);
-        setError(String(err));
-      })
-      .finally(() => {
-        if (req === requestSeqRef.current) {
-          setLoadingInitial(false);
-        }
-      });
-  }, [open, query, tab]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (selectedModelID) return;
-    if (currentVoiceModel) {
-      setSelectedModelID(currentVoiceModel);
-    }
-  }, [currentVoiceModel, open, selectedModelID]);
 
   const selectedModel = useMemo(
     () => items.find((item) => item._id === (selectedModelID ?? currentVoiceModel)) ?? null,
@@ -112,33 +93,7 @@ export default function FishVoicePickerModal({
 
   async function handleLoadMore() {
     if (loadingMore || loadingInitial || !hasMore) return;
-    const nextPage = page + 1;
-    const req = ++requestSeqRef.current;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const resp = await api.browseFishModels({ sort: tab, query, page: nextPage, pageSize: 24 });
-      if (req !== requestSeqRef.current) return;
-      setItems((prev) => {
-        const seen = new Set(prev.map((item) => item._id));
-        const merged = [...prev];
-        for (const item of resp.items) {
-          if (seen.has(item._id)) continue;
-          seen.add(item._id);
-          merged.push(item);
-        }
-        return merged;
-      });
-      setHasMore(resp.has_more);
-      setPage(resp.page);
-    } catch (err) {
-      if (req !== requestSeqRef.current) return;
-      setError(String(err));
-    } finally {
-      if (req === requestSeqRef.current) {
-        setLoadingMore(false);
-      }
-    }
+    await browseQuery.fetchNextPage();
   }
 
   if (!open) return null;
@@ -208,7 +163,7 @@ export default function FishVoicePickerModal({
                 type="button"
                 onClick={() => setSelectedModelID(currentSelectionPinned._id)}
                 className={`mb-3 flex w-full items-start justify-between gap-3 rounded-[20px] border px-4 py-3 text-left ${
-                  selectedModelID === currentSelectionPinned._id
+                  (selectedModelID ?? currentVoiceModel) === currentSelectionPinned._id
                     ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-panel)]"
                     : "border-[var(--color-editorial-line)] bg-white"
                 }`}

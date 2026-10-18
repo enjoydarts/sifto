@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
 import {
   displayGenreLabel,
@@ -85,7 +85,10 @@ export function ItemGenreEditor({
   const [localSummaryGenre, setLocalSummaryGenre] = useState(summaryGenre ?? null);
   const [localSummaryOtherGenreLabel, setLocalSummaryOtherGenreLabel] = useState(summaryOtherGenreLabel ?? null);
 
-  useEffect(() => {
+  const genreInputKey = JSON.stringify([genre, genreOtherLabel, summaryGenre, summaryOtherGenreLabel, userGenre, userOtherGenreLabel]);
+  const [previousGenreInputKey, setPreviousGenreInputKey] = useState(genreInputKey);
+  if (previousGenreInputKey !== genreInputKey) {
+    setPreviousGenreInputKey(genreInputKey);
     setDraftGenre(userGenre ?? "");
     setDraftOtherGenreLabel(userOtherGenreLabel ?? "");
     setLocalGenre(genre ?? null);
@@ -94,7 +97,7 @@ export function ItemGenreEditor({
     setLocalUserOtherGenreLabel(userOtherGenreLabel ?? null);
     setLocalSummaryGenre(summaryGenre ?? null);
     setLocalSummaryOtherGenreLabel(summaryOtherGenreLabel ?? null);
-  }, [genre, genreOtherLabel, summaryGenre, summaryOtherGenreLabel, userGenre, userOtherGenreLabel]);
+  }
 
   const normalizedLocalGenre = normalizeStoredGenreValue(localGenre);
   const normalizedLocalUserGenre = normalizeStoredGenreValue(localUserGenre);

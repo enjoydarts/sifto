@@ -58,7 +58,7 @@ export function useItemsPageData() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
@@ -126,22 +126,26 @@ export function useItemsPageData() {
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
 
-  useEffect(() => {
+  const [selectionScope, setSelectionScope] = useState({ items, pendingMode });
+  if (selectionScope.items !== items || selectionScope.pendingMode !== pendingMode) {
+    setSelectionScope({ items, pendingMode });
     if (!pendingMode) {
       setSelectedItemIDs([]);
       setPendingBulkAction("");
-      return;
+    } else {
+      const visibleIDs = new Set(items.map((item) => item.id));
+      setSelectedItemIDs((prev) => prev.filter((itemID) => visibleIDs.has(itemID)));
     }
-    const visibleIDs = new Set(items.map((item) => item.id));
-    setSelectedItemIDs((prev) => prev.filter((itemID) => visibleIDs.has(itemID)));
-  }, [items, pendingMode]);
+  }
 
-  useEffect(() => {
+  const [searchScope, setSearchScope] = useState({ searchQuery, searchMode, searchOpen });
+  if (searchScope.searchQuery !== searchQuery || searchScope.searchMode !== searchMode || searchScope.searchOpen !== searchOpen) {
+    setSearchScope({ searchQuery, searchMode, searchOpen });
     if (!searchOpen) {
       setSearchDraft(searchQuery);
       setSearchModeDraft(searchMode);
     }
-  }, [searchMode, searchOpen, searchQuery]);
+  }
 
   const normalizedSearchDraft = useMemo(() => searchDraft.trim(), [searchDraft]);
   const suggestionsEnabled = searchOpen && normalizedSearchDraft.length >= 2;
@@ -154,17 +158,15 @@ export function useItemsPageData() {
   });
   const suggestions = useMemo(() => suggestionsQuery.data?.items ?? [], [suggestionsQuery.data]);
 
-  useEffect(() => {
+  const [suggestionScope, setSuggestionScope] = useState({ searchOpen, count: suggestions.length });
+  if (suggestionScope.searchOpen !== searchOpen || suggestionScope.count !== suggestions.length) {
+    setSuggestionScope({ searchOpen, count: suggestions.length });
     if (!searchOpen || suggestions.length === 0) {
       setActiveSuggestionIndex(-1);
-      return;
+    } else {
+      setActiveSuggestionIndex((prev) => Math.min(prev, suggestions.length - 1));
     }
-    setActiveSuggestionIndex((prev) => {
-      if (prev < 0) return -1;
-      if (prev >= suggestions.length) return suggestions.length - 1;
-      return prev;
-    });
-  }, [searchOpen, suggestions.length]);
+  }
 
   const submitSearch = useCallback(() => {
     setSearch(normalizedSearchDraft, searchModeDraft);

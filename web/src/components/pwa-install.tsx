@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Download } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -23,20 +23,22 @@ function isIosSafari(): boolean {
   return isIos && isSafari;
 }
 
+const subscribeToBrowser = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export default function PWAInstallButton() {
   const { t } = useI18n();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [iosFallback, setIosFallback] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToBrowser, getClientSnapshot, getServerSnapshot);
+  const iosFallback = mounted && isIosSafari();
+  const standalone = mounted && isStandaloneMode();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isStandaloneMode()) {
-      setHidden(true);
-      return;
-    }
-    setIosFallback(isIosSafari());
+    if (isStandaloneMode()) return;
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -54,7 +56,7 @@ export default function PWAInstallButton() {
     };
   }, []);
 
-  const canInstall = !hidden && (deferredPrompt != null || iosFallback);
+  const canInstall = !hidden && !standalone && (deferredPrompt != null || iosFallback);
   if (!canInstall) return null;
 
   return (

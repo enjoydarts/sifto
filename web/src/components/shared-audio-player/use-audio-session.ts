@@ -70,6 +70,11 @@ export function useAudioSession(
   const remoteSessionIDRef = useRef<string | null>(null);
   const lastPersistedPositionSecRef = useRef<number>(0);
 
+  function resetRemoteSession() {
+    remoteSessionIDRef.current = null;
+    lastPersistedPositionSecRef.current = 0;
+  }
+
   async function createSummaryPlaybackSession(
     queueKind: SummaryAudioQueueKind,
     queueQuery: string | null,
@@ -259,6 +264,7 @@ export function useAudioSession(
   return {
     remoteSessionIDRef,
     lastPersistedPositionSecRef,
+    resetRemoteSession,
     createSummaryPlaybackSession,
     createAudioBriefingPlaybackSession,
     persistRemoteSession,

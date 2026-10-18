@@ -9,11 +9,8 @@ import { type ModelOption } from "@/components/settings/model-select";
 import { submitSavingFormAction } from "@/components/settings/settings-submit-actions";
 import {
   buildAudioBriefingScriptModels,
-  buildLLMModelsExtras,
   buildLLMModelsState,
-  buildNavigatorActions,
   buildNavigatorState,
-  buildSavingForm,
 } from "@/components/settings/sections/settings-page-adapters";
 import {
   buildCostPerformancePreset,
@@ -392,10 +389,10 @@ export function useSettingsLLMModels({
     onChangeAudioBriefingScriptFallbackModel: (value: string) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value),
   };
 
-  const llmModelsForm = buildSavingForm({
+  const llmModelsForm = {
     onSubmit: submitLLMModels,
     saving: savingLLMModels,
-  });
+  };
 
   const llmModelsState = buildLLMModelsState({
     summary: {
@@ -463,17 +460,17 @@ export function useSettingsLLMModels({
     onRestoreProviderModelUpdates: restoreProviderModelUpdates,
   };
 
-  const llmModelsExtras = buildLLMModelsExtras({
+  const llmModelsExtras = {
     llmExtrasOpen: llm.llmExtrasOpen,
     llmExtrasRef: llmExtrasRef as RefObject<HTMLDivElement>,
     providerModelUpdates,
     visibleProviderModelUpdates,
-  });
+  };
 
-  const navigatorForm = buildSavingForm({
+  const navigatorForm = {
     onSubmit: submitLLMModels,
     saving: savingLLMModels,
-  });
+  };
 
   const navigatorState = buildNavigatorState({
     enabled: navigatorEnabled,
@@ -491,7 +488,7 @@ export function useSettingsLLMModels({
     aiNavigatorBriefFallbackModelOptions: optionsForPurpose("summary", aiNavigatorBriefFallbackModel),
   });
 
-  const navigatorActions = buildNavigatorActions({
+  const navigatorActions = {
     onChangeEnabled: (value: boolean) => {
       llmModelsDirtyRef.current = true;
       setNavigatorEnabled(value);
@@ -531,7 +528,7 @@ export function useSettingsLLMModels({
       } as const;
       handlers[key](value);
     },
-  });
+  };
 
   return {
     savingLLMModels,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api, ItemDetail, LLMExecutionCurrentMonthSummary, LLMUsageAnalysisSummary } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { type ModelOption } from "@/components/settings/model-select";
@@ -63,44 +64,28 @@ export function useLLMAnalysisPageData() {
   const [providerFilter, setProviderFilter] = useState("all");
   const [purposeFilter, setPurposeFilter] = useState("all");
   const [scatterPurpose, setScatterPurpose] = useState("all");
-  const [rankingPurpose, setRankingPurpose] = useState("all");
+  const [rankingPurposeChoice, setRankingPurpose] = useState("all");
   const [modelQuery, setModelQuery] = useState("");
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<string>("estimated_cost_usd");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<LLMUsageAnalysisSummary[]>([]);
-  const [executionRows, setExecutionRows] = useState<ExecutionRow[]>([]);
   const [qaLoading, setQaLoading] = useState(false);
   const [qaSamples, setQaSamples] = useState<ItemDetail[]>([]);
-  const seqRef = useRef(0);
-
-  const load = useCallback(async (selectedDays: number) => {
-    const seq = ++seqRef.current;
-    setLoading(true);
-    try {
+  const analysisQuery = useQuery({
+    queryKey: ["llm-analysis-dashboard", days],
+    placeholderData: (previous) => previous,
+    queryFn: async () => {
       const [nextRows, nextExecutionRows] = await Promise.all([
-        api.getLLMUsageAnalysis({ days: selectedDays }),
-        api.getLLMExecutionCurrentMonthSummary({ days: selectedDays }),
+        api.getLLMUsageAnalysis({ days: Number(days) }),
+        api.getLLMExecutionCurrentMonthSummary({ days: Number(days) }),
       ]);
-      if (seq !== seqRef.current) return;
-      setRows(nextRows ?? []);
-      setExecutionRows(nextExecutionRows ?? []);
-      setError(null);
-    } catch (e) {
-      if (seq !== seqRef.current) return;
-      setError(String(e));
-    } finally {
-      if (seq === seqRef.current) {
-        setLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    load(Number(days));
-  }, [days, load]);
+      return { rows: nextRows, executionRows: nextExecutionRows };
+    },
+  });
+  const loading = analysisQuery.isFetching;
+  const error = analysisQuery.error ? String(analysisQuery.error) : null;
+  const rows = useMemo(() => analysisQuery.data?.rows ?? [], [analysisQuery.data?.rows]);
+  const executionRows = useMemo(() => analysisQuery.data?.executionRows ?? [], [analysisQuery.data?.executionRows]);
 
   const normalizedRows = useMemo(
     () => rows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })),
@@ -261,23 +246,25 @@ export function useLLMAnalysisPageData() {
       });
   }, [providers, sortedRows]);
 
-  useEffect(() => {
+  const [previousPurposeFilter, setPreviousPurposeFilter] = useState(purposeFilter);
+  if (previousPurposeFilter !== purposeFilter) {
+    setPreviousPurposeFilter(purposeFilter);
     if (purposeFilter !== "all") {
       setScatterPurpose(purposeFilter);
       setRankingPurpose(purposeFilter);
     }
-  }, [purposeFilter]);
-
-  useEffect(() => {
-    if (rankingPurpose !== "all") return;
-    if (purposeFilter !== "all") return;
-    if (purposes.length === 0) return;
-    setRankingPurpose(purposes[0]);
-  }, [purposeFilter, purposes, rankingPurpose]);
-
-  useEffect(() => {
+  }
+  const rankingPurpose = rankingPurposeChoice === "all" && purposeFilter === "all"
+    ? purposes[0] ?? "all"
+    : rankingPurposeChoice;
+  if (rankingPurposeChoice === "all" && rankingPurpose !== "all") {
+    setRankingPurpose(rankingPurpose);
+  }
+  const [previousRankingPurpose, setPreviousRankingPurpose] = useState(rankingPurpose);
+  if (previousRankingPurpose !== rankingPurpose) {
+    setPreviousRankingPurpose(rankingPurpose);
     setSelectedModelKey(null);
-  }, [rankingPurpose]);
+  }
 
   const executionMap = useMemo(() => {
     const map = new Map<

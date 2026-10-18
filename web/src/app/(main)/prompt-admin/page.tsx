@@ -88,7 +88,7 @@ export default function PromptAdminPage() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [detail, setDetail] = useState<PromptTemplateDetailResponse | null>(null);
-  const lastInitializedTemplateIdRef = useRef<string>("");
+  const [lastInitializedTemplateId, setLastInitializedTemplateId] = useState("");
   const detailRequestIdRef = useRef(0);
   const [form, setForm] = useState({
     label: "",
@@ -106,30 +106,24 @@ export default function PromptAdminPage() {
     weight: "100",
   });
 
-  const loadTemplates = useCallback(async () => {
+  const loadTemplates = useCallback(async (signal?: AbortSignal) => {
     const [capabilitiesRes, templatesRes] = await Promise.all([
       api.getPromptAdminCapabilities(),
       api.getPromptTemplates(),
     ]);
+    if (signal?.aborted) return capabilitiesRes;
     setCapabilities(capabilitiesRes);
     setTemplates(templatesRes.templates);
-    if (!selectedTemplateId && templatesRes.templates[0]?.id) {
-      setSelectedTemplateId(templatesRes.templates[0].id);
-    }
+    setSelectedTemplateId((current) => current || templatesRes.templates[0]?.id || "");
     return capabilitiesRes;
-  }, [selectedTemplateId]);
+  }, []);
 
-  const loadDetail = useCallback(async (templateId: string) => {
-    if (!templateId) {
-      setDetail(null);
-      return null;
-    }
+  const loadDetail = useCallback(async (templateId: string, signal?: AbortSignal) => {
+    if (!templateId) return null;
     const requestId = ++detailRequestIdRef.current;
     const next = await api.getPromptTemplateDetail(templateId);
     const normalized = normalizePromptTemplateDetail(next);
-    if (requestId !== detailRequestIdRef.current) {
-      return normalized;
-    }
+    if (signal?.aborted || requestId !== detailRequestIdRef.current) return null;
     setDetail(normalized);
     return normalized;
   }, []);
@@ -153,21 +147,37 @@ export default function PromptAdminPage() {
   }, [loadDetail, loadTemplates, selectedTemplateId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let active = true;
+    Promise.all([api.getPromptAdminCapabilities(), api.getPromptTemplates()]).then(
+      ([capabilitiesRes, templatesRes]) => {
+        if (!active) return;
+        setCapabilities(capabilitiesRes);
+        setTemplates(templatesRes.templates);
+        setSelectedTemplateId((current) => current || templatesRes.templates[0]?.id || "");
+        setLoading(false);
+      },
+      (e) => {
+        if (!active) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    if (!selectedTemplateId) return;
-    loadDetail(selectedTemplateId).catch((e) => setError(String(e)));
-  }, [loadDetail, selectedTemplateId]);
+    if (!selectedTemplateId || !capabilities?.can_manage_prompts) return;
+    const controller = new AbortController();
+    loadDetail(selectedTemplateId, controller.signal).catch((e) => {
+      if (!controller.signal.aborted) setError(String(e));
+    });
+    return () => controller.abort();
+  }, [capabilities?.can_manage_prompts, loadDetail, selectedTemplateId]);
 
-  useEffect(() => {
-    if (!detail) return;
-    const templateId = detail.template.id;
-    if (!templateId || lastInitializedTemplateIdRef.current === templateId) return;
-    lastInitializedTemplateIdRef.current = templateId;
+  if (detail?.template.id && lastInitializedTemplateId !== detail.template.id) {
+    setLastInitializedTemplateId(detail.template.id);
     setForm(formFromDefaultTemplate(detail.default_template));
-  }, [detail]);
+  }
 
   const versionOptions = useMemo(() => detail?.versions ?? [], [detail?.versions]);
   const experimentArmsByExperimentId = useMemo(() => {
@@ -206,7 +216,7 @@ export default function PromptAdminPage() {
     } finally {
       setSaving(false);
     }
-  }, [detail?.template.id, form, loadDetail, showToast, t]);
+  }, [detail, form, loadDetail, showToast, t]);
 
   const handleActivate = useCallback(
     async (versionId: string | null) => {
@@ -222,7 +232,7 @@ export default function PromptAdminPage() {
         setSaving(false);
       }
     },
-    [detail?.template.id, loadDetail, showToast, t]
+    [detail, loadDetail, showToast, t]
   );
 
   const handleCreateExperiment = useCallback(async () => {
@@ -250,7 +260,7 @@ export default function PromptAdminPage() {
     } finally {
       setSaving(false);
     }
-  }, [detail?.template.id, experimentForm, loadDetail, showToast, t]);
+  }, [detail, experimentForm, loadDetail, showToast, t]);
 
   const handleExperimentStatus = useCallback(
     async (experiment: PromptExperiment, status: string) => {

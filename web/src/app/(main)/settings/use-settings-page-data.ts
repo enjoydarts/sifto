@@ -115,7 +115,6 @@ import {
   buildPodcastState,
   buildReadingPlanActions,
   buildReadingPlanState,
-  buildSavingForm,
   buildSummaryAudioIntegrations,
   buildSummaryAudioState,
   buildSystemAccessState,
@@ -152,7 +151,15 @@ export function useSettingsPageData() {
   const [digestEmailEnabled, setDigestEmailEnabled] = useState(true);
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
-  const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
+  const sectionQuery = searchParams.toString();
+  const requestedSection = searchParams.get("section");
+  const defaultSection = isSettingsSectionID(requestedSection) ? requestedSection : "models";
+  const [sectionSelection, setSectionSelection] = useState({ query: sectionQuery, section: defaultSection });
+  if (sectionSelection.query !== sectionQuery) {
+    setSectionSelection({ query: sectionQuery, section: defaultSection });
+  }
+  const activeSection = sectionSelection.query === sectionQuery ? sectionSelection.section : defaultSection;
+  const setActiveSection = (section: SettingsSectionID) => setSectionSelection({ query: sectionQuery, section });
   const [uiFontSansKey, setUIFontSansKey] = useState(DEFAULT_UI_FONT_SANS_KEY);
   const [uiFontSerifKey, setUIFontSerifKey] = useState(DEFAULT_UI_FONT_SERIF_KEY);
   const [savingUIFontSettings, setSavingUIFontSettings] = useState(false);
@@ -189,7 +196,8 @@ export function useSettingsPageData() {
   const [summaryAudioSaving, setSummaryAudioSaving] = useState(false);
   const [podcastEnabled, setPodcastEnabled] = useState(false);
   const [podcastFeedSlug, setPodcastFeedSlug] = useState("");
-  const [podcastRSSURL, setPodcastRSSURL] = useState("");
+  const [podcastRSSURLFallback, setPodcastRSSURL] = useState("");
+  const podcastRSSURL = buildPodcastRSSURL(podcastFeedSlug, podcastRSSURLFallback);
   const [podcastTitle, setPodcastTitle] = useState("");
   const [podcastDescription, setPodcastDescription] = useState("");
   const [podcastAuthor, setPodcastAuthor] = useState("");
@@ -204,7 +212,7 @@ export function useSettingsPageData() {
     buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS))
   );
   const [audioBriefingPresets, setAudioBriefingPresets] = useState<AudioBriefingPreset[]>([]);
-  const [audioBriefingPresetsLoading, setAudioBriefingPresetsLoading] = useState(false);
+  const [audioBriefingPresetsRefreshing, setAudioBriefingPresetsRefreshing] = useState(false);
   const [audioBriefingPresetsLoaded, setAudioBriefingPresetsLoaded] = useState(false);
   const [audioBriefingPresetsError, setAudioBriefingPresetsError] = useState<string | null>(null);
   const uiFontSansOptions = useMemo(() => getSelectableSansFonts(), []);
@@ -226,6 +234,8 @@ export function useSettingsPageData() {
   const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
   const dialogState = useSettingsDialogState();
   const { uiFonts, llm, presets, audioBriefingPickers, summaryAudioPickers } = dialogState;
+  const shouldLoadAudioBriefingPresets = activeSection === "audio-briefing" || presets.audioBriefingPresetSaveOpen || presets.audioBriefingPresetApplyOpen;
+  const audioBriefingPresetsLoading = audioBriefingPresetsRefreshing || (shouldLoadAudioBriefingPresets && !audioBriefingPresetsLoaded);
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const uiFontsDirtyRef = useRef(false);
@@ -458,29 +468,29 @@ export function useSettingsPageData() {
     setUIFontSerifKey(nextSettings?.ui_font_serif_key?.trim() || DEFAULT_UI_FONT_SERIF_KEY);
   }, []);
 
-  const loadAudioBriefingPresets = useCallback(async () => {
-    setAudioBriefingPresetsLoading(true);
-    setAudioBriefingPresetsError(null);
-    try {
-      const presets = await api.listAudioBriefingPresets();
+  const presetsLoadSeqRef = useRef(0);
+  const fetchAudioBriefingPresets = useCallback(() => {
+    const sequence = ++presetsLoadSeqRef.current;
+    return api.listAudioBriefingPresets().then((presets) => {
+      if (sequence !== presetsLoadSeqRef.current) return;
       setAudioBriefingPresets(presets ?? []);
-    } catch (e) {
+      setAudioBriefingPresetsError(null);
+    }).catch((e) => {
+      if (sequence !== presetsLoadSeqRef.current) return;
       setAudioBriefingPresets([]);
       setAudioBriefingPresetsError(String(e));
-    } finally {
-      setAudioBriefingPresetsLoaded(true);
-      setAudioBriefingPresetsLoading(false);
-    }
+    }).finally(() => {
+      if (sequence === presetsLoadSeqRef.current) {
+        setAudioBriefingPresetsLoaded(true);
+        setAudioBriefingPresetsRefreshing(false);
+      }
+    });
   }, []);
-
-  useEffect(() => {
-    const section = searchParams.get("section");
-    if (isSettingsSectionID(section)) {
-      setActiveSection(section);
-      return;
-    }
-    setActiveSection("models");
-  }, [searchParams]);
+  const loadAudioBriefingPresets = useCallback(() => {
+    setAudioBriefingPresetsRefreshing(true);
+    setAudioBriefingPresetsError(null);
+    return fetchAudioBriefingPresets();
+  }, [fetchAudioBriefingPresets]);
 
   const syncPodcastForm = useCallback((podcast?: UserSettings["podcast"] | null) => {
     setPodcastEnabled(Boolean(podcast?.enabled));
@@ -505,17 +515,14 @@ export function useSettingsPageData() {
   const isLLMModelsDirty = llmModels.isDirty;
   const syncLLMModelsForm = llmModels.syncForm;
 
-  const load = useCallback(async () => {
+  const fetchAndSyncSettings = useCallback(() => {
     const seq = ++loadSeqRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const [settingsResult, catalogResult, personasResult, profileResult] = await Promise.allSettled([
-        queryClient.fetchQuery(settingsQueryOptions()),
-        api.getLLMCatalog(),
-        api.getNavigatorPersonas(),
-        api.getPreferenceProfile(),
-      ]);
+    return Promise.allSettled([
+      queryClient.fetchQuery(settingsQueryOptions()),
+      api.getLLMCatalog(),
+      api.getNavigatorPersonas(),
+      api.getPreferenceProfile(),
+    ]).then(([settingsResult, catalogResult, personasResult, profileResult]) => {
       const data: UserSettings | null = settingsResult.status === "fulfilled" ? settingsResult.value : null;
       const nextCatalog: LLMCatalog | null = catalogResult.status === "fulfilled" ? catalogResult.value : null;
       const navigatorPersonas: Record<string, NavigatorPersonaDefinition> | null =
@@ -574,14 +581,14 @@ export function useSettingsPageData() {
       setPreferenceProfile(preferenceProfileResult.profile);
       setPreferenceProfileError(preferenceProfileResult.error);
       setError(null);
-    } catch (e) {
+    }).catch((e) => {
       if (seq !== loadSeqRef.current) return;
       setError(String(e));
-    } finally {
+    }).finally(() => {
       if (seq === loadSeqRef.current) {
         setLoading(false);
       }
-    }
+    });
   }, [
     resetAivisUserDictionaries,
     resetElevenLabsVoices,
@@ -596,30 +603,37 @@ export function useSettingsPageData() {
     syncSummaryAudioForm,
     syncUIFontForm,
     queryClient,
+    setNotificationPriority,
     t,
   ]);
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchAndSyncSettings();
+  }, [fetchAndSyncSettings]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void fetchAndSyncSettings();
+    return () => { loadSeqRef.current += 1; };
+  }, [fetchAndSyncSettings]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" && !presets.audioBriefingPresetSaveOpen && !presets.audioBriefingPresetApplyOpen) {
+    if (!shouldLoadAudioBriefingPresets || audioBriefingPresetsLoaded || audioBriefingPresetsRefreshing || audioBriefingPresets.length > 0) {
       return;
     }
-    if (audioBriefingPresetsLoaded || audioBriefingPresetsLoading || audioBriefingPresets.length > 0) {
-      return;
-    }
-    void loadAudioBriefingPresets().catch(() => undefined);
+    void fetchAudioBriefingPresets();
+    const sequence = presetsLoadSeqRef.current;
+    return () => {
+      if (presetsLoadSeqRef.current === sequence) presetsLoadSeqRef.current += 1;
+    };
   }, [
-    activeSection,
-    presets.audioBriefingPresetApplyOpen,
-    presets.audioBriefingPresetSaveOpen,
+    shouldLoadAudioBriefingPresets,
     audioBriefingPresets.length,
-    audioBriefingPresetsLoading,
     audioBriefingPresetsLoaded,
-    loadAudioBriefingPresets,
+    audioBriefingPresetsRefreshing,
+    fetchAudioBriefingPresets,
   ]);
+  useEffect(() => () => { presetsLoadSeqRef.current += 1; }, []);
 
   useEffect(() => {
     ensureUIFontPreviewLoaded(uiFontSansKey);
@@ -629,7 +643,9 @@ export function useSettingsPageData() {
     ensureUIFontPreviewLoaded(uiFontSerifKey);
   }, [uiFontSerifKey]);
 
-  useEffect(() => {
+  const [previousDefaultPersona, setPreviousDefaultPersona] = useState(audioBriefingDefaultPersona);
+  if (previousDefaultPersona !== audioBriefingDefaultPersona) {
+    setPreviousDefaultPersona(audioBriefingDefaultPersona);
     setExpandedAudioBriefingPersonas((prev) => {
       if (prev.length === 0) return [audioBriefingDefaultPersona];
       if (prev.length === 1 && prev[0] === "editor" && audioBriefingDefaultPersona !== "editor") {
@@ -637,24 +653,19 @@ export function useSettingsPageData() {
       }
       return prev;
     });
-  }, [audioBriefingDefaultPersona]);
+  }
 
-  useEffect(() => {
-    if (audioBriefingConversationMode !== "duo") {
-      return;
-    }
-    setAudioBriefingVoices((prev) =>
+  const [previousConversationMode, setPreviousConversationMode] = useState(audioBriefingConversationMode);
+  if (previousConversationMode !== audioBriefingConversationMode) {
+    setPreviousConversationMode(audioBriefingConversationMode);
+    if (audioBriefingConversationMode === "duo") setAudioBriefingVoices((prev) =>
       prev.map((voice) =>
         voice.tts_provider === "elevenlabs" && voice.tts_model !== "eleven_v3"
           ? { ...voice, tts_model: "eleven_v3" }
           : voice,
       ),
     );
-  }, [audioBriefingConversationMode]);
-
-  useEffect(() => {
-    setPodcastRSSURL(buildPodcastRSSURL(podcastFeedSlug, podcastRSSURL));
-  }, [podcastFeedSlug]);
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1840,10 +1851,10 @@ export function useSettingsPageData() {
     onSelectProvider: setActiveAccessProvider,
   });
 
-  const readingPlanForm = buildSavingForm({
+  const readingPlanForm = {
     onSubmit: submitReadingPlan,
     saving: savingReadingPlan,
-  });
+  };
 
   const readingPlanState = buildReadingPlanState({
     window: readingPlanWindow,
@@ -1859,10 +1870,10 @@ export function useSettingsPageData() {
     sizeValue: readingPlanSize,
   });
 
-  const digestForm = buildSavingForm({
+  const digestForm = {
     onSubmit: submitDigestDelivery,
     saving: savingDigestDelivery,
-  });
+  };
 
   const digestState = buildDigestState({
     enabled: digestEmailEnabled,
@@ -1872,10 +1883,10 @@ export function useSettingsPageData() {
     onChangeEnabled: setDigestEmailEnabled,
   });
 
-  const budgetForm = buildSavingForm({
+  const budgetForm = {
     onSubmit: submitBudget,
     saving: savingBudget,
-  });
+  };
 
   const budgetState = buildBudgetState({
     budgetUSD,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AivisModelsResponse,
@@ -73,9 +73,13 @@ export function useSettingsResources({
   const [azureSpeechVoicesError, setAzureSpeechVoicesError] = useState<string | null>(null);
 
   const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
-  const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
+  const [aivisUserDictionariesRefreshing, setAivisUserDictionariesRefreshing] = useState(false);
   const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
   const [aivisUserDictionariesError, setAivisUserDictionariesError] = useState<string | null>(null);
+  const [dictionariesRevision, setDictionariesRevision] = useState(0);
+  const dictionariesLoadSeqRef = useRef(0);
+  const shouldLoadAivisUserDictionaries = (activeSection === "audio-briefing" || activeSection === "summary-audio") && Boolean(settings?.has_aivis_api_key);
+  const aivisUserDictionariesLoading = aivisUserDictionariesRefreshing || (shouldLoadAivisUserDictionaries && !aivisUserDictionariesLoaded);
 
   const loadAivisModels = useCallback(async () => {
     return loadResourceAction({
@@ -173,28 +177,34 @@ export function useSettingsResources({
     });
   }, [showToast, t]);
 
-  const loadAivisUserDictionaries = useCallback(async (force = false) => {
-    if (!force && aivisUserDictionariesLoaded) {
-      return aivisUserDictionaries;
-    }
-    setAivisUserDictionariesLoading(true);
-    try {
-      const next = await api.getAivisUserDictionaries();
+  const fetchAivisUserDictionaries = useCallback(() => {
+    const sequence = ++dictionariesLoadSeqRef.current;
+    return api.getAivisUserDictionaries().then((next) => {
+      if (sequence !== dictionariesLoadSeqRef.current) return [];
       setAivisUserDictionaries(next.user_dictionaries ?? []);
-      setAivisUserDictionariesLoaded(true);
       setAivisUserDictionariesError(null);
       return next.user_dictionaries ?? [];
-    } catch (e) {
-      const message = String(e);
-      setAivisUserDictionariesError(message);
-      if (force) {
-        showToast(message, "error");
-      }
+    }).catch((e) => {
+      if (sequence !== dictionariesLoadSeqRef.current) return [];
+      setAivisUserDictionariesError(String(e));
       throw e;
-    } finally {
-      setAivisUserDictionariesLoading(false);
+    }).finally(() => {
+      if (sequence === dictionariesLoadSeqRef.current) {
+        setAivisUserDictionariesLoaded(true);
+        setAivisUserDictionariesRefreshing(false);
+      }
+    });
+  }, []);
+  const loadAivisUserDictionaries = useCallback(async (force = false) => {
+    if (!force && aivisUserDictionariesLoaded) return aivisUserDictionaries;
+    setAivisUserDictionariesRefreshing(true);
+    try {
+      return await fetchAivisUserDictionaries();
+    } catch (error) {
+      if (force) showToast(String(error), "error");
+      throw error;
     }
-  }, [aivisUserDictionaries, aivisUserDictionariesLoaded, showToast]);
+  }, [aivisUserDictionaries, aivisUserDictionariesLoaded, fetchAivisUserDictionaries, showToast]);
 
   const resetXAIVoices = useCallback(() => {
     setXAIVoicesData(null);
@@ -207,13 +217,19 @@ export function useSettingsResources({
   }, []);
 
   const resetAivisUserDictionaries = useCallback(() => {
+    dictionariesLoadSeqRef.current += 1;
+    setDictionariesRevision((revision) => revision + 1);
     setAivisUserDictionaries([]);
     setAivisUserDictionariesLoaded(false);
+    setAivisUserDictionariesRefreshing(false);
     setAivisUserDictionariesError(null);
   }, []);
 
   const markAivisUserDictionariesStale = useCallback(() => {
+    dictionariesLoadSeqRef.current += 1;
+    setDictionariesRevision((revision) => revision + 1);
     setAivisUserDictionariesLoaded(false);
+    setAivisUserDictionariesRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -286,17 +302,22 @@ export function useSettingsResources({
   }, [activeSection, azureSpeechVoicesData, azureSpeechVoicesLoading, loadAzureSpeechVoices, settings?.has_azure_speech_api_key, settings?.azure_speech_region]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
+    if (!shouldLoadAivisUserDictionaries || aivisUserDictionariesLoaded || aivisUserDictionariesRefreshing) {
       return;
     }
-    void loadAivisUserDictionaries().catch(() => undefined);
+    void fetchAivisUserDictionaries().catch(() => undefined);
+    const sequence = dictionariesLoadSeqRef.current;
+    return () => {
+      if (dictionariesLoadSeqRef.current === sequence) dictionariesLoadSeqRef.current += 1;
+    };
   }, [
-    activeSection,
+    shouldLoadAivisUserDictionaries,
     aivisUserDictionariesLoaded,
-    aivisUserDictionariesLoading,
-    loadAivisUserDictionaries,
-    settings?.has_aivis_api_key,
+    aivisUserDictionariesRefreshing,
+    dictionariesRevision,
+    fetchAivisUserDictionaries,
   ]);
+  useEffect(() => () => { dictionariesLoadSeqRef.current += 1; }, []);
 
   useEffect(() => {
     let cancelled = false;

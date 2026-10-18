@@ -1,6 +1,6 @@
 "use client";
 
-import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
@@ -12,6 +12,10 @@ import { CheckStatusBadges } from "@/components/items/check-status-badges";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
+
+const subscribeToClient = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 export function InlineReader({
   itemId,
@@ -44,7 +48,7 @@ export function InlineReader({
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragY, setDragY] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToClient, getClientSnapshot, getServerSnapshot);
   const startYRef = useRef<number | null>(null);
   const startAtRef = useRef<number>(0);
   const lastMoveAtRef = useRef<number>(0);
@@ -77,11 +81,6 @@ export function InlineReader({
   const error =
     (detailQuery.error ? String(detailQuery.error) : null) ??
     (relatedQuery.error ? String(relatedQuery.error) : null);
-
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
 
   async function toggleRead(current: ItemDetail) {
     if (!canMarkRead) return;

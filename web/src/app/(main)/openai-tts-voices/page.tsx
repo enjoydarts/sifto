@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshCw, Search, X } from "lucide-react";
 import { api, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
-import { useToast } from "@/components/toast-provider";
+import { useModelCatalog } from "@/components/model-catalog/use-model-catalog";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -33,50 +33,12 @@ function getSupportedModels(voice: OpenAITTSVoiceSnapshot): string[] {
 
 export default function OpenAITTSVoicesPage() {
   const { t } = useI18n();
-  const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [data, setData] = useState<OpenAITTSVoicesResponse | null>(null);
+  const { loading, syncing, error, query, setQuery, data, handleSync } = useModelCatalog<OpenAITTSVoicesResponse>({
+    fetchData: () => api.getOpenAITTSVoices(),
+    syncData: () => api.syncOpenAITTSVoices(),
+    syncSuccessKey: "openaiTTS.syncCompleted",
+  });
   const [selectedVoiceID, setSelectedVoiceID] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const next = await api.getOpenAITTSVoices();
-      setData(next);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    if (data?.latest_run?.status !== "running" || data.latest_run.trigger_type !== "manual") return;
-    const timer = window.setInterval(load, 3000);
-    return () => window.clearInterval(timer);
-  }, [data?.latest_run, load]);
-
-  const handleSync = useCallback(async () => {
-    setSyncing(true);
-    try {
-      const next = await api.syncOpenAITTSVoices();
-      setData(next);
-      setError(null);
-      showToast(t("openaiTTS.syncCompleted"), "success");
-    } catch (e) {
-      showToast(String(e), "error");
-    } finally {
-      setSyncing(false);
-    }
-  }, [showToast, t]);
 
   const filteredVoices = useMemo(() => {
     const q = query.trim().toLowerCase();

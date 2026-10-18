@@ -115,7 +115,7 @@ export default function OpenRouterModelsPage() {
         setSavingOverrideModelId(null);
       }
     },
-    [load, selectedModel?.model_id, showToast, t],
+    [load, selectedModel, showToast, t],
   );
 
   const isOverrideEligible = useCallback(

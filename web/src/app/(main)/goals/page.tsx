@@ -23,23 +23,38 @@ export default function GoalsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const readingGoals = await api.getReadingGoals();
+      if (signal?.aborted) return;
       setActiveReadingGoals(readingGoals.active ?? []);
       setArchivedReadingGoals(readingGoals.archived ?? []);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      if (!signal?.aborted) setError(String(e));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let active = true;
+    api.getReadingGoals().then(
+      (readingGoals) => {
+        if (!active) return;
+        setActiveReadingGoals(readingGoals.active ?? []);
+        setArchivedReadingGoals(readingGoals.archived ?? []);
+        setError(null);
+        setLoading(false);
+      },
+      (e) => {
+        if (!active) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+    return () => { active = false; };
+  }, []);
 
   function resetReadingGoalForm() {
     setEditingReadingGoalId(null);
@@ -69,6 +84,7 @@ export default function GoalsPage() {
       } else {
         await api.createReadingGoal(payload);
       }
+      setLoading(true);
       await load();
       resetReadingGoalForm();
       showToast(t("settings.toast.readingGoalSaved"), "success");
@@ -82,6 +98,7 @@ export default function GoalsPage() {
   async function archiveReadingGoal(goalId: string) {
     try {
       await api.archiveReadingGoal(goalId);
+      setLoading(true);
       await load();
       if (editingReadingGoalId === goalId) resetReadingGoalForm();
       showToast(t("settings.toast.readingGoalArchived"), "success");
@@ -93,6 +110,7 @@ export default function GoalsPage() {
   async function restoreReadingGoal(goalId: string) {
     try {
       await api.restoreReadingGoal(goalId);
+      setLoading(true);
       await load();
       showToast(t("settings.toast.readingGoalRestored"), "success");
     } catch (e) {
@@ -103,6 +121,7 @@ export default function GoalsPage() {
   async function deleteReadingGoal(goalId: string) {
     try {
       await api.deleteReadingGoal(goalId);
+      setLoading(true);
       await load();
       if (editingReadingGoalId === goalId) resetReadingGoalForm();
       showToast(t("settings.toast.readingGoalDeleted"), "success");

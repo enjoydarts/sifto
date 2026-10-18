@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ItemDetail, ItemGenreCount, ItemListResponse, RelatedItem } from "@/lib/api";
 import {
   genreValueFromCountEntry,
@@ -36,6 +36,11 @@ export type RelatedCluster = {
 
 const EMPTY_RELATED_ITEMS: RelatedItem[] = [];
 const EMPTY_RELATED_CLUSTERS: RelatedCluster[] = [];
+const subscribeToQueueStorage = (listener: () => void) => {
+  window.addEventListener("storage", listener);
+  return () => window.removeEventListener("storage", listener);
+};
+const getServerNextItemHref = () => null;
 
 function resolveEffectiveOtherGenreLabel({
   effectiveGenre,
@@ -107,8 +112,10 @@ export function useItemDetailData() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const [item, setItem] = useState<ItemDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialCachedItem] = useState(() => queryClient.getQueryData<ItemDetail>(queryKeys.items.detail(id)));
+  const [initialCachedRelated] = useState(() => queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>(queryKeys.items.related(id, 6)));
+  const [item, setItem] = useState<ItemDetail | null>(initialCachedItem ?? null);
+  const [loading, setLoading] = useState(!initialCachedItem);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
@@ -118,15 +125,14 @@ export function useItemDetailData() {
   const [retryUpdating, setRetryUpdating] = useState(false);
   const [retryFromFactsUpdating, setRetryFromFactsUpdating] = useState(false);
   const [genreUpdating, setGenreUpdating] = useState(false);
-  const [related, setRelated] = useState<RelatedItem[]>([]);
-  const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
-  const [relatedLoading, setRelatedLoading] = useState(true);
-  const [relatedStateItemId, setRelatedStateItemId] = useState<string | null>(null);
+  const [related, setRelated] = useState<RelatedItem[]>(initialCachedRelated?.items ?? []);
+  const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>(initialCachedRelated?.clusters ?? []);
+  const [relatedLoading, setRelatedLoading] = useState(!initialCachedRelated);
+  const [relatedStateItemId, setRelatedStateItemId] = useState<string | null>(id);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes" | "genre">("summary");
   const [relatedError, setRelatedError] = useState<string | null>(null);
-  const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const [itemNavigator, setItemNavigator] = useState<Awaited<ReturnType<typeof api.getItemNavigator>>["navigator"] | null>(null);
   const [itemNavigatorLoading, setItemNavigatorLoading] = useState(false);
@@ -227,40 +233,10 @@ export function useItemDetailData() {
   }, [queryClient]);
 
   useEffect(() => {
-    setItemNavigator(null);
-    setItemNavigatorLoading(false);
-    setItemNavigatorError(null);
-    setItemNavigatorOpen(false);
-  }, [id]);
-
-  useEffect(() => {
     const cachedItem = queryClient.getQueryData<ItemDetail>(queryKeys.items.detail(id));
     const cachedRelated = queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>(
       queryKeys.items.related(id, 6)
     );
-    if (cachedItem) {
-      setItem(applyReadOverride(cachedItem));
-      setLoadError(null);
-      setActionError(null);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-    if (cachedRelated) {
-      setRelatedStateItemId(id);
-      setRelated(cachedRelated.items ?? []);
-      setRelatedClusters(cachedRelated.clusters ?? []);
-      setExpandedRelatedClusterIds({});
-      setRelatedError(null);
-      setRelatedLoading(false);
-    } else {
-      setRelatedStateItemId(id);
-      setRelated([]);
-      setRelatedClusters([]);
-      setExpandedRelatedClusterIds({});
-      setRelatedError(null);
-      setRelatedLoading(true);
-    }
     let cancelled = false;
     const loads = startItemDetailLoads({
       loadDetail: () => api.getItem(id),
@@ -311,27 +287,24 @@ export function useItemDetailData() {
     };
   }, [applyReadOverride, id, queryClient]);
 
-  useEffect(() => {
-    if (!item || item.status !== "summarized" || item.is_read || autoMarkedRef.current[item.id]) return;
-
-    autoMarkedRef.current[item.id] = true;
-    setReadUpdating(true);
-    api
-      .markItemRead(item.id)
-      .then(async (next) => {
-        readStateOverrideRef.current[item.id] = next.is_read;
-        syncItemReadInFeedCaches(item.id, next.is_read);
-        queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+  const { mutate: autoMarkRead, isPending: autoReadUpdating } = useMutation({
+    mutationFn: (itemID: string) => api.markItemRead(itemID),
+    onSuccess: async (next, itemID) => {
+        readStateOverrideRef.current[itemID] = next.is_read;
+        syncItemReadInFeedCaches(itemID, next.is_read);
+        queryClient.setQueryData<ItemDetail>(["item-detail", itemID], (prev) =>
           prev ? { ...prev, is_read: next.is_read } : prev
         );
-        setItem((prev) => (prev && prev.id === item.id ? { ...prev, is_read: next.is_read } : prev));
+        setItem((prev) => (prev && prev.id === itemID ? { ...prev, is_read: next.is_read } : prev));
         await refreshReadDependentQueries();
-      })
-      .catch(() => {
-        delete autoMarkedRef.current[item.id];
-      })
-      .finally(() => setReadUpdating(false));
-  }, [item, queryClient, refreshReadDependentQueries, syncItemReadInFeedCaches]);
+    },
+    onError: (_error, itemID) => { delete autoMarkedRef.current[itemID]; },
+  });
+  useEffect(() => {
+    if (!item || item.status !== "summarized" || item.is_read || autoMarkedRef.current[item.id]) return;
+    autoMarkedRef.current[item.id] = true;
+    autoMarkRead(item.id);
+  }, [autoMarkRead, item]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const genreSuggestions = useMemo(
@@ -357,29 +330,27 @@ export function useItemDetailData() {
     return nextQuery ? `/items/${id}?${nextQuery}` : `/items/${id}`;
   }, [id, searchParams]);
   const queueStorageKey = useMemo(() => `items-queue:${backHref}`, [backHref]);
-  useEffect(() => {
+  const getNextItemHref = useCallback(() => {
     try {
       const raw = sessionStorage.getItem(queueStorageKey);
       if (!raw) {
-        setNextItemHref(null);
-        return;
+        return null;
       }
       const ids = JSON.parse(raw) as string[];
       if (!Array.isArray(ids) || ids.length === 0) {
-        setNextItemHref(null);
-        return;
+        return null;
       }
       const idx = ids.findIndex((v) => v === id);
       if (idx < 0 || idx + 1 >= ids.length) {
-        setNextItemHref(null);
-        return;
+        return null;
       }
       const nextID = ids[idx + 1];
-      setNextItemHref(nextID ? `/items/${nextID}?from=${encodeURIComponent(backHref)}` : null);
+      return nextID ? `/items/${nextID}?from=${encodeURIComponent(backHref)}` : null;
     } catch {
-      setNextItemHref(null);
+      return null;
     }
   }, [backHref, id, queueStorageKey]);
+  const nextItemHref = useSyncExternalStore(subscribeToQueueStorage, getNextItemHref, getServerNextItemHref);
   useEffect(() => {
     if (!nextItemHref) return;
     router.prefetch(nextItemHref);
@@ -787,7 +758,7 @@ export function useItemDetailData() {
     loading,
     loadError,
     actionError,
-    readUpdating,
+    readUpdating: readUpdating || autoReadUpdating,
     deleteUpdating,
     restoreUpdating,
     feedbackUpdating,

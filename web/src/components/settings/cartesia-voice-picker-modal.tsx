@@ -16,6 +16,59 @@ type CartesiaVoicePickerModalProps = {
   onSelect: (selection: { voice_id: string; label: string; description: string }) => void;
 };
 
+function CartesiaVoicePreview({ voiceID }: { voiceID: string }) {
+  const { t } = useI18n();
+  const [request, setRequest] = useState(0);
+  const [completedRequest, setCompletedRequest] = useState(0);
+  const [previewURL, setPreviewURL] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewLoading = request !== completedRequest;
+
+  useEffect(() => {
+    if (request === 0) return;
+    let cancelled = false;
+    let objectURL: string | null = null;
+    api.getCartesiaVoicePreview(voiceID)
+      .then((blob) => {
+        if (cancelled) return;
+        objectURL = URL.createObjectURL(blob);
+        setPreviewURL(objectURL);
+      })
+      .catch((error) => {
+        if (!cancelled) setPreviewError(String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setCompletedRequest(request);
+      });
+    return () => {
+      cancelled = true;
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    };
+  }, [request, voiceID]);
+
+  return (
+    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.cartesiaPicker.preview")}</div>
+        <button
+          type="button"
+          onClick={() => {
+            setPreviewError(null);
+            setPreviewURL(null);
+            setRequest((previous) => previous + 1);
+          }}
+          disabled={previewLoading}
+          className="inline-flex min-h-9 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {previewLoading ? t("common.loading") : t("settings.cartesiaPicker.loadPreview")}
+        </button>
+      </div>
+      {previewURL ? <audio controls preload="none" className="mt-3 w-full" src={previewURL} /> : null}
+      {previewError ? <p className="mt-3 text-xs leading-5 text-red-600">{previewError}</p> : null}
+    </div>
+  );
+}
+
 export default function CartesiaVoicePickerModal({
   open,
   loading,
@@ -29,9 +82,6 @@ export default function CartesiaVoicePickerModal({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedVoiceID, setSelectedVoiceID] = useState<string | null>(null);
-  const [previewURL, setPreviewURL] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const filteredVoices = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,38 +103,6 @@ export default function CartesiaVoicePickerModal({
       null
     );
   }, [currentVoiceID, filteredVoices, selectedVoiceID, voices]);
-
-  useEffect(() => {
-    setPreviewError(null);
-    setPreviewLoading(false);
-    setPreviewURL((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return null;
-    });
-  }, [selectedVoice?.voice_id]);
-
-  useEffect(() => {
-    return () => {
-      if (previewURL) URL.revokeObjectURL(previewURL);
-    };
-  }, [previewURL]);
-
-  const loadPreview = async () => {
-    if (!selectedVoice?.voice_id) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    try {
-      const blob = await api.getCartesiaVoicePreview(selectedVoice.voice_id);
-      setPreviewURL((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return URL.createObjectURL(blob);
-      });
-    } catch (err) {
-      setPreviewError(String(err));
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
 
   if (!open) return null;
 
@@ -189,21 +207,7 @@ export default function CartesiaVoicePickerModal({
                     <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.language || "ja"}</div>
                   </div>
                 </div>
-                <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.cartesiaPicker.preview")}</div>
-                    <button
-                      type="button"
-                      onClick={() => void loadPreview()}
-                      disabled={previewLoading}
-                      className="inline-flex min-h-9 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {previewLoading ? t("common.loading") : t("settings.cartesiaPicker.loadPreview")}
-                    </button>
-                  </div>
-                  {previewURL ? <audio controls preload="none" className="mt-3 w-full" src={previewURL} /> : null}
-                  {previewError ? <p className="mt-3 text-xs leading-5 text-red-600">{previewError}</p> : null}
-                </div>
+                <CartesiaVoicePreview key={selectedVoice.voice_id} voiceID={selectedVoice.voice_id} />
                 <div className="flex justify-end">
                   <button
                     type="button"

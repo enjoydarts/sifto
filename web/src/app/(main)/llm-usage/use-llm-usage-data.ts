@@ -1,16 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
-  LLMExecutionCurrentMonthSummary,
   LLMUsageDailySummary,
-  LLMUsageLog,
   LLMUsageModelSummary,
-  LLMUsageProviderMonthSummary,
-  LLMUsagePurposeMonthSummary,
-  UserSettings,
 } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { normalizeProvider } from "@/lib/model-display";
@@ -85,39 +80,10 @@ export function useLLMUsageData() {
   const [logSortKey, setLogSortKey] = useState<string>("created_at");
   const [logSortDir, setLogSortDir] = useState<"asc" | "desc">("desc");
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
-  const [forecastMonth, setForecastMonth] = useState<string | null>(null);
+  const [requestedForecastMonth, setForecastMonth] = useState<string | null>(null);
   const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd" | "prev_month">("mtd");
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
-  const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
-  const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
-  const [currentMonthPurposeRows, setCurrentMonthPurposeRows] = useState<LLMUsagePurposeMonthSummary[]>([]);
-  const [currentMonthExecutionRows, setCurrentMonthExecutionRows] = useState<LLMExecutionCurrentMonthSummary[]>([]);
-  const [logs, setLogs] = useState<LLMUsageLog[]>([]);
-  const [settings, setSettings] = useState<UserSettings | null>(null);
-  const seqRef = useRef(0);
-
-  const normalizedSummaryRows = useMemo(() => {
-    return summaryRows.map((row) => ({
-      ...row,
-      provider: normalizeProvider(row.provider),
-    }));
-  }, [summaryRows]);
-  const normalizedCurrentMonthProviderRows = useMemo(() => {
-    return currentMonthProviderRows.map((row) => ({
-      ...row,
-      provider: normalizeProvider(row.provider),
-    }));
-  }, [currentMonthProviderRows]);
-  const normalizedCurrentMonthExecutionRows = useMemo(() => {
-    return currentMonthExecutionRows.map((row) => ({
-      ...row,
-      provider: normalizeProvider(row.provider),
-    }));
-  }, [currentMonthExecutionRows]);
 
   const selectedDays = useMemo(() => {
     if (daysFilter !== "mtd" && daysFilter !== "prev_month") {
@@ -154,42 +120,41 @@ export function useLLMUsageData() {
     return daysFilter === "prev_month" ? previousJSTMonth : currentJSTMonth;
   }, [currentJSTMonth, daysFilter, previousJSTMonth]);
 
-  const load = useCallback(async (daysParam: number, limitParam: number, monthParam: string, monthMode: boolean) => {
-    const seq = ++seqRef.current;
-    setLoading(true);
-    try {
+  const monthMode = daysFilter === "mtd" || daysFilter === "prev_month";
+  const usageQuery = useQuery({
+    queryKey: ["llm-usage-dashboard", selectedDays, limit, selectedMonth, monthMode],
+    placeholderData: (previous) => previous,
+    queryFn: async () => {
       const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
-        api.getLLMUsageSummary(monthMode ? { month: monthParam } : { days: daysParam }),
-        api.getLLMUsageByModel(monthMode ? { month: monthParam } : { days: daysParam }),
-        api.getLLMUsageCurrentMonthByProvider({ month: monthParam }),
-        api.getLLMUsageCurrentMonthByPurpose({ month: monthParam }),
-        api.getLLMExecutionCurrentMonthSummary({ month: monthParam }),
-        api.getLLMUsage(monthMode ? { limit: limitParam, month: monthParam } : { limit: limitParam }),
+        api.getLLMUsageSummary(monthMode ? { month: selectedMonth } : { days: selectedDays }),
+        api.getLLMUsageByModel(monthMode ? { month: selectedMonth } : { days: selectedDays }),
+        api.getLLMUsageCurrentMonthByProvider({ month: selectedMonth }),
+        api.getLLMUsageCurrentMonthByPurpose({ month: selectedMonth }),
+        api.getLLMExecutionCurrentMonthSummary({ month: selectedMonth }),
+        api.getLLMUsage(monthMode ? { limit, month: selectedMonth } : { limit }),
         queryClient.fetchQuery(settingsQueryOptions()),
       ]);
-      if (seq !== seqRef.current) return;
-      setSummaryRows(summary ?? []);
-      setModelRows(byModel ?? []);
-      setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
-      setCurrentMonthPurposeRows(byPurposeCurrentMonth ?? []);
-      setCurrentMonthExecutionRows(executionCurrentMonth ?? []);
-      setLogs(recent ?? []);
-      setSettings(userSettings);
-      setError(null);
-    } catch (e) {
-      if (seq !== seqRef.current) return;
-      setError(String(e));
-    } finally {
-      if (seq === seqRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [queryClient]);
-
-  useEffect(() => {
+      return { summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings };
+    },
+  });
+  const loading = usageQuery.isFetching;
+  const error = usageQuery.error ? String(usageQuery.error) : null;
+  const summaryRows = useMemo(() => usageQuery.data?.summary ?? [], [usageQuery.data?.summary]);
+  const modelRows = useMemo(() => usageQuery.data?.byModel ?? [], [usageQuery.data?.byModel]);
+  const currentMonthProviderRows = useMemo(() => usageQuery.data?.byProviderCurrentMonth ?? [], [usageQuery.data?.byProviderCurrentMonth]);
+  const currentMonthPurposeRows = useMemo(() => usageQuery.data?.byPurposeCurrentMonth ?? [], [usageQuery.data?.byPurposeCurrentMonth]);
+  const currentMonthExecutionRows = useMemo(() => usageQuery.data?.executionCurrentMonth ?? [], [usageQuery.data?.executionCurrentMonth]);
+  const logs = useMemo(() => usageQuery.data?.recent ?? [], [usageQuery.data?.recent]);
+  const settings = usageQuery.data?.userSettings ?? null;
+  const normalizedSummaryRows = useMemo(() => summaryRows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })), [summaryRows]);
+  const normalizedCurrentMonthProviderRows = useMemo(() => currentMonthProviderRows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })), [currentMonthProviderRows]);
+  const normalizedCurrentMonthExecutionRows = useMemo(() => currentMonthExecutionRows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })), [currentMonthExecutionRows]);
+  const paginationKey = `${daysFilter}:${limit}:${selectedMonth}`;
+  const [previousPaginationKey, setPreviousPaginationKey] = useState(paginationKey);
+  if (previousPaginationKey !== paginationKey) {
+    setPreviousPaginationKey(paginationKey);
     setLogPage(1);
-    load(selectedDays, limit, selectedMonth, daysFilter === "mtd" || daysFilter === "prev_month");
-  }, [daysFilter, limit, load, selectedDays, selectedMonth]);
+  }
 
   const totals = useMemo(() => {
     const t = {
@@ -482,12 +447,12 @@ export function useLLMUsageData() {
     return Array.from(months).sort((a, b) => b.localeCompare(a));
   }, [currentJSTMonth, previousJSTMonth, settings, summaryRows]);
 
-  useEffect(() => {
-    if (availableForecastMonths.length === 0) return;
-    if (!forecastMonth || !availableForecastMonths.includes(forecastMonth)) {
-      setForecastMonth(availableForecastMonths[0]);
-    }
-  }, [availableForecastMonths, forecastMonth]);
+  const forecastMonth = requestedForecastMonth && availableForecastMonths.includes(requestedForecastMonth)
+    ? requestedForecastMonth
+    : availableForecastMonths[0] ?? null;
+  if (requestedForecastMonth !== forecastMonth) {
+    setForecastMonth(forecastMonth);
+  }
 
   const modelChartRows = useMemo(
     () =>

@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
@@ -12,3 +12,8 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY infra/audio-concat/app/ ./app/
 
 CMD ["python", "-m", "app.main"]
+
+FROM base AS dev
+
+FROM base AS runner
+RUN python -m pip uninstall --yes pip

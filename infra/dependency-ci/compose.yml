@@ -71,6 +71,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/audio-concat/Dockerfile
+      target: dev
     command: [sh, -ec, 'pip check && python -X pycache_prefix=/tmp/pycache -m compileall -q app && python -B -m unittest app.test_concat_job']
     network_mode: none
     read_only: true

@@ -24,6 +24,7 @@ RUN npm run build
 FROM node:22.23.3-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk upgrade --no-cache zlib
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

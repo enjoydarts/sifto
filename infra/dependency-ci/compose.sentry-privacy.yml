@@ -1,7 +1,7 @@
 name: sifto-sentry-privacy-compat
 services:
   test:
-    image: golang:1.27.1-alpine
+    image: golang:1.27.2-alpine
     volumes:
       - ../../api/internal/service/sentry_privacy.go:/fixture/sentry_privacy.go:ro
       - ../../api/internal/service/sentry_privacy_test.go:/fixture/sentry_privacy_test.go:ro

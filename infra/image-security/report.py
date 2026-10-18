@@ -1,5 +1,6 @@
 """Correlate an exported final image, source revision, SBOM and findings."""
 import hashlib
+import html
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,43 @@ def read_json(path):
 
 def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
+
+
+def markdown_cell(value):
+    text = html.escape(" ".join(str(value or "").split()))
+    for character in "\\|`*_[]()!":
+        text = text.replace(character, "\\" + character)
+    return text or "—"
+
+
+def remediation_summary(results, artifact_name):
+    findings = [v for result in results for v in result.get("Vulnerabilities", [])]
+    if not findings:
+        return "No vulnerabilities found in the scanned OS and library packages.\n"
+    severity_order = {name: rank for rank, name in enumerate(("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"))}
+    findings.sort(key=lambda v: (severity_order.get(v.get("Severity"), 5),
+                                str(v.get("VulnerabilityID", "")), str(v.get("PkgName", "")),
+                                str(v.get("InstalledVersion", "")), str(v.get("FixedVersion", ""))))
+    lines = [
+        "#### Remediation actions", "",
+        "Prioritize CRITICAL and HIGH findings. Update available means the scanner advertises a fixed version; "
+        "confirm the compatible package or base-image update, rebuild and rescan.",
+        "For No fix advertised, review the distro/vendor advisory and runtime reachability, "
+        "then track an upstream fix or assess a mitigation.", "",
+        "| Severity | CVE | Package | Installed | Fixed | Action |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for vulnerability in findings[:30]:
+        fixed = str(vulnerability.get("FixedVersion") or "").strip()
+        cells = [vulnerability.get("Severity"), vulnerability.get("VulnerabilityID"),
+                 vulnerability.get("PkgName"), vulnerability.get("InstalledVersion"), fixed]
+        action = "Update available" if fixed else "No fix advertised"
+        lines.append("| " + " | ".join(markdown_cell(cell) for cell in cells) + f" | {action} |")
+    lines.append("")
+    if len(findings) > 30:
+        lines.append(f"{len(findings) - 30} additional findings are omitted from this table.")
+    lines.append(f"Full findings: `vulnerabilities.json` in the attached artifact matching `{artifact_name}`.")
+    return "\n".join(lines) + "\n"
 
 
 def prepare(directory, component):
@@ -114,6 +152,7 @@ def verify(directory, component):
         "Vulnerabilities: " + ", ".join(f"{key} {value}" for key, value in counts.items()) + ".",
         "All severities and unfixed CVEs are reported; findings fail this advisory job.",
         "CycloneDX SBOM, JSON findings and correlation metadata are attached as artifacts.", "",
+        remediation_summary(results, f"image-security-{component}-{metadata['source_commit']}-*"),
     ])
     (directory / "summary.md").write_text(summary)
     print(summary)

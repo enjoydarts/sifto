@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/sync-ui-font-catalog.mjs && next dev",
-    "build": "node scripts/clean-next-build-artifacts.mjs && node scripts/sync-ui-font-catalog.mjs && next build",
+    "build": "node scripts/clean-next-build-artifacts.mjs && node scripts/sync-ui-font-catalog.mjs && npm run test:typescript-toolchain && next build && npm run typecheck",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
+    "test:typescript-toolchain": "node scripts/test-typescript-toolchain.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.4",
@@ -21,6 +23,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -28,6 +31,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
-    "typescript": "7.0.2"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
   }
 }

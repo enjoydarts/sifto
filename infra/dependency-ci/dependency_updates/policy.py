@@ -7,6 +7,7 @@ import re
 CHECKS = ('Dependency API', 'Dependency Worker', 'Dependency Web', 'Dependency Policy')
 SHA = re.compile(r'^[0-9a-f]{40}$')
 VERSION = r'[~^]?[0-9][a-zA-Z0-9.+_-]*(?:\.[a-zA-Z0-9.+_-]+)*'
+NPM_COMPILER_ALIASES = {'typescript': '@typescript/typescript6', '@typescript/native': 'typescript'}
 IMAGE = r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*(?:@sha256:[0-9a-f]{64})?'
 DOCKERFILES = {'api/Dockerfile', 'worker/Dockerfile', 'web/Dockerfile', 'infra/audio-concat/Dockerfile', 'infra/dependency-ci/web.Dockerfile', 'infra/dependency-ci/postgres.Dockerfile', 'infra/maintenance/Dockerfile', 'infra/maintenance/backup/Dockerfile.proof-test', 'infra/maintenance/bootstrap/Dockerfile.test'}
 DOCKERFILES.add('infra/maintenance/bootstrap/Dockerfile.postgres-data-mount')
@@ -43,9 +44,20 @@ def assert_unchanged(prepared, current, digest):
 
 def versions(value):
     require(isinstance(value, dict), 'Dependency mapping required')
+    identities = []
     for name, version in value.items():
-        require(re.fullmatch(r'(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+', name) and isinstance(version, str) and re.fullmatch(VERSION, version), 'Unsupported dependency name or version')
-    return sorted(value)
+        require(re.fullmatch(r'(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+', name)
+                and isinstance(version, str), 'Unsupported dependency name or version')
+        if version.startswith('npm:'):
+            target = NPM_COMPILER_ALIASES.get(name)
+            prefix = 'npm:' + (target or '') + '@'
+            require(target is not None and version.startswith(prefix)
+                    and re.fullmatch(VERSION, version[len(prefix):]), 'Unsupported npm compiler alias')
+            identities.append(name + '=npm:' + target)
+        else:
+            require(re.fullmatch(VERSION, version), 'Unsupported dependency name or version')
+            identities.append(name)
+    return sorted(identities)
 
 
 def load_json(text):
@@ -69,15 +81,36 @@ def manifest_shape(text):
 def lock_shape(text):
     value = load_json(text)
     require(value.get('lockfileVersion') == 3 and isinstance(value.get('packages'), dict), 'Only npm lockfile v3 is supported')
-    root = value['packages'].pop('', None)
-    require(root is not None, 'npm lockfile root is required')
-    root = manifest_shape(json.dumps(root))
+    raw_root = value['packages'].pop('', None)
+    require(raw_root is not None, 'npm lockfile root is required')
+    root = manifest_shape(json.dumps(raw_root))
+    aliases = {'node_modules/' + name: NPM_COMPILER_ALIASES[name]
+               for group in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies')
+               for name, spec in raw_root.get(group, {}).items() if spec.startswith('npm:')}
+    if aliases.get('node_modules/typescript') == '@typescript/typescript6':
+        compat = value['packages'].get('node_modules/typescript', {})
+        internal = compat.get('dependencies', {}).get('@typescript/old')
+        if internal is not None:
+            require(isinstance(internal, str) and re.fullmatch(r'npm:typescript@[~^]?6(?:\.[0-9]+){0,2}', internal),
+                    'Invalid TypeScript compatibility dependency')
+            aliases['node_modules/@typescript/old'] = 'typescript'
+            aliases['node_modules/typescript/node_modules/@typescript/old'] = 'typescript'
     # Transitive package metadata may change with versions, but scripts/links and
     # non-registry transports cannot enter the lockfile through dependency data.
     for path, package in value['packages'].items():
         require(re.fullmatch(r'(?:node_modules/(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+/)*node_modules/(?:@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+', path), 'Unsupported npm package path')
         require(isinstance(package, dict) and not package.get('link') and 'scripts' not in package, 'Unsupported npm lock entry')
         require(re.fullmatch(VERSION, package.get('version', '')), 'Unsupported npm lock version')
+        target = aliases.get(path)
+        if target is not None:
+            expected = ('https://registry.npmjs.org/' + target + '/-/' + target.rsplit('/', 1)[-1]
+                        + '-' + package['version'] + '.tgz')
+            require(package.get('name') == target and package.get('resolved') == expected
+                    and 'integrity' in package, 'Invalid npm compiler alias identity')
+            if path.endswith('/@typescript/old'):
+                require(package['version'].startswith('6.'), 'Invalid TypeScript compatibility version')
+        else:
+            require('name' not in package, 'Undeclared npm alias refused')
         if 'resolved' in package:
             require(re.fullmatch(r'https://registry\.npmjs\.org/[a-zA-Z0-9@%/_.+-]+\.tgz', package['resolved']), 'Only npm registry tarballs are supported')
         if 'integrity' in package:
@@ -103,7 +136,7 @@ def lock_shape(text):
                             and re.fullmatch(segment + r'(?:/' + segment + r')*', path)
                             for path in workspaces), 'Invalid npm workspace metadata')
             require(len(set(workspaces)) == len(workspaces), 'Invalid npm workspace metadata')
-        require(set(package) <= {'version', 'resolved', 'integrity', 'dev', 'optional', 'devOptional', 'peer', 'hasInstallScript', 'license', 'engines', 'funding', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'bundleDependencies', 'workspaces', 'bin', 'os', 'cpu', 'libc', 'inBundle', 'deprecated'}, 'Unsupported npm lock metadata')
+        require(set(package) <= {'name', 'version', 'resolved', 'integrity', 'dev', 'optional', 'devOptional', 'peer', 'hasInstallScript', 'license', 'engines', 'funding', 'dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'bundleDependencies', 'workspaces', 'bin', 'os', 'cpu', 'libc', 'inBundle', 'deprecated'}, 'Unsupported npm lock metadata')
     value['packages'] = {'': root}
     return value
 

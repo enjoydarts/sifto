@@ -143,14 +143,20 @@ def verify(directory, component):
     metadata["report_sha256"] = {name: digest(directory / name) for name in ("sbom.cdx.json", "vulnerabilities.json", "scan-status.json")}
     metadata["package_counts"] = {"os": len(os_names), "library": len(library_names)}
     metadata["vulnerability_counts"] = counts
+    metadata["findings_fail_job"] = False
     write_json(directory / "metadata.json", metadata)
+    total = sum(counts.values())
+    fixed = sum(bool(str(v.get("FixedVersion") or "").strip())
+                for result in results for v in result.get("Vulnerabilities", []))
     summary = "\n".join([
         f"### {component} ({platform})", metadata["coverage"],
+        "検査処理: 完了",
+        f"未解決の脆弱性: {total}件。修正版の提示あり: {fixed}件、修正版の提示なし: {total - fixed}件。",
         f"Commit: `{metadata['source_commit']}`; local changes: `{metadata['source_tree_dirty']}`",
         f"Final image ID: `{image_id}`", f"Archive digest: `{metadata['archive_sha256']}`",
         f"Packages: OS {len(os_names)}, library {len(library_names)}.",
         "Vulnerabilities: " + ", ".join(f"{key} {value}" for key, value in counts.items()) + ".",
-        "All severities and unfixed CVEs are reported; findings fail this advisory job.",
+        "検出結果は継続対応が必要です。Actionの成功は検査完了を示し、脆弱性の解消を意味しません。",
         "CycloneDX SBOM, JSON findings and correlation metadata are attached as artifacts.", "",
         remediation_summary(results, f"image-security-{component}-{metadata['source_commit']}-*"),
     ])
@@ -166,6 +172,10 @@ if __name__ == "__main__":
     if sys.argv[1] == "prepare":
         prepare(directory, component)
     elif sys.argv[1] == "verify":
-        verify(directory, component)
+        counts = verify(directory, component)
+        if sum(counts.values()):
+            print(f"::warning title=未解決の脆弱性（{component}）::{sum(counts.values())}件を検出しました。"
+                  f"CRITICAL {counts['CRITICAL']}件、HIGH {counts['HIGH']}件。検査は完了しています。"
+                  "修正版の有無と全件の検出結果はSummary・artifactを確認してください。")
     else:
         raise SystemExit("Unknown report command")

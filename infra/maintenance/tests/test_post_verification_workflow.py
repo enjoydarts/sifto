@@ -16,8 +16,9 @@ class PostVerificationWorkflowTests(unittest.TestCase):
                 plan['restart_services'] = ['containerd.service', 'docker.service']
                 envelope['approval']['plan_sha256'] = plan_module.plan_sha256(plan)
                 host['role'] = config['host_role']
+                # Model a provisioned DB host; its bootstrap default requires explicit opt-in.
                 after['maintenance_policy'].update(host_role=config['host_role'],
-                                                  database_enabled=config['database_enabled'], backup_ready=True)
+                                                  database_enabled=config['host_role'] == 'database', backup_ready=True)
                 after['runtime']['services'] = {unit: 'active' for unit in config['monitored_services']}
                 history['receipts'][0]['before_runtime']['services'] = dict(after['runtime']['services'])
                 if config['host_role'] == 'database':

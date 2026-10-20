@@ -1,8 +1,11 @@
 """Guard the privilege and dependency policy of public dependency automation."""
 import json
+import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -479,16 +482,50 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertNotIn('continue-on-error', scan)
         action = next(s for s in scan['steps'] if s.get('uses', '').startswith('aquasecurity/trivy-action@'))
         self.assertEqual(action['with']['scanners'], 'vuln')
-        self.assertEqual(action['with']['exit-code'], '1')
+        self.assertEqual(action['with']['exit-code'], '0')
         self.assertEqual(action['with']['version'], 'v0.75.0')
         self.assertEqual(action['with']['scan-ref'], '.dependency-inventory')
         self.assertNotIn('continue-on-error', action)
+        self.assertEqual(action['with']['severity'], 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL')
+        self.assertIs(action['with']['ignore-unfixed'], False)
+        self.assertEqual(action['id'], 'inventory_scan')
+        summary = next(step for step in scan['steps'] if step.get('name') == 'Publish package and CVE inventory in summary')
+        self.assertEqual(summary['env']['SCAN_OUTCOME'], '${{ steps.inventory_scan.outcome }}')
+        self.assertIn('test "$SCAN_OUTCOME" = success', summary['run'])
+        self.assertIn('test -s .dependency-vulnerabilities.txt', summary['run'])
 
     def test_sensitive_changes_require_owner_review(self):
         owners = (ROOT / '.github/CODEOWNERS').read_text().splitlines()
         entries = {line.split()[0]: line.split()[1:] for line in owners if line and not line.startswith('#')}
         for pattern in ['/.github/**', '/infra/**', '**/Dockerfile*', '**/requirements*.txt', '**/requirements*.in', '**/package*.json', '**/go.mod', '**/go.sum', '/Makefile', '/renovate.json']:
             self.assertIn('@enjoydarts', entries[pattern])
+
+    def test_manifest_summary_rejects_failed_scans_and_missing_or_empty_results(self):
+        workflow = read_yaml('.github/workflows/dependency-security.yml')
+        step = next(item for item in workflow['jobs']['inventory']['steps']
+                    if item.get('name') == 'Publish package and CVE inventory in summary')
+        for outcome, report, expected in (
+            ('success', 'Total: 0', 0),
+            ('success', 'Total: 1 (HIGH: 1)', 0),
+            ('failure', 'partial result', 1),
+            ('skipped', 'partial result', 1),
+            ('success', None, 1),
+            ('success', '', 1),
+        ):
+            with self.subTest(outcome=outcome, report=report), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                summary = directory / 'summary.md'
+                if report is not None:
+                    (directory / '.dependency-vulnerabilities.txt').write_text(report)
+                result = subprocess.run(['sh', '-ec', step['run']], cwd=directory,
+                    env={'PATH': os.environ['PATH'], 'GITHUB_STEP_SUMMARY': str(summary), 'SCAN_OUTCOME': outcome},
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                if expected == 0:
+                    self.assertIn('検査処理: 完了', summary.read_text())
+                    self.assertIn(report, summary.read_text())
+                else:
+                    self.assertNotIn('検査処理: 完了', summary.read_text())
 
     def test_worker_direct_requirements_are_fixed_and_install_is_bounded(self):
         requirements = (ROOT / 'worker/requirements.in').read_text().splitlines()

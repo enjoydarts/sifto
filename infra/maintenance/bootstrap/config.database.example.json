@@ -6,7 +6,7 @@
   "state_path": "/var/lib/sifto-maintenance",
   "allowed_approvers": [],
   "allowed_restart_services": ["docker.service", "containerd.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
-  "monitored_services": ["docker.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
+  "monitored_services": ["docker.service", "containerd.service", "ssh.service", "postgresql@16-main.service", "pgbouncer.service"],
   "database_restart_services": ["postgresql@16-main.service"],
   "pgbouncer_health": {"database": "sifto", "user": "sifto"},
   "database_enabled": false,

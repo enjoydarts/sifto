@@ -175,9 +175,13 @@ def verify_files(files, component, head):
             and type(status.get('vulnerability_exit_code')) is int
             and status['vulnerability_exit_code'] == int(bool(sum(counts.values()))),
             'Scanner failure or status/report mismatch')
-    return {'component': component, 'platform': platform, 'image_id': image_id,
+    result = {'component': component, 'platform': platform, 'image_id': image_id,
             'archive_sha256': metadata['archive_sha256'], 'report_sha256': hashes,
             'package_counts': package_counts, 'vulnerability_counts': counts}
+    if 'findings_fail_job' in metadata:
+        require(metadata['findings_fail_job'] is False, 'Unknown findings outcome format')
+        result['findings_fail_job'] = False
+    return result
 
 
 def download_zip(repo, identifier):
@@ -364,6 +368,9 @@ def step_proof(job, names, allowed_failure, expected_failure=None):
 
 
 def jobs_proof(api, ticket, run_id, images):
+    modes = {value.get('findings_fail_job', True) for value in images.values()}
+    require(len(modes) == 1, 'Mixed image findings outcome formats')
+    legacy_findings_failure = modes.pop()
     jobs = api.pages('/actions/runs/%d/jobs?filter=all' % run_id, 'jobs', require_total=True)
     names, identifiers = set(), set()
     inventory, image_jobs = None, {}
@@ -378,7 +385,8 @@ def jobs_proof(api, ticket, run_id, images):
         names.add(job['name'])
         if job['name'] == 'inventory':
             if ticket['ref'] == 'main':
-                step_proof(job, INVENTORY_STEPS, INVENTORY_SCAN)
+                step_proof(job, INVENTORY_STEPS, INVENTORY_SCAN,
+                           None if legacy_findings_failure else False)
             else:
                 require(job.get('conclusion') == 'skipped' and job.get('steps') == [],
                         'Candidate filesystem advisory inventory should be skipped')
@@ -386,7 +394,8 @@ def jobs_proof(api, ticket, run_id, images):
         else:
             component = next((name for name in EXPECTED if job['name'] == 'images (' + name + ')'), None)
             require(component is not None, 'Unknown image advisory job')
-            step_proof(job, IMAGE_STEPS, SCAN, bool(sum(images[component]['vulnerability_counts'].values())))
+            expected_failure = legacy_findings_failure and bool(sum(images[component]['vulnerability_counts'].values()))
+            step_proof(job, IMAGE_STEPS, SCAN, expected_failure)
             image_jobs[component] = job['id']
     require(set(image_jobs) == set(EXPECTED) and (ticket['ref'] != 'main' or inventory is not None),
             'All five production image jobs and expected inventory are required')
@@ -450,8 +459,7 @@ def collect(api, plan, ticket, run_id):
             artifact_bytes=artifact['size_in_bytes'], artifact_expires_at=artifact['expires_at'])
     budget()
     image_jobs, inventory, jobs = jobs_proof(api, ticket, run_id, images)
-    failure = any(sum(v['vulnerability_counts'].values()) for v in images.values()) or (
-        inventory is not None and inventory['conclusion'] == 'failure')
+    failure = any(job['conclusion'] == 'failure' for job in jobs)
     require(run['conclusion'] == ('failure' if failure else 'success'), 'Image advisory conclusion/findings mismatch')
     final = api.get('/actions/runs/%d' % run_id)
     child(api, ticket, final)
@@ -522,8 +530,9 @@ def summary(stream, evidence):
     for value in evidence['images']:
         stream.write('| %s | %s | %s |\n' % (value['component'], value['platform'],
             ' | '.join(str(value['vulnerability_counts'][severity]) for severity in SEVERITIES)))
-    stream.write('\nAll severities and unfixed CVEs remain visible. Complete finding failures remain '
-        'advisory failures; build/scanner/report/upload incompleteness stops this pipeline. '
+    stream.write('\nAll severities and unfixed CVEs remain visible. Finding counts are separate from '
+        'scan completion; legacy finding failures remain readable. '
+        'Build/scanner/report/upload incompleteness stops this pipeline. '
         'Artifacts correlate image IDs and report bytes; the image archive itself is not uploaded '
         'or independently verified here. Maintenance executor activation remains separate. '
         'Web coverage is the production Docker image; Vercel managed runtime OS is not inspected.\n')

@@ -16,7 +16,7 @@ cat > /root/payload/config.json <<'JSON'
   "state_path":"/var/lib/sifto-maintenance",
   "allowed_approvers":[],
   "allowed_restart_services":["docker.service","containerd.service","ssh.service"],
-  "monitored_services":["docker.service","ssh.service"],
+  "monitored_services":["docker.service","containerd.service","ssh.service"],
   "database_enabled":false
 }
 JSON

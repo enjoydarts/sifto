@@ -94,7 +94,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   # Keep this advisory inventory separate from required functional PR checks.
-  # Findings fail the job and need human triage; no baseline CVEs are suppressed.
+  # A successful job means the scan completed, not that vulnerabilities are fixed.
+  # All findings need human triage; no baseline CVEs are suppressed.
   inventory:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
@@ -106,6 +107,7 @@ jobs:
       - name: Stage public dependency manifests only
         run: make dependency-inventory
       - name: Scan all known package vulnerabilities
+        id: inventory_scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: 'v0.75.0'
@@ -114,19 +116,25 @@ jobs:
           scanners: vuln
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: false
-          exit-code: '1'
+          exit-code: '0'
           format: table
           output: .dependency-vulnerabilities.txt
           cache: false
       - name: Publish package and CVE inventory in summary
         if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.inventory_scan.outcome }}
         run: |
-          printf '%s\n' '## Dependency vulnerability inventory' 'Findings require human review. This advisory is separate from functional PR checks.' '```text' >> "$GITHUB_STEP_SUMMARY"
-          if [ -f .dependency-vulnerabilities.txt ]; then
-            cat .dependency-vulnerabilities.txt >> "$GITHUB_STEP_SUMMARY"
-          else
-            printf '%s\n' 'The scanner did not produce a report. Inspect the failed scan step.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '## 依存パッケージの脆弱性検査' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SCAN_OUTCOME" != success ]; then
+            printf '%s\n' '検査処理: 未完了。失敗したスキャナの実行ログを確認してください。' >> "$GITHUB_STEP_SUMMARY"
           fi
-          printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"
+          test "$SCAN_OUTCOME" = success
           # Missing/empty output is scanner incompleteness, not a CVE advisory.
+          if [ ! -s .dependency-vulnerabilities.txt ]; then
+            printf '%s\n' '検査処理: 未完了。検査結果の出力がありません。' >> "$GITHUB_STEP_SUMMARY"
+          fi
           test -s .dependency-vulnerabilities.txt
+          printf '%s\n' '検査処理: 完了。以下の検出結果は継続対応が必要です。Actionの成功は脆弱性の解消を意味しません。' '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat .dependency-vulnerabilities.txt >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '```' >> "$GITHUB_STEP_SUMMARY"

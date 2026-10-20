@@ -124,6 +124,15 @@ class ReportTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(Refused):
                 image.verify_archive(archive(files), 'api', HEAD)
 
+    def test_unknown_findings_outcome_markers_are_refused(self):
+        for value in (True, 0, 1, None, 'false'):
+            files = fixture()
+            metadata = json.loads(files['metadata.json'])
+            metadata['findings_fail_job'] = value
+            files['metadata.json'] = encoded(metadata)
+            with self.subTest(value=value), self.assertRaises(Refused):
+                image.verify_archive(archive(files), 'api', HEAD)
+
     def test_zip_unknown_traversal_absolute_duplicate_and_symlink_refused(self):
         for name in ('../metadata.json', '/metadata.json', 'nested/metadata.json', 'metadata.json', 'image.tar'):
             with self.subTest(name=name), self.assertRaises(Refused):
@@ -202,12 +211,16 @@ class ControllerTests(unittest.TestCase):
         if endpoint.endswith('/artifacts'): return {'artifacts': self.artifacts, 'total_count': len(self.artifacts)}
         raise AssertionError('Unexpected evidence API request: ' + path)
 
-    def complete(self, ticket, findings=True):
+    def complete(self, ticket, findings=True, *, findings_fail_job=True):
         head, ref = ticket['head'], ticket['ref']
         self.scans = [self.make_run(20, 2, head, ref, ticket['marker'], '.github/workflows/dependency-security.yml',
-            conclusion='failure' if findings else 'success')]
+            conclusion='failure' if findings and findings_fail_job else 'success')]
         for index, component in enumerate(image.EXPECTED):
             files = fixture(component, findings)
+            if not findings_fail_job:
+                metadata = json.loads(files['metadata.json'])
+                metadata['findings_fail_job'] = False
+                files['metadata.json'] = encoded(metadata)
             if head != HEAD:
                 files['source-sha.txt'] = head.encode()
                 metadata = json.loads(files['metadata.json'])
@@ -222,14 +235,59 @@ class ControllerTests(unittest.TestCase):
                     'repository_id': 42, 'head_repository_id': 42}})
             self.jobs.append({'id': 200 + index, 'run_id': 20, 'head_sha': head, 'run_attempt': 1,
                 'name': 'images (' + component + ')', 'status': 'completed',
-                'conclusion': 'failure' if findings else 'success', 'steps': [
+                'conclusion': 'failure' if findings and findings_fail_job else 'success', 'steps': [
                     {'name': name, 'status': 'completed', 'conclusion':
-                     'failure' if name == image.SCAN and findings else 'success'} for name in image.IMAGE_STEPS]})
+                     'failure' if name == image.SCAN and findings and findings_fail_job else 'success'} for name in image.IMAGE_STEPS]})
         if ref == 'main':
             self.jobs.append({'id': 205, 'run_id': 20, 'head_sha': head, 'run_attempt': 1,
-                'name': 'inventory', 'status': 'completed', 'conclusion': 'failure' if findings else 'success',
+                'name': 'inventory', 'status': 'completed', 'conclusion': 'failure' if findings and findings_fail_job else 'success',
                 'steps': [{'name': name, 'status': 'completed', 'conclusion':
-                    'failure' if name == image.INVENTORY_SCAN and findings else 'success'} for name in image.INVENTORY_STEPS]})
+                    'failure' if name == image.INVENTORY_SCAN and findings and findings_fail_job else 'success'} for name in image.INVENTORY_STEPS]})
+
+    def test_completed_findings_only_scan_succeeds_and_preserves_all_evidence(self):
+        ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+        self.complete(ticket, findings_fail_job=False)
+        evidence = image.wait(self.api, self.plan, ticket)
+        self.assertEqual(evidence['conclusion'], 'success')
+        self.assertTrue(all(value['vulnerability_counts']['HIGH'] == 1 for value in evidence['images']))
+        self.assertTrue(all(value['findings_fail_job'] is False for value in evidence['images']))
+        self.assertEqual(image.revalidate(self.api, self.plan, evidence), evidence)
+
+    def test_completed_findings_only_scan_on_merged_main_includes_successful_inventory(self):
+        self.main = 'e' * 40
+        ticket = image.start(self.api, self.plan, 'merged', self.main, 'main')
+        self.complete(ticket, findings_fail_job=False)
+        evidence = image.wait(self.api, self.plan, ticket)
+        self.assertEqual(evidence['conclusion'], 'success')
+        self.assertEqual(evidence['inventory']['conclusion'], 'success')
+
+    def test_mixed_legacy_and_findings_only_image_formats_are_refused(self):
+        ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+        self.complete(ticket, findings=False, findings_fail_job=False)
+        legacy = archive(fixture('api', False))
+        self.downloads[100] = legacy
+        self.artifacts[0].update(size_in_bytes=len(legacy), digest=image.sha256(legacy))
+        with self.assertRaises(Refused):
+            image.wait(self.api, self.plan, ticket)
+
+    def test_findings_only_mode_does_not_waive_actual_scan_stage_failures(self):
+        ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])
+        self.complete(ticket, findings_fail_job=False)
+        self.jobs[0]['steps'][7]['conclusion'] = 'failure'
+        self.jobs[0]['conclusion'] = 'failure'
+        self.scans[0]['conclusion'] = 'failure'
+        with self.assertRaises(Refused):
+            image.wait(self.api, self.plan, ticket)
+
+    def test_findings_only_mode_does_not_waive_actual_inventory_failures(self):
+        self.main = 'e' * 40
+        ticket = image.start(self.api, self.plan, 'merged', self.main, 'main')
+        self.complete(ticket, findings_fail_job=False)
+        self.jobs[-1]['steps'][3]['conclusion'] = 'failure'
+        self.jobs[-1]['conclusion'] = 'failure'
+        self.scans[0]['conclusion'] = 'failure'
+        with self.assertRaises(Refused):
+            image.wait(self.api, self.plan, ticket)
 
     def test_candidate_dispatch_and_complete_failure_evidence_then_exact_revalidation(self):
         ticket = image.start(self.api, self.plan, 'candidate', HEAD, self.plan['branch'])

@@ -120,6 +120,22 @@ class ImageEvidenceTests(unittest.TestCase):
         self.assertNotIn("| Severity |", summary)
         self.assertEqual(sum(counts.values()), 0)
 
+    def test_summary_separates_completed_scan_from_unresolved_findings(self):
+        summary, counts = self.summary_with_findings([
+            {'Severity': 'HIGH', 'VulnerabilityID': 'CVE-2026-1111', 'PkgName': 'zlib',
+             'InstalledVersion': '1', 'FixedVersion': '2'},
+            {'Severity': 'CRITICAL', 'VulnerabilityID': 'CVE-2026-2222', 'PkgName': 'libc6',
+             'InstalledVersion': '1', 'FixedVersion': ' \t '},
+        ])
+        self.assertIn('検査処理: 完了', summary)
+        self.assertIn('未解決の脆弱性: 2件', summary)
+        self.assertIn('修正版の提示あり: 1件', summary)
+        self.assertIn('修正版の提示なし: 1件', summary)
+        self.assertNotIn('findings fail this advisory job', summary)
+        metadata = json.loads((self.directory / 'metadata.json').read_text())
+        self.assertIs(metadata['findings_fail_job'], False)
+        self.assertEqual(metadata['vulnerability_counts'], counts)
+
     def test_wrong_scan_image_is_rejected(self):
         self.report["Metadata"]["ImageID"] = "sha256:" + "0" * 64
         write_json(self.directory / "vulnerabilities.json", self.report)

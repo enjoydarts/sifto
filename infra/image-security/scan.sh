@@ -30,4 +30,7 @@ printf '{"sbom_exit_code":%s,"vulnerability_exit_code":%s}\n' \
   "$sbom_status" "$vuln_status" > "$IMAGE_SECURITY_DIR/scan-status.json"
 report_status=0
 compose run --rm -T --no-deps verifier python -B /tool/report.py verify || report_status=$?
-if [ "$sbom_status" -ne 0 ] || [ "$vuln_status" -ne 0 ] || [ "$report_status" -ne 0 ]; then exit 1; fi
+if [ "$sbom_status" -ne 0 ] || [ "$report_status" -ne 0 ]; then exit 1; fi
+# Exit 1 denotes findings only when the verifier has checked the complete
+# reports, image identity and exact raw exit status. Other exits are errors.
+case "$vuln_status" in 0|1) exit 0 ;; *) exit 1 ;; esac

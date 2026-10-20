@@ -1,9 +1,30 @@
 import unittest
+import json
 from pathlib import Path
 import yaml
 
+from maintenance import post_apply, plan as plan_module
+from test_post_apply import fixture
+
 
 class PostVerificationWorkflowTests(unittest.TestCase):
+    def test_bootstrap_monitoring_can_verify_approved_container_runtime_restarts(self):
+        for filename in ('config.example.json', 'config.database.example.json'):
+            with self.subTest(config=filename):
+                config = json.loads(Path('/repository/infra/maintenance/bootstrap', filename).read_text())
+                plan, envelope, host, after, history, *_ = fixture()
+                plan['restart_services'] = ['containerd.service', 'docker.service']
+                envelope['approval']['plan_sha256'] = plan_module.plan_sha256(plan)
+                host['role'] = config['host_role']
+                after['maintenance_policy'].update(host_role=config['host_role'],
+                                                  database_enabled=config['database_enabled'], backup_ready=True)
+                after['runtime']['services'] = {unit: 'active' for unit in config['monitored_services']}
+                history['receipts'][0]['before_runtime']['services'] = dict(after['runtime']['services'])
+                if config['host_role'] == 'database':
+                    after['runtime']['database_pool_health'] = {'status': 'healthy', 'reason': 'read_only_route_verified'}
+                result = post_apply.validate_observation(plan, envelope, host, after, history)
+                self.assertEqual(result['status'], 'verified')
+
     def test_same_run_job_uses_pipeline_source_and_read_only_scope(self):
         workflow = yaml.safe_load(Path('/repository/.github/workflows/maintenance-apply.yml').read_text())
         self.assertIn('post-verification', workflow['jobs'], 'same-run verification job missing')

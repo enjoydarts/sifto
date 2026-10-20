@@ -7,7 +7,7 @@
   "allowed_approvers": ["REPLACE_WITH_GITHUB_LOGIN"],
   "allowed_restart_services": ["docker.service", "containerd.service", "ssh.service"],
   "allowed_recreated_container_images": ["docker.io/coollabsio/sentinel:1.0.2"],
-  "monitored_services": ["docker.service", "ssh.service"],
+  "monitored_services": ["docker.service", "containerd.service", "ssh.service"],
   "database_enabled": false,
   "coolify_standard": {"enabled": false},
   "backup_destination": {"bucket": "sifto-backups-prod", "prefix": "application"}

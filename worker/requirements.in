@@ -11,7 +11,7 @@ sentry-sdk[fastapi]==2.72.0
 langfuse==4.17.0
 json-repair==0.64.0
 PyMuPDF==1.28.2
-boto3==1.43.112
+boto3==1.43.113
 mutagen==1.48.1
 google-auth==2.62.0
 pytest==9.1.1

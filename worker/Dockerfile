@@ -3,7 +3,7 @@ FROM python:3.12.15-slim AS base
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl liblzma5 \
+    && apt-get install -y --no-install-recommends liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY worker/requirements.txt .
@@ -35,3 +35,7 @@ ENV HOME=/home/sifto
 ENV XDG_CACHE_HOME=/home/sifto/.cache
 ENV PYTHONDONTWRITEBYTECODE=1
 USER 10001:10001
+
+# Keep Coolify readiness checks independent of curl and its OS dependencies.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-c", "import http.client; c = http.client.HTTPConnection('127.0.0.1', 8000, timeout=3); c.request('GET', '/health'); r = c.getresponse(); raise SystemExit(0 if r.status == 200 else 1)"]

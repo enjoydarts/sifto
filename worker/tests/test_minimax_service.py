@@ -23,7 +23,7 @@ class MiniMaxServiceTests(unittest.TestCase):
         self.assertEqual(request.headers["Authorization"], "Bearer minimax-key")
         self.assertEqual(body["model"], "MiniMax-M3.1-Flash")
         self.assertEqual(body.get("reasoning_effort"), "low")
-        self.assertEqual(body.get("max_completion_tokens"), 1200)
+        self.assertEqual(body.get("max_completion_tokens"), 4096)
         self.assertNotIn("max_tokens", body)
         self.assertNotIn("temperature", body)
         self.assertNotIn("top_p", body)
@@ -42,8 +42,8 @@ class MiniMaxServiceTests(unittest.TestCase):
                     side_effect=lambda **kwargs: client(transport=transport, **kwargs)):
                 text, usage = _p._chat_json("Return JSON", model, "minimax-key",
                     max_output_tokens=1200, response_schema={"type": "object"}, top_p=0.5)
-            self.assertEqual(json.loads(text), {"answer": "ok"})
-            self.assertEqual(usage["input_tokens"], 10)
+                self.assertEqual(json.loads(text), {"answer": "ok"})
+                self.assertEqual(usage["input_tokens"], 10)
 
     def test_flash_async_requests_use_same_supported_parameters(self):
         client = httpx.AsyncClient
@@ -60,6 +60,36 @@ class MiniMaxServiceTests(unittest.TestCase):
             {"input_tokens": 1_000_000, "output_tokens": 100_000, "cache_read_input_tokens": 100_000})
         self.assertEqual(llm["provider"], "minimax")
         self.assertAlmostEqual(llm["estimated_cost_usd"], 0.1965)
+
+    def test_flash_non_summary_truncation_grows_budget_sync_and_async(self):
+        for asynchronous in (False, True):
+            budgets = []
+
+            def respond(request):
+                body = json.loads(request.content)
+                budgets.append(body["max_completion_tokens"])
+                truncated = len(budgets) == 1
+                return httpx.Response(200, json={
+                    "choices": [{"finish_reason": "length" if truncated else "stop", "message": {
+                        "content": "" if truncated else '{"answer":"ok"}', "reasoning_content": "thinking"}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 100},
+                })
+
+            transport = httpx.MockTransport(respond)
+            client_type = "AsyncClient" if asynchronous else "Client"
+            client = getattr(httpx, client_type)
+            with self.subTest(asynchronous=asynchronous), patch(
+                "app.services.openai_compat_transport.httpx." + client_type,
+                side_effect=lambda **kwargs: client(transport=transport, **kwargs),
+            ):
+                kwargs = {"max_output_tokens": 120, "schema_name": "verification", "response_schema": {"type": "object"}}
+                if asynchronous:
+                    text, usage = asyncio.run(_p._chat_json_async("Return JSON", "MiniMax-M3.1-Flash", "key", **kwargs))
+                else:
+                    text, usage = _p._chat_json("Return JSON", "MiniMax-M3.1-Flash", "key", **kwargs)
+                self.assertEqual(json.loads(text), {"answer": "ok"})
+                self.assertEqual(budgets, [4096, 8192])
+                self.assertEqual(usage["output_tokens"], 200)
 
     def test_provider_for_model_detects_minimax(self):
         self.assertEqual(provider_for_model("MiniMax-M3"), "minimax")

@@ -2,6 +2,28 @@ package service
 
 import "testing"
 
+func TestMiniMaxCurrentCatalogPricing(t *testing.T) {
+	for _, tc := range []struct {
+		model                 string
+		input, output, cached int
+		want                  float64
+	}{
+		{"MiniMax-M3.1-Flash", 1_000_000, 100_000, 100_000, 0.1965},
+		{"minimax::MiniMax-M3.1-Flash", 1_000_000, 100_000, 100_000, 0.1965},
+		{"MiniMax-M3", 512_000, 1_000, 1_000, 0.15456},
+		{"MiniMax-M3", 512_001, 1_000, 1_000, 0.3091206},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			got := NormalizeCatalogPricedUsage("summary", &LLMUsage{
+				Model: tc.model, InputTokens: tc.input, OutputTokens: tc.output, CacheReadInputTokens: tc.cached,
+			})
+			if got.Provider != "minimax" || got.EstimatedCostUSD != tc.want {
+				t.Fatalf("provider/cost = %s/%.8f, want minimax/%.8f", got.Provider, got.EstimatedCostUSD, tc.want)
+			}
+		})
+	}
+}
+
 func float64Ptr(v float64) *float64 { return &v }
 
 func TestNormalizeCatalogPricedUsagePrefersOpenRouterAliasedPricing(t *testing.T) {

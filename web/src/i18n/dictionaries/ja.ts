@@ -885,6 +885,8 @@ export const jaDict: Dict = {
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol。複雑な要約・Ask・ダイジェスト向けの品質と費用のバランスを比較する候補。",
   "settings.modelGuide.comments.mistral-large-4": "Mistral Large 4（公開Preview）。100万tokenの長文コンテキストを備え、複雑な要約・Ask・ダイジェストの比較候補。",
   "settings.section.llm": "LLM",
+  "settings.modelGuide.comments.MiniMax-M3.1-Flash": "MiniMax M3.1 Flash。100万tokenの長文コンテキストに対応し、要約・Ask・ダイジェストを低価格で処理する候補。",
+  "settings.modelGuide.comments.MiniMax-M3": "MiniMax M3。100万tokenの長文コンテキストに対応する比較候補。入力512K token超では長文料金が適用される。",
   "settings.section.llmDescription": "プロバイダーアクセス、用途別モデル、更新通知をまとめて管理します。",
   "settings.section.goals": "読書ゴール",
   "settings.section.goalsDescription": "今追うテーマを管理し、Today Queue と Briefing の優先度に反映します。",

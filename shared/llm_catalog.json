@@ -169,6 +169,7 @@
       "id": "minimax",
       "api_key_header": "x-minimax-api-key",
       "match_exact": [
+        "MiniMax-M3.1-Flash",
         "MiniMax-M3",
         "MiniMax-M2.7",
         "MiniMax-M2.7-highspeed",
@@ -177,12 +178,12 @@
       ],
       "match_prefixes": [],
       "default_models": {
-        "facts": "MiniMax-M2.5-highspeed",
-        "summary": "MiniMax-M2.7",
-        "digest_cluster_draft": "MiniMax-M2.7",
-        "digest": "MiniMax-M2.7",
-        "ask": "MiniMax-M2.7-highspeed",
-        "source_suggestion": "MiniMax-M2.5-highspeed"
+        "facts": "MiniMax-M3.1-Flash",
+        "summary": "MiniMax-M3.1-Flash",
+        "digest_cluster_draft": "MiniMax-M3.1-Flash",
+        "digest": "MiniMax-M3.1-Flash",
+        "ask": "MiniMax-M3.1-Flash",
+        "source_suggestion": "MiniMax-M3.1-Flash"
       },
       "settings_field_base": "MiniMax"
     },
@@ -3070,6 +3071,39 @@
       }
     },
     {
+      "id": "MiniMax-M3.1-Flash",
+      "provider": "minimax",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast"
+      ],
+      "comment": "MiniMax M3.1 Flash。100万tokenの長文コンテキストに対応し、要約・Ask・ダイジェストを低価格で処理する候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "minimax_docs_2026_10_21",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6,
+        "cache_read_per_mtok_usd": 0.015
+      }
+    },
+    {
       "id": "MiniMax-M3",
       "provider": "minimax",
       "available_purposes": [
@@ -3083,10 +3117,9 @@
       "recommendation": "strong",
       "best_for": "coding",
       "highlights": [
-        "latest",
         "jsonStable"
       ],
-      "comment": "MiniMax の最新 M3。1M context とマルチモーダル、coding/agentic タスクを重視する長文整理や複雑な Ask の比較候補。",
+      "comment": "MiniMax M3。100万tokenの長文コンテキストに対応する比較候補。入力512K token超では長文料金が適用される。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -3096,10 +3129,16 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "minimax_docs_2026_06",
-        "input_per_mtok_usd": 0.6,
-        "output_per_mtok_usd": 2.4,
-        "cache_read_per_mtok_usd": 0.12
+        "pricing_source": "minimax_docs_2026_10_21",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.06,
+        "long_context": {
+          "input_token_threshold": 512000,
+          "input_per_mtok_usd": 0.6,
+          "output_per_mtok_usd": 2.4,
+          "cache_read_per_mtok_usd": 0.12
+        }
       }
     },
     {

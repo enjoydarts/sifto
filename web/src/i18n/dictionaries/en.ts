@@ -885,6 +885,8 @@ export const enDict: Dict = {
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol, an option for balancing quality and cost on complex summaries, Ask, and digests.",
   "settings.modelGuide.comments.mistral-large-4": "Mistral Large 4 (public preview), with a one-million-token context window for comparing complex summaries, Ask, and digests.",
   "settings.section.llm": "LLM",
+  "settings.modelGuide.comments.MiniMax-M3.1-Flash": "MiniMax M3.1 Flash, a low-cost option for summaries, Ask, and digests with a one-million-token context window.",
+  "settings.modelGuide.comments.MiniMax-M3": "MiniMax M3, an alternative with a one-million-token context window. Prompts above 512K tokens use higher rates.",
   "settings.section.llmDescription": "Manage provider access, per-purpose models, and update notices in one place.",
   "settings.section.goals": "Reading Goals",
   "settings.section.goalsDescription": "Manage the themes you are actively following and feed them into Today Queue and Briefing priority.",

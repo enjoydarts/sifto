@@ -409,6 +409,57 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(policy.Refused):
                 policy.surfaces([path])
 
+    def test_typescript_compiler_alias_updates_preserve_registry_package_identity(self):
+        def manifest(api='6.0.2', native='7.0.2'):
+            return {'devDependencies': {'typescript': 'npm:@typescript/typescript6@' + api,
+                                       '@typescript/native': 'npm:typescript@' + native}}
+
+        original, updated = manifest(), manifest('6.0.3', '7.0.3')
+        policy.validate_change('web/package.json', json.dumps(original), json.dumps(updated))
+        for spec in ('npm:other@6.0.3', 'npm:@typescript/typescript6@latest',
+                     'npm:@typescript/typescript6@file:/tmp/package', '6.0.3'):
+            candidate = manifest()
+            candidate['devDependencies']['typescript'] = spec
+            with self.subTest(spec=spec), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package.json', json.dumps(original), json.dumps(candidate))
+        with self.assertRaises(policy.Refused):
+            policy.manifest_shape(json.dumps({'dependencies': {'other': 'npm:typescript@7.0.2'}}))
+
+    def test_typescript_alias_locks_require_exact_declared_identity_and_registry_artifacts(self):
+        def lock(version):
+            return {'lockfileVersion': 3, 'packages': {
+                '': {'devDependencies': {'typescript': 'npm:@typescript/typescript6@' + version}},
+                'node_modules/typescript': {
+                    'name': '@typescript/typescript6', 'version': version,
+                    'resolved': 'https://registry.npmjs.org/@typescript/typescript6/-/typescript6-' + version + '.tgz',
+                    'integrity': 'sha512-' + 'A' * 86 + '==', 'dev': True,
+                    'dependencies': {'@typescript/old': 'npm:typescript@^6'}},
+                'node_modules/@typescript/old': {
+                    'name': 'typescript', 'version': '6.0.3',
+                    'resolved': 'https://registry.npmjs.org/typescript/-/typescript-6.0.3.tgz',
+                    'integrity': 'sha512-' + 'A' * 86 + '==', 'dev': True}}}
+
+        original, updated = lock('6.0.2'), lock('6.0.3')
+        policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(updated))
+        for field, value in (('name', 'other'), ('name', None), ('resolved', 'https://example.invalid/pkg.tgz'),
+                             ('resolved', 'https://registry.npmjs.org/other/-/other-6.0.3.tgz'), ('integrity', None)):
+            candidate = lock('6.0.3')
+            package = candidate['packages']['node_modules/typescript']
+            if value is None:
+                del package[field]
+            else:
+                package[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(policy.Refused):
+                policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+        candidate = lock('6.0.3')
+        candidate['packages']['node_modules/other'] = candidate['packages'].pop('node_modules/typescript')
+        with self.assertRaises(policy.Refused):
+            policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+        candidate = lock('6.0.3')
+        del candidate['packages']['node_modules/typescript']['dependencies']['@typescript/old']
+        with self.assertRaises(policy.Refused):
+            policy.validate_change('web/package-lock.json', json.dumps(original), json.dumps(candidate))
+
     def test_scripts_and_manifest_metadata_cannot_change(self):
         original = {'dependencies': {'next': '^16.2.6'}, 'scripts': {'build': 'next build'}}
         candidate = json.loads(json.dumps(original))

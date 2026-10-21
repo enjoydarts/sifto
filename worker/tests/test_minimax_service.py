@@ -1,7 +1,10 @@
 import asyncio
+import json
 import os
 import unittest
 from unittest.mock import patch
+
+import httpx
 
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
 from app.services.minimax_service import (
@@ -15,6 +18,49 @@ from app.services.minimax_service import (
 
 
 class MiniMaxServiceTests(unittest.TestCase):
+    def _check_flash_request(self, request):
+        body = json.loads(request.content)
+        self.assertEqual(request.headers["Authorization"], "Bearer minimax-key")
+        self.assertEqual(body["model"], "MiniMax-M3.1-Flash")
+        self.assertEqual(body.get("reasoning_effort"), "low")
+        self.assertEqual(body.get("max_completion_tokens"), 1200)
+        self.assertNotIn("max_tokens", body)
+        self.assertNotIn("temperature", body)
+        self.assertNotIn("top_p", body)
+        self.assertNotEqual(body.get("thinking"), {"type": "disabled"})
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": '{"answer":"ok"}', "reasoning_content": "reasoning"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+        })
+
+    def test_flash_requests_use_supported_reasoning_and_preserve_final_json(self):
+        client = httpx.Client
+        transport = httpx.MockTransport(self._check_flash_request)
+        for model in ("MiniMax-M3.1-Flash", "minimax::MiniMax-M3.1-Flash", "minimax/MiniMax-M3.1-Flash"):
+            with self.subTest(model=model), patch("app.services.openai_compat_transport.httpx.Client",
+                    side_effect=lambda **kwargs: client(transport=transport, **kwargs)):
+                text, usage = _p._chat_json("Return JSON", model, "minimax-key",
+                    max_output_tokens=1200, response_schema={"type": "object"}, top_p=0.5)
+            self.assertEqual(json.loads(text), {"answer": "ok"})
+            self.assertEqual(usage["input_tokens"], 10)
+
+    def test_flash_async_requests_use_same_supported_parameters(self):
+        client = httpx.AsyncClient
+        transport = httpx.MockTransport(self._check_flash_request)
+        with patch("app.services.openai_compat_transport.httpx.AsyncClient",
+                side_effect=lambda **kwargs: client(transport=transport, **kwargs)):
+            text, usage = asyncio.run(_p._chat_json_async("Return JSON", "MiniMax-M3.1-Flash", "minimax-key",
+                max_output_tokens=1200, response_schema={"type": "object"}, top_p=0.5))
+        self.assertEqual(json.loads(text), {"answer": "ok"})
+        self.assertEqual(usage["output_tokens"], 20)
+
+    def test_flash_pricing_preserves_provider_and_cache_cost(self):
+        llm = _llm_meta("minimax::MiniMax-M3.1-Flash", "summary",
+            {"input_tokens": 1_000_000, "output_tokens": 100_000, "cache_read_input_tokens": 100_000})
+        self.assertEqual(llm["provider"], "minimax")
+        self.assertAlmostEqual(llm["estimated_cost_usd"], 0.1965)
+
     def test_provider_for_model_detects_minimax(self):
         self.assertEqual(provider_for_model("MiniMax-M3"), "minimax")
         self.assertEqual(provider_for_model("MiniMax-M2.5"), "minimax")
@@ -58,7 +104,7 @@ class MiniMaxServiceTests(unittest.TestCase):
         self.assertEqual(llm.get("provider"), "minimax")
         self.assertEqual(llm.get("model"), "MiniMax-M3")
         self.assertEqual(llm.get("pricing_model_family"), "MiniMax-M3")
-        self.assertEqual(llm.get("pricing_source"), "minimax_docs_2026_06")
+        self.assertEqual(llm.get("pricing_source"), "minimax_docs_2026_10_21")
 
     @patch("app.services.minimax_service._p._chat_json")
     def test_summarize_keeps_taxonomy_genre_from_structured_output(self, chat_json):

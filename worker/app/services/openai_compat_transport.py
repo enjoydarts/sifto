@@ -110,6 +110,16 @@ def _is_non_retryable_quota_response(response: httpx.Response) -> bool:
 
 
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict, *, schema_name: str = "response") -> None:
+    if provider_name == "minimax" and normalized_model == "MiniMax-M3.1-Flash":
+        # Flash always reasons. Use the lowest supported effort so small JSON
+        # budgets remain available for the final answer rather than max thinking.
+        body["reasoning_effort"] = "low"
+        max_tokens = body.pop("max_tokens", None)
+        if max_tokens is not None:
+            body["max_completion_tokens"] = max_tokens
+        body.pop("temperature", None)
+        body.pop("top_p", None)
+        return
     if provider_name == "mistral" and normalized_model in {"mistral-large-4", "mistral-large-4-0"}:
         # Keep the small structured-output budget available for the JSON answer.
         body["reasoning_effort"] = "none"

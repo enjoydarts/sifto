@@ -2,6 +2,7 @@
 import json
 import os
 import pathlib
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -10,6 +11,11 @@ import urllib.error
 import urllib.request
 
 from yt_dlp import YoutubeDL
+
+assert shutil.which("curl") is None, "Worker must not depend on curl"
+healthcheck = json.loads(os.environ["WORKER_HEALTHCHECK"])
+assert healthcheck[0] == "CMD", "Worker must define an exec-form image health check"
+healthcheck = healthcheck[1:]
 
 assert os.getuid() == os.getgid() == 10001
 assert not os.getenv("INTERNAL_WORKER_SECRET")
@@ -57,6 +63,10 @@ with tempfile.TemporaryFile() as output:
                 time.sleep(0.5)
         else:
             raise AssertionError("Worker health did not become ready")
+        # Execute the image's actual probe with a live server and hostile proxy settings.
+        subprocess.run(healthcheck, check=True, timeout=5,
+                       env={**os.environ, "HTTP_PROXY": "http://127.0.0.1:1",
+                            "ALL_PROXY": "http://127.0.0.1:1", "NO_PROXY": ""})
         status = pathlib.Path(f"/proc/{server.pid}/status").read_text().splitlines()
         for field in ("Uid:", "Gid:"):
             assert next(line for line in status if line.startswith(field)).split()[1:] == ["10001"] * 4
@@ -73,4 +83,6 @@ with tempfile.TemporaryFile() as output:
         except subprocess.TimeoutExpired:
             server.kill()
             server.wait()
+    assert subprocess.run(healthcheck, timeout=5, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode != 0, "Stopped Worker must fail its health check"
 print("Worker uid/gid, temp, yt-dlp cache, health, and missing-secret denial verified")

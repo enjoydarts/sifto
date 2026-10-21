@@ -61,7 +61,9 @@ echo 'API binary runs as the image user; dependency-free startup fails closed'
 SH
         ;;
     worker)
+        worker_healthcheck=$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' "$image")
         docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges \
+            -e "WORKER_HEALTHCHECK=$worker_healthcheck" \
             --entrypoint python "$image" -B - < infra/runtime-ci/worker.py
         ;;
     web)

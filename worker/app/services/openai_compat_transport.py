@@ -110,6 +110,16 @@ def _is_non_retryable_quota_response(response: httpx.Response) -> bool:
 
 
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict, *, schema_name: str = "response") -> None:
+    if provider_name == "minimax" and normalized_model == "MiniMax-M3.1-Flash":
+        # Flash counts thinking and final JSON in one budget. Low effort and a
+        # 4K floor leave room for short translation and verification responses.
+        body["reasoning_effort"] = "low"
+        max_tokens = body.pop("max_tokens", None)
+        if max_tokens is not None:
+            body["max_completion_tokens"] = max(4096, max_tokens)
+        body.pop("temperature", None)
+        body.pop("top_p", None)
+        return
     if provider_name == "mistral" and normalized_model in {"mistral-large-4", "mistral-large-4-0"}:
         # Keep the small structured-output budget available for the JSON answer.
         body["reasoning_effort"] = "none"
@@ -592,7 +602,10 @@ def run_chat_json(
                 else:
                     text = str(content or "")
                 text = text.strip()
-                if schema_name == "summary" and choices[0].get("finish_reason") == "length":
+                if choices[0].get("finish_reason") == "length" and (
+                    schema_name == "summary"
+                    or (provider_name == "minimax" and normalized_model == "MiniMax-M3.1-Flash")
+                ):
                     token_field = "max_completion_tokens" if "max_completion_tokens" in body else "max_tokens"
                     current_budget = body[token_field]
                     reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"
@@ -809,7 +822,10 @@ async def run_chat_json_async(
                 else:
                     text = str(content or "")
                 text = text.strip()
-                if schema_name == "summary" and choices[0].get("finish_reason") == "length":
+                if choices[0].get("finish_reason") == "length" and (
+                    schema_name == "summary"
+                    or (provider_name == "minimax" and normalized_model == "MiniMax-M3.1-Flash")
+                ):
                     token_field = "max_completion_tokens" if "max_completion_tokens" in body else "max_tokens"
                     current_budget = body[token_field]
                     reason = f"output_truncated finish_reason=length max_output_tokens={current_budget}"

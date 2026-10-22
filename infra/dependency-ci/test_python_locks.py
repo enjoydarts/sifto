@@ -10,12 +10,39 @@ import sys
 from unittest.mock import patch
 
 from python_locks import COMMAND, compile_lock, check_directory, LockError
-from dependency_updates.policy import python_lock
+from dependency_updates.policy import python_lock, Refused
+from dependency_updates.release_age import verify_python_release_age
 
 ROOT = Path('/repository')
 
 
 class PythonLocksTests(unittest.TestCase):
+    def test_generation_preserves_the_existing_certifi_security_pin_before_cutoff(self):
+        before = (ROOT / 'worker/requirements.txt').read_text()
+        expected = python_lock(before)['certifi']['version']
+        inputs = ['httpx==0.28.1'] + [
+            line for line in (ROOT / 'worker/requirements.in').read_text().splitlines()
+            if line.startswith('certifi==')]
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'requirements.in').write_text('\n'.join(inputs) + '\n')
+            (target / 'requirements.txt').write_text(before)
+            compile_lock(target, cutoff='2026-10-15T00:00:00Z')
+            after = (target / 'requirements.txt').read_text()
+            self.assertEqual(python_lock(after)['certifi']['version'], expected,
+                             'Generation must retain the already adopted CA security fix')
+            # Existing, unchanged security artifacts need no new age exception
+            # at the independent approval gate.
+            verify_python_release_age(before, after, '2026-10-15T00:00:00Z')
+            check_directory(target)
+
+    def test_new_certifi_security_artifacts_still_require_seven_days(self):
+        after = (ROOT / 'worker/requirements.txt').read_text()
+        before = after.replace('certifi==' + python_lock(after)['certifi']['version'],
+                               'certifi==2026.7.22', 1)
+        with self.assertRaisesRegex(Refused, 'seven-day publication policy'):
+            verify_python_release_age(before, after, '2026-10-15T00:00:00Z')
+
     def test_generator_replaces_immature_transitive_preference_with_compatible_mature_pin(self):
         # Actual PR 34 at 305807ace06f3cad97a7ca7ca051e12b6a114d45:
         # boto3 1.43.108 was old enough; botocore 1.43.111 (Oct 9) was not.

@@ -32,13 +32,13 @@ bgutil-ytdlp-pot-provider==1.3.2 \
     --hash=sha256:9674227441402b56fe06f4e7559a691f33913eebfc7d50831894ccb24c8bc479 \
     --hash=sha256:9971733ebba2b69ca1f1b8c6036a114154330a9f8af54491c6baa941863df87a
     # via -r requirements.in
-boto3==1.43.113 \
-    --hash=sha256:2e6fa2eef6decd7cbe5cf55b4ccc3218a3784630e54cb5e7e7f7074437dda281 \
-    --hash=sha256:5a3e7750325c22fab0957c41a500fe2f95a936c2bbcf5c18f58472ba5ffbb792
+boto3==1.43.114 \
+    --hash=sha256:be704857751564a5cf69c5bbaadbfa01c22806409815c73563db42fbffe583a2 \
+    --hash=sha256:d9cac2eb921ce674970cef1c9ad750f85ee3a846aedcf188d18368fb9eb6da23
     # via -r requirements.in
-botocore==1.43.113 \
-    --hash=sha256:8908e4a5fe94a06801a7bf4c451717a38145cc4ffa41aaffa50665940b64b4fa \
-    --hash=sha256:941d3f0e289540da7c49d5e2dc022f992e3638127a02a74a0c91df2661bd98ef
+botocore==1.43.114 \
+    --hash=sha256:d1c441a22e93e158de5b1e026205f5d6d67a4545d10540c5090c62dccb3a9eca \
+    --hash=sha256:f366fa4db518775632ad1eb128cd8203ca46396cecf37209d904f0bbc049ce90
     # via
     #   boto3
     #   s3transfer
@@ -416,9 +416,9 @@ docstring-parser==0.18.0 \
     --hash=sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015 \
     --hash=sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b
     # via anthropic
-fastapi==0.143.0 \
-    --hash=sha256:1acffe48206a80917cf7dac21992b5c44b25384e8902bf745c1fd9dabcf6c51f \
-    --hash=sha256:3e9395fd35276425b61b516a31fdd7c77fe2af83e41b4da22e30696fb1304c5d
+fastapi==0.143.1 \
+    --hash=sha256:4cafaab64df8534758bf0fce61947f5e27e6cd512798ccbbaad5425086c3b664 \
+    --hash=sha256:687beb445804e4c4dbe2a76fd83c25e9b973ac48c267defb86f791e099baecc4
     # via
     #   -r requirements.in
     #   sentry-sdk
@@ -719,9 +719,9 @@ justext==3.0.2 \
     --hash=sha256:13496a450c44c4cd5b5a75a5efcd9996066d2a189794ea99a49949685a0beb05 \
     --hash=sha256:62b1c562b15c3c6265e121cc070874243a443bfd53060e869393f09d6b6cc9a7
     # via trafilatura
-langfuse==4.17.0 \
-    --hash=sha256:02560e12d715dd24f239c240886ee197b9e62f4a808f06de77193356c56bf57a \
-    --hash=sha256:f8cccfc49d9839969e962ffb88ce49cf531a8cbf31507eb99e43668fb5b3b5da
+langfuse==4.18.0 \
+    --hash=sha256:b0f14f30f9f147ca662eaa9998af374fc57b9e8a894f0ae86789cbbd96448289 \
+    --hash=sha256:fd529365207ecdefd778ad1a35056a2acee032ff0d75e18368c106fbc3cd865c
     # via -r requirements.in
 lxml==6.1.3 \
     --hash=sha256:032a0a97eed428bd143c75a11118238546424ceb2fa311cca5f073aa44658dc4 \

@@ -24,7 +24,7 @@ EXPOSE 8080
 
 CMD ["air", "-c", ".air.toml"]
 
-FROM alpine:latest AS runner
+FROM alpine:latest@sha256:c6b073f8e9e58d881f6ffba6ebf3b9ebd60b9e7d6e8337018c0e68bb5c356873 AS runner
 ARG APP_COMMIT_SHA=unknown
 
 RUN apk add --no-cache ca-certificates && \

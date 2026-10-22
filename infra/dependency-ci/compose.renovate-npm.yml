@@ -1,7 +1,7 @@
 name: sifto-renovate-npm-fixture
 services:
   test:
-    image: node:22.23.3-alpine
+    image: node:22.23.4-alpine
     user: '1000:1000'
     entrypoint: [node]
     command: [/fixtures/test-renovate-npm-resolution.mjs]

@@ -1,5 +1,5 @@
 # ── Dev stage ───────────────────────────────────────────────
-FROM node:22.23.3-alpine AS dev
+FROM node:22.23.4-alpine AS dev
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,12 +8,12 @@ ENV WATCHPACK_POLLING=true
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 # ── Production build ─────────────────────────────────────────
-FROM node:22.23.3-alpine AS deps
+FROM node:22.23.4-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-FROM node:22.23.3-alpine AS builder
+FROM node:22.23.4-alpine AS builder
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
 WORKDIR /app
@@ -21,7 +21,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:22.23.3-alpine AS runner
+FROM node:22.23.4-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk upgrade --no-cache zlib

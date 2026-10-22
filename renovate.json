@@ -15,7 +15,7 @@
   "enabledManagers": ["dockerfile", "docker-compose", "gomod", "pip-compile", "npm", "custom.regex"],
   "constraints": {"python": "==3.12.*", "uv": "0.13.0"},
   "npm": {
-    "constraints": {"node": "22.23.3", "npm": "12.2.0"},
+    "constraints": {"node": "22.23.4", "npm": "12.2.0"},
     "skipInstalls": false,
     "ignoreScripts": true,
     "npmrcMerge": false,

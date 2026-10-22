@@ -63,7 +63,7 @@ try {
   assert.equal(config.npm.npmrcMerge, false);
   assert.equal(config.npm.npmrc, npmrc);
   assert.equal(config.npm.constraints.npm, version);
-  assert.equal(config.npm.constraints.node, '22.23.3');
+  assert.equal(config.npm.constraints.node, '22.23.4');
   assert.equal(config.minimumReleaseAge, '7 days');
   assert.equal(config.automerge, false);
   const green = install('normal-install', dependency, config.npm.skipInstalls !== false, config.npm.npmrc, true);

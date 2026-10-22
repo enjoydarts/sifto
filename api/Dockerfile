@@ -1,4 +1,4 @@
-FROM golang:1.27.2-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 ARG APP_COMMIT_SHA=unknown
 
 WORKDIR /src
@@ -9,7 +9,7 @@ WORKDIR /src/api
 RUN go mod download && \
     go build -o /out/server ./cmd/server
 
-FROM golang:1.27.2-alpine AS dev
+FROM golang:1.27.3-alpine AS dev
 
 WORKDIR /app
 

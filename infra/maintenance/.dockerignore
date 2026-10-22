@@ -4,5 +4,9 @@
 !maintenance/*.py
 !tests/
 !tests/*.py
+!tests/fixtures/
+!tests/fixtures/emudhra/
+!tests/fixtures/emudhra/*.pem
+!tests/fixtures/emudhra/README.md
 !playbooks/
 !playbooks/*.yml

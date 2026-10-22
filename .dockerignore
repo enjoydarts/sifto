@@ -7,6 +7,9 @@
 **/.git
 **/.env*
 **/*.pem
+!api/internal/service/testdata/emudhra/ov-g3c-emudhra.we-have-a-problem.com.pem
+!api/internal/service/testdata/emudhra/ov-g3c-aaa-emudhra.we-have-a-problem.com.pem
+!infra/maintenance/tests/fixtures/emudhra/*.pem
 **/*.key
 **/.clerk
 **/.vercel

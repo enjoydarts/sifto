@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 
-FIXTURES = Path(__file__).parent / "fixtures" / "emudhra"
+FIXTURES = Path(__file__).resolve().parents[1] / "tls-fixtures" / "emudhra"
 VERIFY_TIME = "1792627200"  # 2026-10-22 00:00:00 UTC; independent of test date.
 CAFILE = "/etc/ssl/certs/ca-certificates.crt"
 CAPATH = "/etc/ssl/certs"

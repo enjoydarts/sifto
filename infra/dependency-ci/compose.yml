@@ -53,7 +53,7 @@ services:
       - ../../worker/tests:/app/tests:ro
       - ../../shared:/shared:ro
       - ../maintenance/tests/test_ca_trust.py:/trust-tests/tests/test_ca_trust.py:ro
-      - ../maintenance/tests/fixtures/emudhra:/trust-tests/tests/fixtures/emudhra:ro
+      - ../maintenance/tls-fixtures/emudhra:/trust-tests/tls-fixtures/emudhra:ro
     command: [sh, -ec, 'python -m compileall -q app && python -m pytest tests/ -q && python -B -m unittest discover -s /trust-tests/tests -p test_ca_trust.py -v']
   web:
     build:
@@ -76,7 +76,7 @@ services:
       target: dev
     volumes:
       - ../maintenance/tests/test_ca_trust.py:/trust-tests/tests/test_ca_trust.py:ro
-      - ../maintenance/tests/fixtures/emudhra:/trust-tests/tests/fixtures/emudhra:ro
+      - ../maintenance/tls-fixtures/emudhra:/trust-tests/tls-fixtures/emudhra:ro
     command: [sh, -ec, 'pip check && python -X pycache_prefix=/tmp/pycache -m compileall -q app && python -B -m unittest app.test_concat_job && python -B -m unittest discover -s /trust-tests/tests -p test_ca_trust.py -v']
     network_mode: none
     read_only: true

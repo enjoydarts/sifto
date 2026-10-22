@@ -29,6 +29,7 @@ except KeyError:
 PY
 COPY maintenance ./maintenance
 COPY tests ./tests
+COPY tls-fixtures ./tls-fixtures
 COPY playbooks ./playbooks
 ENV PYTHONDONTWRITEBYTECODE=1
 CMD ["python", "-B", "-m", "unittest", "discover", "-s", "tests", "-v"]

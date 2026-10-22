@@ -359,8 +359,8 @@ class PolicyTests(unittest.TestCase):
 
     def test_renovate_npm_compose_pin_is_ci_only_and_runtime_configuration_is_fixed(self):
         path = 'infra/dependency-ci/compose.renovate-npm.yml'
-        original = 'services:\n  test:\n    image: node:22.23.3-alpine\n    user: "1000:1000"\n    network_mode: none\n    read_only: true\n    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n    volumes: [./tool:/tool:ro]\n'
-        pinned = original.replace('node:22.23.3-alpine', 'node:22.23.3-alpine@sha256:' + 'b' * 64)
+        original = 'services:\n  test:\n    image: node:22.23.4-alpine\n    user: "1000:1000"\n    network_mode: none\n    read_only: true\n    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n    volumes: [./tool:/tool:ro]\n'
+        pinned = original.replace('node:22.23.4-alpine', 'node:22.23.4-alpine@sha256:' + 'b' * 64)
         policy.validate_change(path, original, pinned)
         self.assertEqual(policy.surfaces([path]), ['ci'])
         for candidate in (pinned + '    environment: {TOKEN: fixture}\n',

@@ -2,3 +2,7 @@
 # dependencies; uv refreshes compatible transitives with the fixed age cutoff.
 [pip]
 upgrade = true
+# The explicit certifi input retains an already adopted CA security fix even
+# before it reaches the global cutoff. Renovate still ages direct-pin updates,
+# and the independent approval gate still checks every changed artifact.
+exclude-newer-package = { certifi = false }

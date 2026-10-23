@@ -1,5 +1,5 @@
 pip==26.2.1
-fastapi==0.143.1
+fastapi==0.143.2
 uvicorn[standard]==0.54.0
 trafilatura==2.3.1
 anthropic==0.125.0

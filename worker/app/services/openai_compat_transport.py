@@ -54,7 +54,9 @@ def _is_kimi_k2x_model(model: str) -> bool:
 
 def _is_kimi_k3_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
-    return normalized in {"moonshotai/kimi-k3", "kimi-k3"}
+    return normalized.removeprefix("moonshotai/") in {
+        "kimi-k3", "kimi-k3.1-pro", "kimi-k3.1-pro-highspeed",
+    }
 
 
 def _is_glm_model(model: str) -> bool:
@@ -453,7 +455,7 @@ def usage_from_chat_response(data: dict) -> dict:
     usage_payload = {
         "input_tokens": int(usage.get("prompt_tokens", 0) or 0),
         "output_tokens": int(usage.get("completion_tokens", 0) or 0),
-        "cache_creation_input_tokens": 0,
+        "cache_creation_input_tokens": int(prompt_details.get("cache_write_tokens", 0) or 0),
         "cache_read_input_tokens": int(cached_tokens or 0),
         "resolved_model": str(data.get("model") or "").strip() or None,
     }

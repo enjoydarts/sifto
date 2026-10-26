@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { ItemLLMExecutionAttempt, ItemQualityEvaluation, NavigatorLLM } from "@/lib/api";
-import { qualityEvaluationRoute } from "./quality-evaluation-route";
+import { qualityEvaluationReason, qualityEvaluationRoute } from "./quality-evaluation-route";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
@@ -226,6 +226,7 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
   const isD1 = evaluation.provider === "d1";
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   const route = t(qualityEvaluationRoute(evaluation, finalCheck));
+  const reason = qualityEvaluationReason(evaluation);
   const hasScores = evaluation.decision !== "error";
   const listSeparator = locale === "ja" ? "、" : ", ";
   const flaggedDimensions = jevFlaggedDimensions(evaluation);
@@ -249,8 +250,8 @@ function QualityEvaluationCard({ evaluation, finalCheck, t, locale }: { evaluati
         {hasScores ? <span>${evaluation.estimated_cost_usd.toFixed(8)}</span> : null}
         <span>{new Date(evaluation.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}</span>
       </div>
-      {evaluation.escalation_reason ? (
-        <p className="mt-2 text-amber-800">{t("itemDetail.jev.escalationReason")}: {t(`itemDetail.${isD1 ? "d1" : "jev"}.reason.${evaluation.escalation_reason}`, t(`itemDetail.jev.reason.${evaluation.escalation_reason}`, evaluation.escalation_reason))}</p>
+      {reason ? (
+        <p className="mt-2 text-amber-800">{t("itemDetail.jev.escalationReason")}: {t(`itemDetail.${isD1 ? "d1" : "jev"}.reason.${reason}`, t(`itemDetail.jev.reason.${reason}`, reason))}</p>
       ) : null}
       {flaggedDimensions.length > 0 ? (
         <p className="mt-1 text-amber-900">

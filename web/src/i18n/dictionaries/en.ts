@@ -2629,6 +2629,8 @@ export const enDict: Dict = {
   "itemDetail.jev.reason.critical_dimension_low": "An essential criterion scored below the threshold",
   "itemDetail.jev.reason.timeout": "Jev did not respond in time",
   "itemDetail.jev.reason.http_error": "A connection error occurred with Jev",
+  "itemDetail.jev.reason.payment_required": "Jev requires payment. Check API credits and billing in the TypeSafe console.",
+  "itemDetail.d1.reason.payment_required": "D1 requires payment. Check API credits and billing in the Liquid console.",
   "itemDetail.jev.reason.schema_error": "Jev's response could not be read",
   "itemDetail.jev.reason.configuration_error": "Jev's configuration could not be verified",
   "itemDetail.jev.reason.unsupported_claim_risk": "Some statements may lack support in the source",

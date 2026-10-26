@@ -2629,6 +2629,8 @@ export const jaDict: Dict = {
   "itemDetail.jev.reason.critical_dimension_low": "重要な観点が基準を下回りました",
   "itemDetail.jev.reason.timeout": "Jevの応答が時間内にありませんでした",
   "itemDetail.jev.reason.http_error": "Jevへの接続でエラーが発生しました",
+  "itemDetail.jev.reason.payment_required": "Jevのクレジットまたは支払いの確認が必要です。TypeSafe ConsoleのBillingを確認してください。",
+  "itemDetail.d1.reason.payment_required": "D1のクレジットまたは支払いの確認が必要です。Liquidの管理画面で請求設定を確認してください。",
   "itemDetail.jev.reason.schema_error": "Jevの回答を読み取れませんでした",
   "itemDetail.jev.reason.configuration_error": "Jevの設定を確認できませんでした",
   "itemDetail.jev.reason.unsupported_claim_risk": "本文で裏付けられない記述の可能性があります",

@@ -1,10 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { qualityEvaluationRoute } from "./quality-evaluation-route.ts";
+import * as qualityEvaluation from "./quality-evaluation-route.ts";
+import { jaDict } from "../../../../i18n/dictionaries/ja.ts";
+import { enDict } from "../../../../i18n/dictionaries/en.ts";
 
 const jev = { provider: "jev", decision: "escalated", gate_policy_version: "jev-quality-gate-v5", attempt_index: 1 };
 const d1 = { ...jev, provider: "d1", decision: "accepted", gate_policy_version: "d1-conditional-gate-v1" };
 const passed = { retry_count: 1, short_comment: "D1の高信頼品質ゲートを通過しました。" };
+
+test("stored 402 failures explain billing instead of a connection problem in both languages", () => {
+  assert.equal(typeof qualityEvaluation.qualityEvaluationReason, "function");
+  for (const [provider, prefix] of [["jev", "Jev"], ["d1", "D1"]]) {
+    const reason = qualityEvaluation.qualityEvaluationReason({
+      provider, escalation_reason: "http_error", reason_detail: `${prefix} HTTP status=402`,
+    });
+    assert.equal(reason, "payment_required");
+    for (const dictionary of [jaDict, enDict]) {
+      const message = dictionary[`itemDetail.${provider}.reason.${reason}`];
+      assert.ok(message);
+      assert.match(message, /クレジット|credits/);
+      assert.doesNotMatch(message, /接続|connection/);
+    }
+  }
+});
+
+test("other errors and gate decisions keep their recorded reason", () => {
+  assert.equal(typeof qualityEvaluation.qualityEvaluationReason, "function");
+  for (const reason_detail of [null, "", "Jev HTTP status=502", "Jev HTTP status=4020", "Jev request: connection refused", "Jev HTTP status=502 response: 402"]) {
+    assert.equal(qualityEvaluation.qualityEvaluationReason({ provider: "jev", escalation_reason: "http_error", reason_detail }), "http_error");
+  }
+  assert.equal(qualityEvaluation.qualityEvaluationReason({ provider: "jev", escalation_reason: "timeout", reason_detail: "Jev HTTP status=402" }), "timeout");
+  assert.equal(qualityEvaluation.qualityEvaluationReason({ provider: "jev", escalation_reason: "low_score" }), "low_score");
+  assert.equal(qualityEvaluation.qualityEvaluationReason({ provider: "jev" }), null);
+});
 
 test("a D1 rescue keeps Jev's own gate label and attributes approval only to D1", () => {
   assert.equal(qualityEvaluationRoute(jev, passed), "itemDetail.jev.gate");

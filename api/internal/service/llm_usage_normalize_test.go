@@ -2,6 +2,27 @@ package service
 
 import "testing"
 
+func TestKimiK31ProCacheWritesAreNotChargedTwice(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		want  float64
+	}{
+		{"kimi-k3.1-pro", 11.55},
+		{"kimi-k3.1-pro-highspeed", 23.05},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			got := NormalizeCatalogPricedUsage("summary", &LLMUsage{
+				Provider: "moonshot", Model: tc.model,
+				InputTokens: 1_000_000, OutputTokens: 1_000_000,
+				CacheReadInputTokens: 250_000, CacheCreationInputTokens: 500_000,
+			})
+			if got.EstimatedCostUSD != tc.want {
+				t.Fatalf("cost = %.8f, want %.8f", got.EstimatedCostUSD, tc.want)
+			}
+		})
+	}
+}
+
 func TestMiniMaxCurrentCatalogPricing(t *testing.T) {
 	for _, tc := range []struct {
 		model                 string

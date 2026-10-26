@@ -1,10 +1,26 @@
 import unittest
 
 from app.services.llm_catalog import provider_for_model
-from app.services.moonshot_service import _llm_meta, _normalize_temperature, _normalize_top_p
+from app.services.moonshot_service import _llm_meta, _normalize_temperature, _normalize_top_p, _p
 
 
 class MoonshotServiceTests(unittest.TestCase):
+    def test_kimi_k31_pro_models_use_moonshot_and_cache_aware_prices(self):
+        for model, expected_cost in (("kimi-k3.1-pro", 11.55), ("kimi-k3.1-pro-highspeed", 23.05)):
+            with self.subTest(model=model):
+                self.assertEqual(provider_for_model(model), "moonshot")
+                self.assertTrue(_p._supports_strict_schema(model))
+                llm = _llm_meta(model, "summary", {
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 1_000_000,
+                    "cache_read_input_tokens": 250_000,
+                    "cache_creation_input_tokens": 500_000,
+                })
+                self.assertEqual(llm["pricing_source"], "moonshot_static_2026_10")
+                self.assertEqual(llm["pricing_model_family"], model)
+                self.assertEqual(llm["estimated_cost_usd"], expected_cost)
+                self.assertEqual(llm["cache_creation_input_tokens"], 500_000)
+
     def test_provider_for_model_detects_moonshot(self):
         self.assertEqual(provider_for_model("kimi-k3"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2.6"), "moonshot")

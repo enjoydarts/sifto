@@ -14,6 +14,7 @@ from app.services.openai_compat_transport import (
     _provider_user_max_concurrency,
     provider_request_context,
     run_chat_json,
+    usage_from_chat_response,
 )
 
 
@@ -416,6 +417,42 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertNotIn("max_tokens", _FakeClient.last_json)
         self.assertEqual(_FakeClient.last_json.get("max_completion_tokens"), 1200)
         self.assertEqual(_FakeClient.last_json.get("response_format", {}).get("type"), "json_schema")
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_kimi_k31_pro_requests_preserve_thinking_and_strict_schema(self):
+        for model in ("kimi-k3.1-pro", "kimi-k3.1-pro-highspeed"):
+            with self.subTest(model=model):
+                run_chat_json(
+                    "Return JSON", model, "test-key",
+                    url="https://example.com/chat/completions",
+                    normalize_model_name=lambda value: value,
+                    supports_strict_schema=lambda value: True,
+                    timeout_sec=5, attempts=1, base_sleep_sec=0,
+                    provider_name="moonshot", logger=None,
+                    response_schema={"type": "object"},
+                    temperature=0.2, top_p=0.8,
+                )
+                body = _FakeClient.last_json
+                self.assertEqual(body.get("reasoning_effort"), "max")
+                for field in ("thinking", "temperature", "top_p", "max_tokens"):
+                    self.assertNotIn(field, body)
+                self.assertEqual(body.get("max_completion_tokens"), 1200)
+                self.assertTrue(body["response_format"]["json_schema"]["strict"])
+
+    def test_kimi_cache_usage_retains_read_and_write_tokens(self):
+        usage = usage_from_chat_response({
+            "usage": {
+                "prompt_tokens": 1_000_000,
+                "completion_tokens": 100,
+                "prompt_tokens_details": {
+                    "cached_tokens": 250_000,
+                    "cache_write_tokens": 500_000,
+                },
+            },
+        })
+        self.assertEqual(usage["input_tokens"], 1_000_000)
+        self.assertEqual(usage["cache_read_input_tokens"], 250_000)
+        self.assertEqual(usage["cache_creation_input_tokens"], 500_000)
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_deepseek_flash_requests_disable_thinking(self):

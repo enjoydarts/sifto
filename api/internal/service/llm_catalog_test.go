@@ -85,6 +85,18 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("kimi-k3"); got == nil {
 		t.Fatal("kimi-k3 not found in catalog")
 	}
+	for _, id := range []string{"kimi-k3.1-pro", "kimi-k3.1-pro-highspeed"} {
+		got := findModelCatalog(id)
+		if got == nil || got.Provider != "moonshot" || !reflect.DeepEqual(got.AvailablePurposes, []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"}) {
+			t.Fatalf("%s should be selectable for all Moonshot chat purposes", id)
+		}
+		if got.Capabilities == nil || !got.Capabilities.SupportsStrictJSONSchema || !got.Capabilities.SupportsCacheWritePricing {
+			t.Fatalf("%s should support strict schema and cache write pricing", id)
+		}
+		if CatalogProviderForModel(id) != "moonshot" {
+			t.Fatalf("%s should route to Moonshot", id)
+		}
+	}
 	if got := findModelCatalog("kimi-k2.6"); got == nil {
 		t.Fatal("kimi-k2.6 not found in catalog")
 	}

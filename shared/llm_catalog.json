@@ -233,6 +233,8 @@
       "id": "moonshot",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
+        "kimi-k3.1-pro",
+        "kimi-k3.1-pro-highspeed",
         "kimi-k3",
         "kimi-k2.6",
         "kimi-k2.5",
@@ -3501,6 +3503,76 @@
       }
     },
     {
+      "id": "kimi-k3.1-pro",
+      "provider": "moonshot",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "recommended",
+      "best_for": "reasoning",
+      "highlights": [
+        "jsonStable",
+        "reasoning",
+        "longContext"
+      ],
+      "comment": "Moonshot AI の K3.1 Pro。1M context、常時 thinking、strict JSON Schema に対応し、長文の要約・知識作業・複雑な Ask に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_10",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 10.0,
+        "cache_read_per_mtok_usd": 0.2,
+        "cache_write_per_mtok_usd": 2.0
+      }
+    },
+    {
+      "id": "kimi-k3.1-pro-highspeed",
+      "provider": "moonshot",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "experimental",
+      "best_for": "reasoning",
+      "highlights": [
+        "jsonStable",
+        "reasoning",
+        "longContext"
+      ],
+      "comment": "Kimi K3.1 Pro の高速版。1M context と strict JSON Schema を保ち、要約や Ask の応答速度を重視する時の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_10",
+        "input_per_mtok_usd": 4.0,
+        "output_per_mtok_usd": 20.0,
+        "cache_read_per_mtok_usd": 0.2,
+        "cache_write_per_mtok_usd": 4.0
+      }
+    },
+    {
       "id": "kimi-k3",
       "provider": "moonshot",
       "available_purposes": [
@@ -3518,7 +3590,7 @@
         "reasoning",
         "longContext"
       ],
-      "comment": "Moonshot AI の最新フラッグシップ。1M context、常時 thinking、strict JSON Schema に対応し、長文の要約・知識作業・複雑な Ask に向く。",
+      "comment": "Moonshot AI の K3。1M context、常時 thinking、strict JSON Schema に対応し、長文の要約・知識作業・複雑な Ask に向く。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": true,

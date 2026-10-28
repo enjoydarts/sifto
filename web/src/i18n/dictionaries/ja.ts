@@ -883,6 +883,7 @@ export const jaDict: Dict = {
   "settings.modelGuide.longContextThreshold": "入力{threshold}トークン超:",
   "settings.modelGuide.longContextPrice": "入力{threshold}トークン超: 入力{input} / 出力{output} / キャッシュ入力{cacheRead}（100万tokenあたり）",
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol。複雑な要約・Ask・ダイジェスト向けの品質と費用のバランスを比較する候補。",
+  "settings.modelGuide.comments.gpt-6.1-terra": "OpenAI GPT-6.1 Terra。自然な文章生成と構造化出力に対応し、要約・Ask・ダイジェストを Sol より低コストで試す候補。入力272,000 token超では長文料金が適用される。",
   "settings.modelGuide.comments.kimi-k3.1-pro": "Moonshot AI の K3.1 Pro。100万tokenの長文コンテキスト、常時推論、厳密なJSON Schema出力に対応し、長文要約・知識作業・複雑なAskに向く。",
   "settings.modelGuide.comments.kimi-k3.1-pro-highspeed": "Kimi K3.1 Pro の高速版。100万tokenの長文コンテキストと厳密なJSON Schema出力に対応し、要約やAskの応答速度を重視する時の比較候補。",
   "settings.modelGuide.comments.mistral-large-4": "Mistral Large 4（公開Preview）。100万tokenの長文コンテキストを備え、複雑な要約・Ask・ダイジェストの比較候補。",

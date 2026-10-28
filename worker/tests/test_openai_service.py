@@ -6,6 +6,46 @@ from app.services.openai_service import _p
 
 
 class OpenAIServiceModelBehaviorTests(unittest.TestCase):
+    def test_gpt_6_1_terra_uses_strict_responses_without_sampling(self):
+        model = "gpt-6.1-terra"
+        self.assertTrue(_p._should_use_responses_api(model))
+        self.assertTrue(_p._supports_strict_schema(model))
+        self.assertEqual(_p._responses_reasoning(model), {"effort": "none"})
+        schema = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
+        for asynchronous in (False, True):
+            with self.subTest(asynchronous=asynchronous):
+                target = "app.services.openai_service.run_responses_json" + ("_async" if asynchronous else "")
+                mock_type = AsyncMock if asynchronous else None
+                with patch(target, new_callable=mock_type, return_value=('{}', {})) as run:
+                    kwargs = {"temperature": 0.2, "top_p": 0.9, "response_schema": schema}
+                    if asynchronous:
+                        asyncio.run(_p._chat_json_async("prompt", model, "api-key", **kwargs))
+                    else:
+                        _p._chat_json("prompt", model, "api-key", **kwargs)
+                self.assertEqual(run.call_args.args[1], model)
+                self.assertEqual(run.call_args.kwargs["response_schema"], schema)
+                self.assertTrue(run.call_args.kwargs["supports_strict_schema"](model))
+                self.assertEqual(run.call_args.kwargs["responses_reasoning"](model), {"effort": "none"})
+                self.assertNotIn("temperature", run.call_args.kwargs)
+                self.assertNotIn("top_p", run.call_args.kwargs)
+
+    def test_gpt_6_1_terra_prices_cache_and_long_context_at_boundary(self):
+        cases = (
+            (272000, 0.227),
+            (272001, 0.429002),
+        )
+        for input_tokens, expected in cases:
+            with self.subTest(input_tokens=input_tokens):
+                meta = _p._llm_meta("gpt-6.1-terra", "summary", {
+                    "input_tokens": input_tokens,
+                    "cache_read_input_tokens": 100000,
+                    "output_tokens": 10000,
+                })
+                self.assertEqual(meta["provider"], "openai")
+                self.assertEqual(meta["pricing_model_family"], "gpt-6.1-terra")
+                self.assertEqual(meta["pricing_source"], "openai_model_pages_2026_10")
+                self.assertEqual(meta["estimated_cost_usd"], expected)
+
     def test_gpt_6_1_sol_uses_low_reasoning_without_sampling_parameters(self):
         self.assertTrue(_p._should_use_responses_api("gpt-6.1-sol"))
         self.assertFalse(_p._supports_custom_temperature("gpt-6.1-sol"))

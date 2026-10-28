@@ -427,6 +427,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gpt-6-astra", provider: "openai"},
 		{model: "gpt-6-sol", provider: "openai"},
 		{model: "gpt-6.1-sol", provider: "openai"},
+		{model: "gpt-6.1-terra", provider: "openai"},
 		{model: "gpt-6-luna", provider: "openai"},
 		{model: "gpt-5.5", provider: "openai"},
 		{model: "gpt-5.6-sol", provider: "openai"},
@@ -643,6 +644,7 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 	}{
 		{model: "gpt-6-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
 		{model: "gpt-6.1-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1},
+		{model: "gpt-6.1-terra", input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.05},
 		{model: "gpt-6-luna", input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01},
 		{model: "claude-opus-5-5", input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2},
 		{model: "claude-sonnet-5-5", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
@@ -659,6 +661,25 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 				t.Fatalf("%s pricing = %#v", tt.model, item.Pricing)
 			}
 		})
+	}
+}
+
+func TestLLMCatalogGPT61TerraCapabilitiesAndLongContext(t *testing.T) {
+	item := findModelCatalog("gpt-6.1-terra")
+	if item == nil || item.Capabilities == nil || item.Pricing == nil || item.Pricing.LongContext == nil {
+		t.Fatal("gpt-6.1-terra capabilities and pricing must be present")
+	}
+	if !item.Capabilities.SupportsStrictJSONSchema || !item.Capabilities.SupportsStructuredOutput {
+		t.Fatal("gpt-6.1-terra must support structured output and strict schema")
+	}
+	for _, purpose := range []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"} {
+		if !CatalogModelSupportsPurpose(item.ID, purpose) {
+			t.Fatalf("gpt-6.1-terra must support %s", purpose)
+		}
+	}
+	p := item.Pricing.LongContext
+	if p.InputTokenThreshold != 272000 || p.InputPerMTokUSD != 2 || p.OutputPerMTokUSD != 7.5 || p.CacheReadPerMTokUSD != 0.1 || p.CacheWritePerMTokUSD != 2.5 {
+		t.Fatalf("unexpected long-context pricing: %#v", p)
 	}
 }
 

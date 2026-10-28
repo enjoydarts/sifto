@@ -883,6 +883,7 @@ export const enDict: Dict = {
   "settings.modelGuide.longContextThreshold": "Above {threshold} input tokens:",
   "settings.modelGuide.longContextPrice": "Above {threshold} input tokens: in {input} / out {output} / cached in {cacheRead} (per 1M tokens)",
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol, an option for balancing quality and cost on complex summaries, Ask, and digests.",
+  "settings.modelGuide.comments.gpt-6.1-terra": "OpenAI GPT-6.1 Terra supports natural writing and structured output, offering a lower-cost option than Sol for summaries, Ask, and digests. Long-context rates apply above 272,000 input tokens.",
   "settings.modelGuide.comments.kimi-k3.1-pro": "Moonshot AI's K3.1 Pro, with a one-million-token context window, always-on reasoning, and strict JSON Schema output for long summaries, knowledge work, and complex Ask tasks.",
   "settings.modelGuide.comments.kimi-k3.1-pro-highspeed": "The faster Kimi K3.1 Pro variant, with a one-million-token context window and strict JSON Schema output for comparing response speed on summaries and Ask tasks.",
   "settings.modelGuide.comments.mistral-large-4": "Mistral Large 4 (public preview), with a one-million-token context window for comparing complex summaries, Ask, and digests.",

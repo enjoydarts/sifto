@@ -436,6 +436,7 @@
       "match_exact": [
         "gpt-6-astra",
         "gpt-6.1-sol",
+        "gpt-6.1-terra",
         "gpt-6-sol",
         "gpt-6-luna"
       ],
@@ -5856,6 +5857,49 @@
         "output_per_mtok_usd": 10.0,
         "cache_read_per_mtok_usd": 0.1,
         "cache_write_per_mtok_usd": 2.5
+      }
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "provider": "openai",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [
+        "latest",
+        "fast",
+        "jsonStable",
+        "long-context"
+      ],
+      "comment": "OpenAI GPT-6.1 Terra。自然な文章生成と構造化出力に対応し、要約・Ask・ダイジェストを Sol より低コストで試す候補。入力272,000 token超では長文料金が適用される。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "openai_model_pages_2026_10",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 5.0,
+        "cache_read_per_mtok_usd": 0.05,
+        "cache_write_per_mtok_usd": 1.25,
+        "long_context": {
+          "input_token_threshold": 272000,
+          "input_per_mtok_usd": 2.0,
+          "output_per_mtok_usd": 7.5,
+          "cache_read_per_mtok_usd": 0.1,
+          "cache_write_per_mtok_usd": 2.5
+        }
       }
     },
     {

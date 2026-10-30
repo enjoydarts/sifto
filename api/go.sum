@@ -65,6 +65,8 @@ github.com/inngest/inngest v1.45.1 h1:TbauYYnyqLgEEZLmJWiwAl3kQgKa88Qv5ROLgU+A8m
 github.com/inngest/inngest v1.45.1/go.mod h1:QgrR6Qb0nrAtZ1DsTNPoY3db83N+aC5zcIL3gr59c/E=
 github.com/inngest/inngest v1.46.0 h1:NbrETNljk3/x1X66wv0ACsYdz6z0H0tq40tC7Pc/AmI=
 github.com/inngest/inngest v1.46.0/go.mod h1:QgrR6Qb0nrAtZ1DsTNPoY3db83N+aC5zcIL3gr59c/E=
+github.com/inngest/inngest v1.48.0 h1:KS086nut/ve2uD4WmpawUupVhVZUl6OudtINlFoJTG4=
+github.com/inngest/inngest v1.48.0/go.mod h1:zN2FkbD/gg0tLJe1ZhohU5rTHfll0/LPgtrHoupxD08=
 github.com/inngest/inngestgo v0.15.0 h1:WiIhGUL8D8MnnySBdjDyRcxjsOXLQQWF+1hV4oslWc8=
 github.com/inngest/inngestgo v0.15.0/go.mod h1:2Qm4ULk506Zwt8MJXHfTZ4lthY1WTpYksXK1z6lEM/U=
 github.com/inngest/inngestgo v0.15.1 h1:JccdXQj5x1SZ7TOVgeUEeAzSugzPzUFzuYUQ9hB0jY0=

@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 
 import anthropic
-import httpx
+import httpx2 as httpx
 import pytest
 
 from app.services import anthropic_transport, claude_service
@@ -11,6 +11,40 @@ from app.services.llm_catalog import load_llm_catalog, model_pricing, provider_f
 
 
 MODEL = "claude-haiku-5-5"
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-4-6", "claude-haiku-4-5"])
+@pytest.mark.parametrize("async_call", [False, True], ids=["sync", "async"])
+def test_sdk_v2_omits_removed_sampling_parameters_for_older_models(monkeypatch, model, async_call):
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        assert request.headers["anthropic-version"] == "2026-10-21"
+        assert body["model"] == model
+        assert "temperature" not in body
+        assert "top_p" not in body
+        return httpx.Response(200, json={
+            "id": "msg_legacy_model", "type": "message", "role": "assistant", "model": model,
+            "content": [{"type": "text", "text": "{}"}],
+            "stop_reason": "end_turn", "stop_sequence": None,
+            "usage": {"input_tokens": 10, "output_tokens": 2},
+        })
+
+    kwargs = dict(prompt="prompt", model=model, api_key="test-key", temperature=0.2, top_p=0.8)
+    if async_call:
+        async def run():
+            async with anthropic.AsyncAnthropic(api_key="test-key", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))) as client:
+                monkeypatch.setattr(anthropic_transport, "async_client_for_api_key", lambda *args, **kwargs: client)
+                return await anthropic_transport.messages_create_async(**kwargs)
+        message = asyncio.run(run())
+    else:
+        with anthropic.Anthropic(api_key="test-key", http_client=httpx.Client(transport=httpx.MockTransport(respond))) as client:
+            monkeypatch.setattr(anthropic_transport, "client_for_api_key", lambda *args, **kwargs: client)
+            message = anthropic_transport.messages_create(**kwargs)
+    assert anthropic_transport.message_text(message) == "{}"
+    assert len(requests) == 1
 
 
 def test_haiku_5_5_is_selectable_for_all_chat_purposes():

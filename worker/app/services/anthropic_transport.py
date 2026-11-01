@@ -1,20 +1,13 @@
 import os
-import re
 import time
 
 import anthropic
 
 
 def supports_sampling_parameters(model: str) -> bool:
-    return re.sub(r"-(?:latest|\d{8})$", "", str(model or "").strip()) not in {
-        "claude-opus-4-7",
-        "claude-opus-4-8",
-        "claude-opus-5",
-        "claude-opus-5-5",
-        "claude-sonnet-5",
-        "claude-sonnet-5-5",
-        "claude-haiku-5-5",
-    }
+    # SDK v2 uses API version 2026-10-21, which removed sampling parameters
+    # for every model, including older models that previously accepted them.
+    return False
 
 
 def message_text(message) -> str:

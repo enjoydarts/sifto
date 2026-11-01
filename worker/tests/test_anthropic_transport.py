@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 import anthropic
-import httpx
+import httpx2 as httpx
 
 from app.services.anthropic_transport import message_text, messages_create, messages_create_async
 

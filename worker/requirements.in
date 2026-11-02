@@ -12,7 +12,9 @@ redis==8.1.0
 sentry-sdk[fastapi]==2.73.0
 langfuse==5.0.4
 json-repair==0.64.2
-PyMuPDF==2.0
+# Plain PDF extraction must fit the isolated parser's 512 MiB address-space limit.
+# Lite provides the same pymupdf API without Layout / NumPy / ONNX initialization.
+PyMuPDF-Lite==2.0
 boto3==1.43.118
 mutagen==1.48.1
 google-auth==2.62.0

@@ -4,9 +4,9 @@ from app.services.pdf_service import extract_pdf_body_from_bytes
 
 
 def build_pdf_bytes(text: str | None, title: str | None = None) -> bytes:
-    import fitz
+    import pymupdf
 
-    with fitz.open() as doc:
+    with pymupdf.open() as doc:
         page = doc.new_page()
         if text:
             page.insert_text((72, 72), text)

@@ -33,13 +33,13 @@ bgutil-ytdlp-pot-provider==1.3.2 \
     --hash=sha256:9674227441402b56fe06f4e7559a691f33913eebfc7d50831894ccb24c8bc479 \
     --hash=sha256:9971733ebba2b69ca1f1b8c6036a114154330a9f8af54491c6baa941863df87a
     # via -r requirements.in
-boto3==1.43.118 \
-    --hash=sha256:ab8f3d2c622ef039338b4f228d97ea55f1abd573d84bb9b9a5ee8cb6780c0ccd \
-    --hash=sha256:c0620f799e0f0c222ba42c337b65cdbcd3da38a3121187f634d8926cbbb28a9c
+boto3==1.43.119 \
+    --hash=sha256:d1718edae48c3241d289c0ece8a515399a7242c406e35328b9685c4d24039186 \
+    --hash=sha256:e12c3b1d81713e14bd6947b7412d9d0ea49b320642d795ded1d64d6483ca6f49
     # via -r requirements.in
-botocore==1.43.118 \
-    --hash=sha256:7f3f9d88cc9e847587690f82a42e3c3c292c3026c92c1e60d68a9310018e003f \
-    --hash=sha256:a45d7ae570674161e4a3542d8c68633bf7503f92d1de781ef7361b79488eda6f
+botocore==1.43.119 \
+    --hash=sha256:6026aec97914a4fa116915fd3b05af899912eff51b93fb8dff95aa228a3e761b \
+    --hash=sha256:ed11934be6e6d398ac21b7fe03778c9584368eeff8ba5371581f19bb47db0b6a
     # via
     #   boto3
     #   s3transfer
@@ -917,9 +917,9 @@ lxml==6.1.3 \
     #   justext
     #   lxml-html-clean
     #   trafilatura
-lxml-html-clean==0.4.5 \
-    --hash=sha256:c76fcadd1e5bfb9b8bafc2200d51e4e78eb0dad67f56881c21dfb6484c7e7746 \
-    --hash=sha256:e2a4c7d5beedd17cd7b484d848a0571e54baa239a4f9df5546e3acba7f990560
+lxml-html-clean==0.4.6 \
+    --hash=sha256:cc037270ba500a65e7235409dcddcae8ef37300f26dea826b61d917bf0236880 \
+    --hash=sha256:ea9db067c3053854fd87f8d5a1cf01221dc893b54dbf6019c689052e05c64f22
     # via lxml
 mutagen==1.48.1 \
     --hash=sha256:4f077fe87d3fc7fba259aa63d8c026b18382ca6a42ef37c61e16f1b1b5b82fe7 \
@@ -995,9 +995,9 @@ protobuf==7.36.2 \
     # via
     #   googleapis-common-protos
     #   opentelemetry-proto
-pyasn1==0.6.4 \
-    --hash=sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81 \
-    --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b
+pyasn1==0.6.5 \
+    --hash=sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587 \
+    --hash=sha256:6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47
     # via pyasn1-modules
 pyasn1-modules==0.4.2 \
     --hash=sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a \
@@ -1844,7 +1844,7 @@ wrapt==2.5.1 \
     --hash=sha256:fcccaa1484f7dd1091602970988ab741491f9f974013c844f70e45ac1196b80d \
     --hash=sha256:fd3f878a4aac3c262447ddf43c5f4c18fc67dfc3ba69c4fb1c7a4c4af96abe7e
     # via langfuse
-yt-dlp==2026.10.21 \
-    --hash=sha256:94a3a3e2c423129d0bbd2f1be000c4171fa1226c29e251c84aff868f2851c247 \
-    --hash=sha256:cbf748d7d17cd37647c4b9f07b6c25f24384bfd4361407ee5ec519e753d22539
+yt-dlp==2026.10.26 \
+    --hash=sha256:a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae \
+    --hash=sha256:abe5c6b94c3b2f0560500add1c42e0a97641752743a5b65588ac2007a6e23eb6
     # via -r requirements.in

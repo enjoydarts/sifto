@@ -15,9 +15,9 @@ json-repair==0.64.2
 # Plain PDF extraction must fit the isolated parser's 512 MiB address-space limit.
 # Lite provides the same pymupdf API without Layout / NumPy / ONNX initialization.
 PyMuPDF-Lite==2.0
-boto3==1.43.119
+boto3==1.43.120
 mutagen==1.48.1
 google-auth==2.62.0
-pytest==9.1.1
+pytest==9.2.0
 yt-dlp==2026.10.26
 bgutil-ytdlp-pot-provider==1.3.2

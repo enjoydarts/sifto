@@ -60,7 +60,8 @@ jobs:
       COOLIFY_WORKER_UUID: ${{ vars.COOLIFY_WORKER_UUID }}
       COOLIFY_API_UUID: ${{ vars.COOLIFY_API_UUID }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
+      INNGEST_CF_ACCESS_CLIENT_ID: ${{ secrets.INNGEST_CF_ACCESS_CLIENT_ID }}
+      INNGEST_CF_ACCESS_CLIENT_SECRET: ${{ secrets.INNGEST_CF_ACCESS_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -75,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN INNGEST_API_KEY; do
+          for name in COOLIFY_URL COOLIFY_WORKER_UUID COOLIFY_API_UUID COOLIFY_TOKEN INNGEST_CF_ACCESS_CLIENT_ID INNGEST_CF_ACCESS_CLIENT_SECRET; do
             if [ -z "${!name:-}" ]; then
               echo "::error::$name is not configured."
               missing=1
@@ -235,14 +236,15 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     env:
-      INNGEST_API_KEY: ${{ secrets.INNGEST_API_KEY }}
+      INNGEST_CF_ACCESS_CLIENT_ID: ${{ secrets.INNGEST_CF_ACCESS_CLIENT_ID }}
+      INNGEST_CF_ACCESS_CLIENT_SECRET: ${{ secrets.INNGEST_CF_ACCESS_CLIENT_SECRET }}
     steps:
       - name: Sync Inngest app
         run: |
           set -euo pipefail
           curl --fail --silent --show-error \
             -X POST \
-            -H "Authorization: Bearer $INNGEST_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data '{"url":"https://api.sifto.net/api/inngest"}' \
-            "https://api.inngest.com/v2/apps/sifto-api/syncs" > /dev/null
+            --connect-timeout 10 --max-time 60 \
+            -H "CF-Access-Client-Id: $INNGEST_CF_ACCESS_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $INNGEST_CF_ACCESS_CLIENT_SECRET" \
+            "https://inngest-api.kitayama.io/sync" > /dev/null

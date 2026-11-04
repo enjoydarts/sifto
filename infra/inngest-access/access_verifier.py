@@ -4,8 +4,12 @@ import re
 import os
 import json
 import threading
+import time
+import hashlib
+import hmac
 import urllib.error
 import urllib.request
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import jwt
@@ -45,16 +49,59 @@ class Verifier:
 
 
 def sync_app():
-    # The caller cannot choose a URL, query, or payload. Inngest signs the SDK ping.
-    payload = {'query': 'mutation { createApp(input: {url: "https://api.sifto.net/api/inngest"}) { name error functionCount } }'}
-    req = urllib.request.Request('http://127.0.0.1:8288/v0/gql',
-                                 data=json.dumps(payload).encode(),
-                                 headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=45) as response:
-        result = json.load(response)
-    app = (result.get('data') or {}).get('createApp') or {}
-    if result.get('errors') or app.get('error') or app.get('name') != 'sifto-api' or not app.get('functionCount'):
-        raise ValueError('app sync failed')
+    # Go SDK 0.16 returns in-band config; OSS Ping does not register that response.
+    # Perform the signed exchange explicitly. Caller input is never forwarded.
+    sdk_url = 'https://api.sifto.net/api/inngest'
+    signing_key = os.environ.get('INNGEST_SIGNING_KEY', '')
+    key = re.sub(r'^signkey-\w+-', '', signing_key)
+    if not re.fullmatch(r'[0-9a-fA-F]{64}', key):
+        raise ValueError('missing signing key')
+    body = json.dumps({'url': sdk_url}, separators=(',', ':')).encode()
+    timestamp = str(int(time.time()))
+    digest = hmac.new(key.encode(), body + timestamp.encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(sdk_url, data=body, method='PUT', headers={
+        'Content-Type': 'application/json', 'X-Inngest-Signature': 't=' + timestamp + '&s=' + digest})
+    # Redirects would send a signed request to an unintended endpoint.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *_):
+            return None
+    opener = urllib.request.build_opener(NoRedirect)
+    with opener.open(req, timeout=20) as response:
+        raw = response.read(2 * 1024 * 1024 + 1)
+        signature = response.headers.get('X-Inngest-Signature', '')
+    if len(raw) > 2 * 1024 * 1024:
+        raise ValueError('oversized SDK response')
+    parts = urllib.parse.parse_qs(signature, strict_parsing=True)
+    if set(parts) != {'t', 's'} or any(len(v) != 1 for v in parts.values()):
+        raise ValueError('invalid SDK signature')
+    if abs(int(time.time()) - int(parts['t'][0])) > 300:
+        raise ValueError('expired SDK signature')
+    expected = hmac.new(key.encode(), raw.removesuffix(b'\n') + parts['t'][0].encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, parts['s'][0]):
+        raise ValueError('invalid SDK signature')
+    config = json.loads(raw)
+    if config.get('app_id') != 'sifto-api' or config.get('url') != sdk_url or not config.get('functions'):
+        raise ValueError('invalid SDK config')
+    for function in config['functions']:
+        if not function.get('steps'):
+            raise ValueError('missing steps')
+        for step in function['steps'].values():
+            url = urllib.parse.urlsplit(step.get('runtime', {}).get('url', ''))
+            if url.scheme != 'https' or url.netloc != 'api.sifto.net' or url.path != '/api/inngest' or url.fragment:
+                raise ValueError('unexpected callback')
+    registration = {'v': '1', 'url': sdk_url, 'deployType': 'ping', 'appName': 'sifto-api',
+                    'sdk': config['sdk_language'] + ':' + config['sdk_version'],
+                    'functions': config['functions'], 'headers': {},
+                    'capabilities': {'in_band_sync': 'v1'}}
+    prefix = signing_key.removesuffix(key)
+    bearer = prefix + hashlib.sha256(bytes.fromhex(key)).hexdigest()
+    req = urllib.request.Request('http://127.0.0.1:8288/fn/register',
+                                 data=json.dumps(registration).encode(), headers={
+                                     'Content-Type': 'application/json', 'Authorization': 'Bearer ' + bearer})
+    with opener.open(req, timeout=20) as response:
+        result = json.loads(response.read(1024 * 1024))
+    if result.get('ok') is not True:
+        raise ValueError('app registration failed')
 
 
 def make_handler(verifier, ci_client_id=None, sync=None):

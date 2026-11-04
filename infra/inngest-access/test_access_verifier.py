@@ -6,6 +6,9 @@ import unittest
 import urllib.error
 import io
 import json
+import hashlib
+import hmac
+import os
 from unittest.mock import patch
 
 import jwt
@@ -15,30 +18,55 @@ from access_verifier import Verifier, make_handler, sync_app
 
 
 class SyncUpstreamTest(unittest.TestCase):
-    def result(self, result):
-        with patch('access_verifier.urllib.request.urlopen', return_value=io.BytesIO(json.dumps(result).encode())) as call:
+    def setUp(self):
+        self.url = 'https://api.sifto.net/api/inngest'
+        self.key = 'a' * 64
+        self.config = {'app_id': 'sifto-api', 'url': self.url, 'sdk_language': 'go',
+                       'sdk_version': '0.16.5', 'functions': [{'id': 'sifto-api-fixture', 'steps': {
+                           'step': {'runtime': {'type': 'http', 'url': self.url + '?fnId=fixture'}}}}]}
+
+    def invoke(self, config=None, signature_valid=True, registration=None):
+        raw = json.dumps(config or self.config).encode()
+        timestamp = str(int(time.time()))
+        digest = hmac.new(self.key.encode(), raw + timestamp.encode(), hashlib.sha256).hexdigest()
+        response = io.BytesIO(raw + b'\n')
+        response.headers = {'X-Inngest-Signature': 't=' + timestamp + '&s=' + (digest if signature_valid else '0' * 64)}
+        registered = io.BytesIO(json.dumps(registration or {'ok': True}).encode())
+        with patch.dict(os.environ, INNGEST_SIGNING_KEY=self.key), patch('access_verifier.urllib.request.OpenerDirector.open', side_effect=[response, registered]) as call:
             sync_app()
-            request = call.call_args.args[0]
-            self.assertEqual(request.full_url, 'http://127.0.0.1:8288/v0/gql')
-            query = json.loads(request.data)['query']
-            self.assertIn('https://api.sifto.net/api/inngest', query)
-            self.assertIn('functionCount', query)
+            sdk_request = call.call_args_list[0].args[0]
+            self.assertEqual(sdk_request.full_url, self.url)
+            self.assertEqual(sdk_request.method, 'PUT')
+            self.assertIn('X-inngest-signature', sdk_request.headers)
+            register_request = call.call_args_list[1].args[0]
+            self.assertEqual(register_request.full_url, 'http://127.0.0.1:8288/fn/register')
+            self.assertEqual(json.loads(register_request.data)['functions'], self.config['functions'])
 
-    def test_sync_requires_registered_functions(self):
+    def test_sync_requires_functions(self):
+        self.config['functions'] = []
         with self.assertRaises(ValueError):
-            self.result({'data': {'createApp': {'name': 'sifto-api', 'functionCount': 0}}})
+            self.invoke()
 
-    def test_sync_checks_graphql_errors_even_with_http_success(self):
+    def test_sync_rejects_forged_sdk_response(self):
         with self.assertRaises(ValueError):
-            self.result({'errors': [{'message': 'failed'}]})
+            self.invoke(signature_valid=False)
 
-    def test_sync_checks_app_error_and_identity(self):
-        for app in ({'name': 'sifto-api', 'error': 'failed', 'functionCount': 32}, {'name': 'other', 'functionCount': 32}):
-            with self.subTest(app=app), self.assertRaises(ValueError):
-                self.result({'data': {'createApp': app}})
+    def test_sync_rejects_wrong_app_or_url(self):
+        for field, value in [('app_id', 'other'), ('url', 'https://other.example/')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.invoke(dict(self.config, **{field: value}))
 
-    def test_sync_accepts_registered_sifto(self):
-        self.result({'data': {'createApp': {'name': 'sifto-api', 'functionCount': 32}}})
+    def test_sync_rejects_foreign_function_callback(self):
+        self.config['functions'][0]['steps']['step']['runtime']['url'] = 'https://other.example/'
+        with self.assertRaises(ValueError):
+            self.invoke()
+
+    def test_sync_checks_registration_result(self):
+        with self.assertRaises(ValueError):
+            self.invoke(registration={'ok': False})
+
+    def test_sync_accepts_signed_config_and_registers_it(self):
+        self.invoke()
 
 
 class AccessVerifierTest(unittest.TestCase):

@@ -1,0 +1,24 @@
+[Unit]
+Description=Cloudflare Access JWT verification for Inngest API
+Wants=network-online.target
+After=network-online.target
+Before=caddy.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/sifto-inngest/access-verifier.env
+ExecStart=/usr/bin/python3 /opt/sifto-inngest-access/access_verifier.py
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+TasksMax=64
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

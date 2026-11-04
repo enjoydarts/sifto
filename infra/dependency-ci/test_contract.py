@@ -20,6 +20,18 @@ def read_yaml(path):
 
 
 class DependencyAutomationContract(unittest.TestCase):
+    def test_production_inngest_sync_uses_dedicated_access_ci_credentials(self):
+        workflow = read_yaml('.github/workflows/deploy.yml')
+        job = workflow['jobs']['sync-inngest']
+        self.assertEqual(job['env']['INNGEST_CF_ACCESS_CLIENT_ID'], '${{ secrets.INNGEST_CF_ACCESS_CLIENT_ID }}')
+        self.assertEqual(job['env']['INNGEST_CF_ACCESS_CLIENT_SECRET'], '${{ secrets.INNGEST_CF_ACCESS_CLIENT_SECRET }}')
+        command = job['steps'][0]['run']
+        self.assertIn('https://inngest-api.kitayama.io/sync', command)
+        self.assertIn('CF-Access-Client-Id:', command)
+        self.assertIn('CF-Access-Client-Secret:', command)
+        self.assertNotIn('api.inngest.com', command)
+        self.assertNotIn('INNGEST_API_KEY', command)
+
     def test_renovate_cannot_merge_before_native_owner_approval(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
         self.assertIs(config['automerge'], False)

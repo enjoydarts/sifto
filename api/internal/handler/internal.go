@@ -234,6 +234,11 @@ func (h *InternalHandler) UpsertObsidianGitHubInstallation(w http.ResponseWriter
 		http.Error(w, fmt.Sprintf("save installation failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	if h.cache != nil {
+		if _, err := h.cache.BumpVersion(r.Context(), cacheVersionKeyUserSettings(body.UserID)); err != nil {
+			log.Printf("obsidian installation settings cache bump failed user_id=%s err=%v", body.UserID, err)
+		}
+	}
 	writeJSON(w, map[string]any{
 		"user_id": settings.UserID,
 		"obsidian_export": map[string]any{

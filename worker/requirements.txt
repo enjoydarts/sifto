@@ -33,13 +33,13 @@ bgutil-ytdlp-pot-provider==1.3.2 \
     --hash=sha256:9674227441402b56fe06f4e7559a691f33913eebfc7d50831894ccb24c8bc479 \
     --hash=sha256:9971733ebba2b69ca1f1b8c6036a114154330a9f8af54491c6baa941863df87a
     # via -r requirements.in
-boto3==1.43.120 \
-    --hash=sha256:86978245a7b911549a44df3f805ae4ce94a8154f4ebe4a166631b8a6d7af2697 \
-    --hash=sha256:9d85840e721869f8202ab5f6b4ec3e697ac46343116cc8d1d0804ec58f90c503
+boto3==1.43.121 \
+    --hash=sha256:0599bdde7d0c03d914d9247b0a328ea48c15b0b3b5fb31a153857fa5bc7a4fd3 \
+    --hash=sha256:fc41ea80507416c30a3f7bdea3682124551ec0c36405c0d8149efaf65d9628e7
     # via -r requirements.in
-botocore==1.43.120 \
-    --hash=sha256:7f54674f26f0d9a500bf44a1f858e88b70b03c82b2aca385ddf51f6e968bfd01 \
-    --hash=sha256:f479cbb7273b9c0ea589a91a7abe38badda6353fb7c237a22c7461a06d279ee2
+botocore==1.43.121 \
+    --hash=sha256:39bfd17e69f3370350e6aac2072df64045d002f9878e09115e85b87c772bd473 \
+    --hash=sha256:69eb571c74ff140cc3a716aed3bc25d09eb7b12de4ea2f990c03785a634f9dcf
     # via
     #   boto3
     #   s3transfer
@@ -1465,9 +1465,9 @@ typing-inspection==0.4.4 \
     # via
     #   fastapi
     #   pydantic
-tzdata==2026.5 ; sys_platform == 'win32' \
-    --hash=sha256:8cc73c0a0bfca7dbfa59235d60b2eff82231dee33f53d206db1acd9173cfc0a7 \
-    --hash=sha256:b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac
+tzdata==2026.6 ; sys_platform == 'win32' \
+    --hash=sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec \
+    --hash=sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d
     # via tzlocal
 tzlocal==5.4.5 \
     --hash=sha256:ba976898bad27945178c9ca25c222c19e322b30c10342b9f40b46714f70d2d5f \

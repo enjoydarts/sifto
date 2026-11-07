@@ -7,15 +7,15 @@ httpx==0.28.1
 httpx2==2.16.0
 httpcore==1.0.9
 certifi==2026.10.23
-pydantic==2.14.1
+pydantic==2.14.2
 redis==8.1.0
 sentry-sdk[fastapi]==2.73.0
-langfuse==5.0.4
+langfuse==5.1.0
 json-repair==0.64.2
 # Plain PDF extraction must fit the isolated parser's 512 MiB address-space limit.
 # Lite provides the same pymupdf API without Layout / NumPy / ONNX initialization.
 PyMuPDF-Lite==2.0
-boto3==1.43.121
+boto3==1.43.123
 mutagen==1.48.1
 google-auth==2.62.0
 pytest==9.2.0

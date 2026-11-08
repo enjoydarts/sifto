@@ -83,6 +83,14 @@
       "enabled": true
     },
     {
+      "description": ["These fixtures verify Ubuntu 24.04 production hosts and systemd 255; keep OS upgrades separate while allowing 24.04 digest updates."],
+      "matchManagers": ["dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ubuntu"],
+      "matchFileNames": ["infra/maintenance/bootstrap/Dockerfile.test", "infra/maintenance/bootstrap/Dockerfile.postgres-data-mount"],
+      "allowedVersions": "/^24\\.04$/"
+    },
+    {
       "matchFileNames": ["infra/maintenance/Dockerfile", "infra/maintenance/requirements.in", "infra/maintenance/requirements.txt"],
       "groupName": "Maintenance executor activation dependencies",
       "groupSlug": "maintenance-executor-activation",

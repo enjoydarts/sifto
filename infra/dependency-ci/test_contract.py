@@ -20,6 +20,30 @@ def read_yaml(path):
 
 
 class DependencyAutomationContract(unittest.TestCase):
+    def test_maintenance_os_fixtures_remain_on_supported_ubuntu_release(self):
+        files = {
+            'infra/maintenance/bootstrap/Dockerfile.test',
+            'infra/maintenance/bootstrap/Dockerfile.postgres-data-mount',
+        }
+        config = json.loads((ROOT / 'renovate.json').read_text())
+        rules = [rule for rule in config['packageRules']
+                 if rule.get('matchPackageNames') == ['ubuntu']
+                 and set(rule.get('matchFileNames', [])) == files]
+        self.assertEqual(len(rules), 1, 'host OS fixtures need an explicit supported-release constraint')
+        rule = rules[0]
+        self.assertEqual(rule['matchManagers'], ['dockerfile'])
+        self.assertEqual(rule['matchDatasources'], ['docker'])
+        self.assertIsNot(rule.get('enabled'), False, 'Ubuntu 24.04 digest updates must remain enabled')
+        self.assertNotIn('matchUpdateTypes', rule)
+        allowed = rule['allowedVersions']
+        self.assertTrue(allowed.startswith('/') and allowed.endswith('/'))
+        pattern = re.compile(allowed[1:-1])
+        self.assertIsNotNone(pattern.search('24.04'))
+        for unsupported in ('24.10', '25.04', '26.04', 'latest'):
+            self.assertIsNone(pattern.search(unsupported), unsupported)
+        for path in files:
+            self.assertRegex((ROOT / path).read_text(), r'(?m)^FROM ubuntu:24\.04@sha256:[0-9a-f]{64}$')
+
     def test_production_inngest_sync_uses_dedicated_access_ci_credentials(self):
         workflow = read_yaml('.github/workflows/deploy.yml')
         job = workflow['jobs']['sync-inngest']

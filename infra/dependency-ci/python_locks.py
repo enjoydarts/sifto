@@ -1,6 +1,7 @@
 """Regenerate or verify locks with the pinned uv container; never run headers."""
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -13,11 +14,22 @@ DIRECTORIES = ('worker', 'infra/maintenance', 'infra/audio-concat')
 COMMAND = ('uv', 'pip', 'compile', '--python-version=3.12', '--universal', '--generate-hashes', '--output-file=requirements.txt', 'requirements.in')
 
 
+def runtime_version(directory):
+    dockerfile = directory / 'Dockerfile'
+    if not dockerfile.exists():
+        return '3.12'  # Synthetic fixtures retain the ordinary application target.
+    match = re.search(r'^FROM python:(3\.\d+)(?:\.\d+)?(?:-[a-z0-9-]+)?(?:@sha256:[0-9a-f]{64})?(?: AS [a-zA-Z0-9_-]+)?$',
+                      dockerfile.read_text(), re.MULTILINE)
+    if match is None:
+        raise LockError('Expected a pinned Python runtime in ' + str(dockerfile))
+    return match[1]
+
+
 class LockError(Exception):
     pass
 
 
-def compile_lock(directory, cutoff=None, generate=True):
+def compile_lock(directory, cutoff=None, generate=True, python_version=None):
     environment = os.environ.copy()
     # Verification retains the locked version preferences and refreshes hashes;
     # it must never inherit generation's upgrade or publication cutoff settings.
@@ -26,7 +38,9 @@ def compile_lock(directory, cutoff=None, generate=True):
     if generate:
         environment.update(generation_environment(
             cutoff or release_cutoff(), str(Path(__file__).with_name('uv-renovate.toml'))))
-    subprocess.run(COMMAND, cwd=directory, env=environment, check=True, stdout=subprocess.DEVNULL)
+    version = python_version or runtime_version(directory)
+    command = tuple('--python-version=' + version if arg.startswith('--python-version=') else arg for arg in COMMAND)
+    subprocess.run(command, cwd=directory, env=environment, check=True, stdout=subprocess.DEVNULL)
 
 
 def check_directory(directory):
@@ -38,9 +52,10 @@ def check_directory(directory):
     """
     source = directory / 'requirements.in'
     lock = directory / 'requirements.txt'
+    version = runtime_version(directory)
     try:
         requirement_shape(source.read_text())
-        pins = python_lock(lock.read_text())
+        pins = python_lock(lock.read_text(), python_version=version)
     except Refused as error:
         raise LockError(str(error)) from None
     with tempfile.TemporaryDirectory() as temporary:
@@ -50,8 +65,8 @@ def check_directory(directory):
         # Retain only version preferences so all hashes are fetched afresh.
         preferences = ''.join(pin['requirement'] + '==' + pin['version'] + (' ; ' + pin['marker'] if pin['marker'] else '') + '\n' for pin in pins.values())
         (target / 'requirements.txt').write_text(preferences)
-        compile_lock(target, generate=False)
-        resolved = python_lock((target / 'requirements.txt').read_text())
+        compile_lock(target, generate=False, python_version=version)
+        resolved = python_lock((target / 'requirements.txt').read_text(), python_version=version)
         graph = lambda values: {name: {key: pin[key] for key in ('requirement', 'version', 'marker')}
                                 for name, pin in values.items()}
         if (graph(pins) != graph(resolved)

@@ -244,6 +244,7 @@ dependency-contract: dependency-python-locks-mounts-test
 dependency-renovate-validate:
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-validator
 	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-status-test
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-artifacts-test
 	$(MAKE) dependency-renovate-python-test
 	$(MAKE) dependency-renovate-npm-test
 

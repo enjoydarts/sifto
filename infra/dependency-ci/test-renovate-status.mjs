@@ -138,7 +138,7 @@ require (
     for (const path of [lockPath, lockPath.replace('.txt', '.in')]) copyFileSync(`/fixtures/${path}`, join(directory, path));
     const header = extractHeaderCommand(readFileSync(`/fixtures/${lockPath}`, 'utf8'), lockPath);
     assert.equal(header.commandType, 'uv');
-    assert.equal(header.pythonVersion, '3.12');
+    assert.equal(header.pythonVersion, lockPath.startsWith('infra/maintenance/') ? '3.15' : '3.12');
     assert.deepEqual(header.sourceFiles, ['requirements.in']);
   }
   const extracted = await extractAllPackageFiles(repositoryConfig, lockPaths);
@@ -150,18 +150,19 @@ require (
     assert.ok(file.deps.some((dep) => dep.currentValue && dep.lockedVersion));
     assert.ok(file.deps.every((dep) => dep.datasource === 'pypi'));
   }
-  console.log(`Renovate ${installedVersion}: uv Python 3.12 headers extract all three direct inputs and hashed transitive dependencies.`);
+  console.log(`Renovate ${installedVersion}: runtime-specific uv headers extract all three direct inputs and hashed transitive dependencies.`);
   const activationGroup = 'Maintenance executor activation dependencies';
   for (const packageFile of ['infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt']) {
     const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile',
       datasource: 'pypi', packageName: 'ansible-core', depName: 'ansible-core', versioning: 'pep440', updateType: 'minor' });
     assert.equal(config.constraintsFiltering, 'strict');
-    assert.equal(config.constraints.python, '3.12');
+    assert.equal(config.constraints.python, '3.15.2');
     const ansible = applyConstraintsFiltering({ releases: [
       { version: '2.21.5', constraints: { python: ['>=3.12'] } },
       { version: '2.22.0', constraints: { python: ['>=3.13'] } },
+      { version: '2.99.0', constraints: { python: ['>=3.16'] } },
     ] }, config);
-    assert.deepEqual(ansible.releases.map((release) => release.version), ['2.21.5']);
+    assert.deepEqual(ansible.releases.map((release) => release.version), ['2.21.5', '2.22.0']);
     const pipConfig = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile',
       datasource: 'pypi', packageName: 'pip', depName: 'pip', versioning: 'pep440', updateType: 'minor' });
     const pip = applyConstraintsFiltering({ releases: [
@@ -174,7 +175,7 @@ require (
     const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', datasource: 'pypi' });
     assert.notEqual(config.constraintsFiltering, 'strict');
   }
-  console.log(`Renovate ${installedVersion}: maintenance Python 3.12 excludes Python 3.13-only Ansible and retains compatible pip releases.`);
+  console.log(`Renovate ${installedVersion}: maintenance Python 3.15.2 accepts current Ansible and rejects future incompatible Python requirements.`);
   for (const updateType of ['minor', 'patch']) {
     for (const packageFile of ['worker/requirements.in', 'worker/requirements.txt', 'infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt']) {
       const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', updateType });

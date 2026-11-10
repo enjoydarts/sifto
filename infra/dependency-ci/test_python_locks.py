@@ -17,6 +17,23 @@ ROOT = Path('/repository')
 
 
 class PythonLocksTests(unittest.TestCase):
+    def test_maintenance_lock_uses_its_runtime_through_temporary_verification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / 'Dockerfile').write_text('FROM python:3.15.2-slim-trixie\n')
+            (target / 'requirements.in').write_text('ansible-core==2.22.0\n')
+            compile_lock(target)
+            lock = (target / 'requirements.txt').read_text()
+            self.assertIn('--python-version=3.15 ', lock)
+            pins = python_lock(lock, python_version='3.15')
+            self.assertEqual(pins['ansible-core']['version'], '2.22.0')
+            check_directory(target)
+            with self.assertRaisesRegex(Refused, 'header changed'):
+                python_lock(lock)
+            (target / 'Dockerfile').write_text('FROM python:3.12-slim\n')
+            with self.assertRaises(LockError):
+                check_directory(target)
+
     def test_generation_preserves_the_existing_certifi_security_pin_before_cutoff(self):
         before = (ROOT / 'worker/requirements.txt').read_text()
         expected = python_lock(before)['certifi']['version']

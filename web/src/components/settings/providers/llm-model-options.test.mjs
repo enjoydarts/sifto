@@ -16,6 +16,10 @@ test("long-context pricing inherits omitted base rates and allows models without
         input_per_mtok_usd: 1, output_per_mtok_usd: 2,
         long_context: { input_token_threshold: 100, input_per_mtok_usd: 3, output_per_mtok_usd: 4 },
       } },
+      { id: "free-cache-model", provider: "alibaba", available_purposes: ["summary"], pricing: {
+        input_per_mtok_usd: 1, output_per_mtok_usd: 2, cache_read_per_mtok_usd: 0.1,
+        long_context: { input_token_threshold: 100, cache_read_per_mtok_usd: 0 },
+      } },
     ],
     embedding_models: [],
   };
@@ -23,7 +27,8 @@ test("long-context pricing inherits omitted base rates and allows models without
     ? "Above {threshold}: in {input} / out {output} / cached in {cacheRead}" : key;
   const options = buildOptionsForPurpose(catalog, "summary", undefined, translate);
   assert.match(options[0].note, /Above 100: in \$3 \/ out \$2 \/ cached in \$0\.1/);
-  assert.match(options[1].note, /Above 100: in \$3 \/ out \$4 \/ cached in \$0/);
+  assert.match(options[1].note, /Above 100: in \$3 \/ out \$4 \/ cached in -/);
+  assert.match(options[2].note, /Above 100: in \$1 \/ out \$2 \/ cached in \$0/);
 });
 
 test("buildOptionsForPurpose keeps featherless unavailable and removed models visible but disabled", () => {

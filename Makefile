@@ -203,16 +203,16 @@ export PYTHON_LOCK_GID ?= $(shell id -g)
 PYTHON_LOCK_COMPOSE := docker compose --env-file /dev/null -f infra/dependency-ci/compose.python-locks.yml
 .PHONY: dependency-python-locks dependency-python-locks-check dependency-python-locks-test dependency-python-locks-mounts-test dependency-audio
 dependency-python-locks:
-	$(PYTHON_LOCK_COMPOSE) run --rm -T generate
+	$(PYTHON_LOCK_COMPOSE) run --build --rm -T generate
 
 dependency-python-locks-check:
-	$(PYTHON_LOCK_COMPOSE) run --rm -T locks check
+	$(PYTHON_LOCK_COMPOSE) run --build --rm -T locks check
 
 dependency-python-locks-test:
-	$(PYTHON_LOCK_COMPOSE) run --rm -T --entrypoint python locks -B /repository/infra/dependency-ci/test_python_locks.py
+	$(PYTHON_LOCK_COMPOSE) run --build --rm -T --entrypoint python locks -B /repository/infra/dependency-ci/test_python_locks.py
 
 dependency-python-locks-mounts-test:
-	$(PYTHON_LOCK_COMPOSE) --profile generate config --format json | $(PYTHON_LOCK_COMPOSE) run --rm -T --entrypoint python generate -B /repository/infra/dependency-ci/test_python_lock_mounts.py
+	$(PYTHON_LOCK_COMPOSE) --profile generate config --format json | $(PYTHON_LOCK_COMPOSE) run --build --rm -T --entrypoint python generate -B /repository/infra/dependency-ci/test_python_lock_mounts.py
 
 dependency-audio:
 	$(DEPENDENCY_COMPOSE) run --build --rm -T --no-deps audio
@@ -250,7 +250,7 @@ dependency-renovate-validate:
 
 .PHONY: dependency-renovate-python-test
 dependency-renovate-python-test:
-	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-python-command | $(PYTHON_LOCK_COMPOSE) run --rm -T --volume "$(CURDIR)/infra/dependency-ci/uv-renovate.toml:/sifto-python-generation.toml:ro" --entrypoint python locks -B /repository/infra/dependency-ci/test_renovate_python_generation.py
+	$(DEPENDENCY_COMPOSE) run --rm -T --no-deps renovate-python-command | $(PYTHON_LOCK_COMPOSE) run --build --rm -T --volume "$(CURDIR)/infra/dependency-ci/uv-renovate.toml:/sifto-python-generation.toml:ro" --entrypoint python locks -B /repository/infra/dependency-ci/test_renovate_python_generation.py
 
 .PHONY: dependency-renovate-npm-test
 dependency-renovate-npm-test:

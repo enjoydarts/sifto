@@ -11,6 +11,7 @@ NPM_COMPILER_ALIASES = {'typescript': '@typescript/typescript6', '@typescript/na
 IMAGE = r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*(?:@sha256:[0-9a-f]{64})?'
 DOCKERFILES = {'api/Dockerfile', 'worker/Dockerfile', 'web/Dockerfile', 'infra/audio-concat/Dockerfile', 'infra/dependency-ci/web.Dockerfile', 'infra/dependency-ci/postgres.Dockerfile', 'infra/maintenance/Dockerfile', 'infra/maintenance/backup/Dockerfile.proof-test', 'infra/maintenance/bootstrap/Dockerfile.test'}
 DOCKERFILES.add('infra/maintenance/bootstrap/Dockerfile.postgres-data-mount')
+DOCKERFILES.add('infra/dependency-ci/python-locks.Dockerfile')
 COMPOSE = {'docker-compose.yml', 'infra/dependency-ci/compose.yml', 'infra/maintenance/compose.yml', 'infra/maintenance/bootstrap/compose.yml', 'infra/maintenance/backup/compose.yml'}
 COMPOSE.add('infra/dependency-ci/compose.python-locks.yml')
 COMPOSE.add('infra/dependency-ci/compose.renovate-npm.yml')

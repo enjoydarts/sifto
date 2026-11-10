@@ -32,6 +32,8 @@ def message_text(message) -> str:
 def _validate_answer_text(message, model: str):
     if str(model or "").strip() == "claude-haiku-5-5" and not message_text(message):
         raise RuntimeError(f"anthropic Haiku 5.5 returned no text (stop_reason={getattr(message, 'stop_reason', None)})")
+    if str(model or "").strip() == "claude-fable-5-2" and not message_text(message):
+        raise RuntimeError(f"anthropic Fable 5.2 returned no text (stop_reason={getattr(message, 'stop_reason', None)})")
     return message
 
 

@@ -27,9 +27,9 @@ export function formatModelOptionNote(item: LLMCatalogModel, t: Translate): stri
   if (longContext) {
     parts.push(t("settings.modelGuide.longContextPrice")
       .replace("{threshold}", longContext.input_token_threshold.toLocaleString("en-US"))
-      .replace("{input}", formatUSDPerMTok(longContext.input_per_mtok_usd))
-      .replace("{output}", formatUSDPerMTok(longContext.output_per_mtok_usd))
-      .replace("{cacheRead}", formatUSDPerMTok(longContext.cache_read_per_mtok_usd)));
+      .replace("{input}", formatUSDPerMTok(longContext.input_per_mtok_usd ?? item.pricing.input_per_mtok_usd))
+      .replace("{output}", formatUSDPerMTok(longContext.output_per_mtok_usd ?? item.pricing.output_per_mtok_usd))
+      .replace("{cacheRead}", formatUSDPerMTok(longContext.cache_read_per_mtok_usd ?? item.pricing.cache_read_per_mtok_usd ?? 0)));
   }
   return parts.join(" / ");
 }

@@ -880,6 +880,7 @@ export const jaDict: Dict = {
   "settings.modelGuide.highlights.latest": "最新",
   "settings.modelGuide.comments.claude-sonnet-5-5": "Anthropic の最新 Sonnet。要約・Ask・ダイジェスト向けの速度と品質のバランスが良い候補。",
   "settings.modelGuide.comments.claude-haiku-5-5": "Claude Haiku 5.5。事実抽出・分類・要約向けの高速で低価格な候補。入力10万token超では長文料金が適用される。",
+  "settings.modelGuide.comments.claude-fable-5-2": "Claude Fable 5.2。1M context、128K max output、常時 adaptive thinking を備え、複雑な要約・Ask・重いダイジェスト生成向けの高品質候補。",
   "settings.modelGuide.longContextThreshold": "入力{threshold}トークン超:",
   "settings.modelGuide.longContextPrice": "入力{threshold}トークン超: 入力{input} / 出力{output} / キャッシュ入力{cacheRead}（100万tokenあたり）",
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol。複雑な要約・Ask・ダイジェスト向けの品質と費用のバランスを比較する候補。",

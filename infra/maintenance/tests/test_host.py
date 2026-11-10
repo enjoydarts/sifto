@@ -27,6 +27,14 @@ except ImportError:
     h = None
 
 
+def hold_posix_lock(lockfile, ready):
+    # Spawn/forkserver need an importable process target (Python 3.14+ default).
+    with lockfile.open("r+") as stream:
+        fcntl.lockf(stream, fcntl.LOCK_EX)
+        ready.send("locked")
+        ready.recv()
+
+
 class FakeRunner:
     def __init__(self):
         self.calls = []
@@ -1007,13 +1015,7 @@ class HostTests(unittest.TestCase):
         lockfile.touch()
         ready_parent, ready_child = multiprocessing.Pipe()
 
-        def hold_lock():
-            with lockfile.open("r+") as stream:
-                fcntl.lockf(stream, fcntl.LOCK_EX)
-                ready_child.send("locked")
-                ready_child.recv()
-
-        process = multiprocessing.Process(target=hold_lock)
+        process = multiprocessing.Process(target=hold_posix_lock, args=(lockfile, ready_child))
         process.start()
         try:
             self.assertTrue(ready_parent.poll(5), "lock fixture did not start")

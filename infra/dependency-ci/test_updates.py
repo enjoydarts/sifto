@@ -27,6 +27,14 @@ def python_lock_fixture(extra_packages=0):
 
 
 class PythonReleaseAgeTests(unittest.TestCase):
+    def test_generator_digest_refresh_is_an_ordinary_dependency_change(self):
+        path = 'infra/dependency-ci/python-locks.Dockerfile'
+        before = (Path('/repository') / path).read_text()
+        import re
+        after = re.sub(r'@sha256:[0-9a-f]{64}', '@sha256:' + 'f' * 64, before, count=1)
+        policy.validate_change(path, before, after)
+        self.assertEqual(policy.surfaces([path]), ['ci'])
+
     def setUp(self):
         spec = importlib.util.find_spec('dependency_updates.release_age')
         self.assertIsNotNone(spec, 'Python transitive artifact-age policy is missing')

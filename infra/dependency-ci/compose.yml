@@ -128,3 +128,12 @@ services:
     command: [/fixtures/test-renovate-python-generation.mjs]
     volumes:
       - ./test-renovate-python-generation.mjs:/fixtures/test-renovate-python-generation.mjs:ro
+  renovate-artifacts-test:
+    extends: renovate-status-test
+    entrypoint: [/usr/local/sbin/renovate-entrypoint.sh, node]
+    command: [/fixtures/test-renovate-artifacts.mjs]
+    # Actual containerbase tool installation needs network and /opt writes.
+    network_mode: bridge
+    read_only: false
+    volumes:
+      - ./test-renovate-artifacts.mjs:/fixtures/test-renovate-artifacts.mjs:ro

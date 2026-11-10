@@ -11,6 +11,7 @@ NPM_COMPILER_ALIASES = {'typescript': '@typescript/typescript6', '@typescript/na
 IMAGE = r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*(?:@sha256:[0-9a-f]{64})?'
 DOCKERFILES = {'api/Dockerfile', 'worker/Dockerfile', 'web/Dockerfile', 'infra/audio-concat/Dockerfile', 'infra/dependency-ci/web.Dockerfile', 'infra/dependency-ci/postgres.Dockerfile', 'infra/maintenance/Dockerfile', 'infra/maintenance/backup/Dockerfile.proof-test', 'infra/maintenance/bootstrap/Dockerfile.test'}
 DOCKERFILES.add('infra/maintenance/bootstrap/Dockerfile.postgres-data-mount')
+DOCKERFILES.add('infra/dependency-ci/python-locks.Dockerfile')
 COMPOSE = {'docker-compose.yml', 'infra/dependency-ci/compose.yml', 'infra/maintenance/compose.yml', 'infra/maintenance/bootstrap/compose.yml', 'infra/maintenance/backup/compose.yml'}
 COMPOSE.add('infra/dependency-ci/compose.python-locks.yml')
 COMPOSE.add('infra/dependency-ci/compose.renovate-npm.yml')
@@ -234,14 +235,16 @@ def requirement_shape(text):
     return shape
 
 
-def python_lock(text):
+def python_lock(text, python_version='3.12'):
     """Parse uv's data-only hashed output; never execute its header or flags."""
-    require(text.startswith(UV_HEADER), 'Python lock generator header changed')
+    require(re.fullmatch(r'3\.\d+(?:\.\d+)?', python_version) is not None, 'Invalid Python lock target')
+    header = UV_HEADER.replace('--python-version=3.12 ', '--python-version=' + python_version + ' ')
+    require(text.startswith(header), 'Python lock generator header changed')
     result = {}
     current = None
     continuation = False
     atom = r"(?:python_version|python_full_version|os_name|sys_platform|platform_machine|platform_python_implementation|platform_system|platform_release|platform_version|implementation_name|implementation_version) (?:==|!=|<=|>=|<|>|not in|in) '[a-zA-Z0-9_. ,-]+'"
-    for line in text[len(UV_HEADER):].splitlines():
+    for line in text[len(header):].splitlines():
         if line.startswith('    #'):
             require(not continuation and re.fullmatch(r'    # (?:via(?: [a-zA-Z0-9_.\[\], -]+)?|  [a-zA-Z0-9_.\[\], -]+)', line), 'Unsupported Python lock annotation')
             continue

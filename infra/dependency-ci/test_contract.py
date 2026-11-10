@@ -574,8 +574,10 @@ class DependencyAutomationContract(unittest.TestCase):
 
     def test_all_python_installations_require_full_hashed_locks(self):
         from dependency_updates.policy import python_lock, UV_HEADER
+        from python_locks import runtime_version
         for directory in ['worker', 'infra/maintenance', 'infra/audio-concat']:
-            pins = python_lock((ROOT / directory / 'requirements.txt').read_text())
+            pins = python_lock((ROOT / directory / 'requirements.txt').read_text(),
+                               python_version=runtime_version(ROOT / directory))
             self.assertGreater(len(pins), 1)
             self.assertIn('pip install --no-cache-dir --require-hashes -r requirements.txt', (ROOT / directory / 'Dockerfile').read_text())
             for line in (ROOT / directory / 'requirements.in').read_text().splitlines():
@@ -592,7 +594,22 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertIn('--python-version=3.12', UV_HEADER)
         compose = read_yaml('infra/dependency-ci/compose.python-locks.yml')
         locks = compose['services']['locks']
-        self.assertRegex(locks['image'], r'uv:0\.13\.0-python3\.12-.*@sha256:[0-9a-f]{64}$')
+        generator = (ROOT / 'infra/dependency-ci' / locks['build']['dockerfile']).read_text()
+        self.assertRegex(generator, r'uv:0\.13\.0-.*@sha256:[0-9a-f]{64} AS uv')
+        runtime = (ROOT / 'infra/maintenance/Dockerfile').read_text().splitlines()[0]
+        maintenance_rule = next(rule for rule in config['packageRules'] if rule.get('constraintsFiltering') == 'strict')
+        # Tooling can use a different patch/digest of the same Python minor.
+        # Renovate updates these independently; exact FROM equality blocks both
+        # otherwise valid PRs. Minor migrations intentionally need a new review.
+        tooling_minor = '.'.join(maintenance_rule['constraints']['python'].split('.')[:2])
+        generator_minor = re.search(r'^FROM python:(3\.\d+)', generator, re.MULTILINE)[1]
+        for candidate_runtime in [runtime,
+                                  re.sub(r'(python:3\.\d+)\.\d+', r'\g<1>.999', runtime),
+                                  re.sub(r'@sha256:[0-9a-f]{64}', '@sha256:' + 'f' * 64, runtime)]:
+            with self.subTest(runtime=candidate_runtime):
+                runtime_minor = re.search(r'^FROM python:(3\.\d+)', candidate_runtime)[1]
+                self.assertEqual(runtime_minor, generator_minor)
+                self.assertEqual(runtime_minor, tooling_minor)
         self.assertIn('../..:/repository:ro', locks['volumes'])
         self.assertTrue(locks['read_only'])
 

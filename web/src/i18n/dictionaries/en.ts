@@ -880,6 +880,7 @@ export const enDict: Dict = {
   "settings.modelGuide.highlights.latest": "Latest",
   "settings.modelGuide.comments.claude-sonnet-5-5": "Anthropic's latest Sonnet, balancing speed and quality for summaries, Ask, and digests.",
   "settings.modelGuide.comments.claude-haiku-5-5": "Claude Haiku 5.5, a fast and low-cost option for extraction, classification, and summaries. Prompts over 100,000 tokens use higher rates.",
+  "settings.modelGuide.comments.claude-fable-5-2": "Claude Fable 5.2, with a one-million-token context window, 128K maximum output, and always-on adaptive thinking for complex summaries, Ask, and demanding digests.",
   "settings.modelGuide.longContextThreshold": "Above {threshold} input tokens:",
   "settings.modelGuide.longContextPrice": "Above {threshold} input tokens: in {input} / out {output} / cached in {cacheRead} (per 1M tokens)",
   "settings.modelGuide.comments.gpt-6.1-sol": "OpenAI GPT-6.1 Sol, an option for balancing quality and cost on complex summaries, Ask, and digests.",

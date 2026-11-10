@@ -12,9 +12,9 @@ anthropic==2.3.0 \
     --hash=sha256:aa6a3984f9276f307933d42dc6f58b6efc821a5ecafbc8d1bb5993a066767622 \
     --hash=sha256:edfdea1e3fa7b3ce25df1511953408b2f03bfa61eb6f6268f766101a9e18ad53
     # via -r requirements.in
-anyio==4.15.1 \
-    --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101 \
-    --hash=sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94
+anyio==4.16.0 \
+    --hash=sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb \
+    --hash=sha256:c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026
     # via
     #   anthropic
     #   httpx
@@ -723,9 +723,9 @@ jmespath==1.1.0 \
     # via
     #   boto3
     #   botocore
-json-repair==0.64.2 \
-    --hash=sha256:1dec7868c05abff0c52e91dc896e01f28fda6ba1c9f2a9ede18ab520dde637e1 \
-    --hash=sha256:3f8e76631edab40e7e0c9b859e64c06992a39488b4bbb8285f0e9c3e61d684e9
+json-repair==0.64.3 \
+    --hash=sha256:0066a1ac03953fd802cc5f2fc7c208b5aee33def2448a9cf619f60c461440a1e \
+    --hash=sha256:6424e8242449cd504a66137c56f774579e41b8a98c278351ded21996350fb57a
     # via -r requirements.in
 justext==3.0.2 \
     --hash=sha256:13496a450c44c4cd5b5a75a5efcd9996066d2a189794ea99a49949685a0beb05 \

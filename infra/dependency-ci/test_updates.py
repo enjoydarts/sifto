@@ -16,6 +16,16 @@ SHA = 'a' * 40
 BASE = 'b' * 40
 
 
+def python_lock_fixture(extra_packages=0):
+    """Controlled uv output, independent of versions in the application lock."""
+    import hashlib
+    packages = [('annotated-types', '1.0.0'), ('anthropic', '1.0.0'), ('anyio', '4.15.1')]
+    packages.extend(('fixture-package-%03d' % i, '1.0.0') for i in range(extra_packages))
+    return policy.UV_HEADER + ''.join(
+        name + '==' + version + ' \\\n    --hash=sha256:' + hashlib.sha256(name.encode()).hexdigest() + '\n    # via -r requirements.in\n'
+        for name, version in packages)
+
+
 class PythonReleaseAgeTests(unittest.TestCase):
     def setUp(self):
         spec = importlib.util.find_spec('dependency_updates.release_age')
@@ -382,7 +392,7 @@ class PolicyTests(unittest.TestCase):
                 policy.validate_change('worker/requirements.in', 'httpx==0.28.1\n', candidate)
 
     def test_hashed_uv_locks_allow_transitive_changes_with_bounded_summary(self):
-        original = (Path('/repository') / 'worker/requirements.txt').read_text()
+        original = python_lock_fixture()
         updated = original.replace('anyio==4.15.1', 'anyio==4.15.2')
         policy.validate_change('worker/requirements.txt', original, updated)
         self.assertEqual(policy.python_lock(original)['anyio']['version'], '4.15.1')
@@ -1503,7 +1513,7 @@ class PipelineTests(unittest.TestCase):
         import base64
         import hashlib
         import re
-        original = (Path('/repository') / 'worker/requirements.txt').read_text()
+        original = python_lock_fixture(extra_packages=120)
         updated = re.sub(r'sha256:([0-9a-f]{64})', lambda match: 'sha256:' + hashlib.sha256(match[1].encode()).hexdigest(), original)
         self.paths = ['worker/requirements.txt']
         transport = self.transport

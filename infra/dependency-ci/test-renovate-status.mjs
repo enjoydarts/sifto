@@ -33,6 +33,7 @@ import { prAlreadyExisted } from '/usr/local/renovate/dist/workers/repository/up
 import { flattenUpdates } from '/usr/local/renovate/dist/workers/repository/updates/flatten.js';
 import { extractPackageFile as extractDocker } from '/usr/local/renovate/dist/modules/manager/dockerfile/extract.js';
 import { extractPackageFile as extractCompose } from '/usr/local/renovate/dist/modules/manager/docker-compose/extract.js';
+import { applyConstraintsFiltering } from '/usr/local/renovate/dist/modules/datasource/common.js';
 
 const workflow = parse(readFileSync('/fixtures/renovate.yml', 'utf8'));
 const action = workflow.jobs.renovate.steps.find((step) => step.uses?.startsWith('renovatebot/'));
@@ -151,6 +152,29 @@ require (
   }
   console.log(`Renovate ${installedVersion}: uv Python 3.12 headers extract all three direct inputs and hashed transitive dependencies.`);
   const activationGroup = 'Maintenance executor activation dependencies';
+  for (const packageFile of ['infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt']) {
+    const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile',
+      datasource: 'pypi', packageName: 'ansible-core', depName: 'ansible-core', versioning: 'pep440', updateType: 'minor' });
+    assert.equal(config.constraintsFiltering, 'strict');
+    assert.equal(config.constraints.python, '3.12');
+    const ansible = applyConstraintsFiltering({ releases: [
+      { version: '2.21.5', constraints: { python: ['>=3.12'] } },
+      { version: '2.22.0', constraints: { python: ['>=3.13'] } },
+    ] }, config);
+    assert.deepEqual(ansible.releases.map((release) => release.version), ['2.21.5']);
+    const pipConfig = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile',
+      datasource: 'pypi', packageName: 'pip', depName: 'pip', versioning: 'pep440', updateType: 'minor' });
+    const pip = applyConstraintsFiltering({ releases: [
+      { version: '26.2.2', constraints: { python: ['>=3.10'] } },
+      { version: '26.3', constraints: { python: ['>=3.10'] } },
+    ] }, pipConfig);
+    assert.deepEqual(pip.releases.map((release) => release.version), ['26.2.2', '26.3']);
+  }
+  for (const packageFile of ['worker/requirements.in', 'infra/audio-concat/requirements.in']) {
+    const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', datasource: 'pypi' });
+    assert.notEqual(config.constraintsFiltering, 'strict');
+  }
+  console.log(`Renovate ${installedVersion}: maintenance Python 3.12 excludes Python 3.13-only Ansible and retains compatible pip releases.`);
   for (const updateType of ['minor', 'patch']) {
     for (const packageFile of ['worker/requirements.in', 'worker/requirements.txt', 'infra/audio-concat/requirements.in', 'infra/audio-concat/requirements.txt', 'infra/maintenance/requirements.in', 'infra/maintenance/requirements.txt']) {
       const config = await applyPackageRules({ ...repositoryConfig, packageFile, manager: 'pip-compile', updateType });

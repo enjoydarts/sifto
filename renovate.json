@@ -91,6 +91,14 @@
       "allowedVersions": "/^24\\.04$/"
     },
     {
+      "description": ["Only propose maintenance Python packages compatible with the executor's Python 3.12 runtime."],
+      "matchManagers": ["pip-compile"],
+      "matchDatasources": ["pypi"],
+      "matchFileNames": ["infra/maintenance/requirements.in", "infra/maintenance/requirements.txt"],
+      "constraints": {"python": "3.12"},
+      "constraintsFiltering": "strict"
+    },
+    {
       "matchFileNames": ["infra/maintenance/Dockerfile", "infra/maintenance/requirements.in", "infra/maintenance/requirements.txt"],
       "groupName": "Maintenance executor activation dependencies",
       "groupSlug": "maintenance-executor-activation",

@@ -69,6 +69,8 @@ github.com/inngest/inngest v1.48.0 h1:KS086nut/ve2uD4WmpawUupVhVZUl6OudtINlFoJTG
 github.com/inngest/inngest v1.48.0/go.mod h1:zN2FkbD/gg0tLJe1ZhohU5rTHfll0/LPgtrHoupxD08=
 github.com/inngest/inngest v1.49.0 h1:ZS5716HKlfOTzoMyvf14Zg+Lp0drdHkNY8u6ONMm5CY=
 github.com/inngest/inngest v1.49.0/go.mod h1:zN2FkbD/gg0tLJe1ZhohU5rTHfll0/LPgtrHoupxD08=
+github.com/inngest/inngest v1.50.0 h1:SoQ9+Kp2TZftJBhHKdnGyXQAKU473rXH5Qi7Pu5Ejt0=
+github.com/inngest/inngest v1.50.0/go.mod h1:KL7ZD9Yvb84jhroZuQDOLYJlBCxhp5TgJpsBGIZSGJg=
 github.com/inngest/inngestgo v0.15.0 h1:WiIhGUL8D8MnnySBdjDyRcxjsOXLQQWF+1hV4oslWc8=
 github.com/inngest/inngestgo v0.15.0/go.mod h1:2Qm4ULk506Zwt8MJXHfTZ4lthY1WTpYksXK1z6lEM/U=
 github.com/inngest/inngestgo v0.15.1 h1:JccdXQj5x1SZ7TOVgeUEeAzSugzPzUFzuYUQ9hB0jY0=
@@ -184,6 +186,8 @@ google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 h1:
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 h1:utmqiUzZAEINbLmRyAt1QjVkMyLQ+lvIwCpLaB1rZfw=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20260904194346-d0f1323225a4 h1:5t+ZydAFj5kGVLrgCvLmpmCf9ylGRd64hpEronfRaws=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20260904194346-d0f1323225a4/go.mod h1:DjtHYE8FKJLivXcBEjGwndXfIC23G0VpXiXKqG179uA=
 google.golang.org/grpc v1.73.0 h1:VIWSmpI2MegBtTuFt5/JWy2oXxtjJ/e89Z70ImfD2ok=
 google.golang.org/grpc v1.73.0/go.mod h1:50sbHOUqWoCQGI8V2HQLJM0B+LMlIUjNSZmow7EVBQc=
 google.golang.org/grpc v1.84.0 h1:soMyaPJ8pAak5PIQ0DGBUir0XRo2fRoMqhNWMLlLxO0=

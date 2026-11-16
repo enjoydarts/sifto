@@ -255,6 +255,16 @@ func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days,
 		); err != nil {
 			return nil, err
 		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Release the result connection before enrichment queries acquire another
+	// pool slot. Concurrent exports must not wait on connections they hold.
+	rows.Close()
+	for i := range out {
+		item := &out[i]
 		if llm, err := loadLatestItemLLMUsage(ctx, r.db, item.ID, "summary"); err == nil {
 			item.SummaryLLM = llm
 		}
@@ -268,7 +278,6 @@ func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days,
 			item.Note = note
 			item.Highlights = highlights
 		}
-		out = append(out, item)
 	}
-	return out, rows.Err()
+	return out, nil
 }

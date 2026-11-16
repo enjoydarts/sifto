@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/enjoydarts/sifto/api/internal/handler"
 	inngestfn "github.com/enjoydarts/sifto/api/internal/inngest"
@@ -690,18 +688,4 @@ func preloadDynamicModels(ctx context.Context, d *appDeps) {
 	} else {
 		service.SetDynamicChatModelsForProvider("deepinfra", service.DeepInfraSnapshotsToCatalogModels(latestModels))
 	}
-}
-
-func registerHealthEndpoint(r chi.Router) {
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		commitSHA := os.Getenv("APP_COMMIT_SHA")
-		if commitSHA == "" {
-			commitSHA = "unknown"
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": "ok",
-			"commit": commitSHA,
-		})
-	})
 }

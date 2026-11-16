@@ -62,7 +62,7 @@ func main() {
 	r := chi.NewRouter()
 	useCommonMiddleware(r)
 
-	registerHealthEndpoint(r)
+	registerHealthEndpoint(r, dependencyHealthChecks(deps))
 
 	for _, m := range modules {
 		if m.registerPublic != nil {

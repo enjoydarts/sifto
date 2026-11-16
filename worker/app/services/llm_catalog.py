@@ -1,6 +1,7 @@
 import json
 import os
 from functools import lru_cache
+from datetime import datetime, timezone
 from pathlib import Path
 
 OPENROUTER_ALIAS_PREFIX = "openrouter::"
@@ -126,7 +127,18 @@ def provider_requires_anthropic_args(provider_id: str | None) -> bool:
     return bool(cfg.get("requires_anthropic_args"))
 
 
-def model_pricing(model: str | None) -> dict | None:
+def resolve_pricing_at(pricing: dict, at: datetime) -> dict:
+    resolved = dict(pricing)
+    effective = None
+    for change in pricing.get("scheduled", []):
+        starts = datetime.fromisoformat(change["effective_at"].replace("Z", "+00:00"))
+        if starts <= at and (effective is None or starts > effective):
+            resolved = {**pricing, **change["pricing"]}
+            effective = starts
+    return resolved
+
+
+def model_pricing(model: str | None, *, at: datetime | None = None) -> dict | None:
     m = str(model or "").strip()
     if not m:
         return None
@@ -136,10 +148,10 @@ def model_pricing(model: str | None) -> dict | None:
         for item in catalog.get(group, []):
             if str(item.get("id") or "").strip() == m:
                 pricing = item.get("pricing")
-                return dict(pricing) if isinstance(pricing, dict) else None
+                return resolve_pricing_at(pricing, at or datetime.now(timezone.utc)) if isinstance(pricing, dict) else None
             if resolved != m and str(item.get("id") or "").strip() == resolved:
                 pricing = item.get("pricing")
-                return dict(pricing) if isinstance(pricing, dict) else None
+                return resolve_pricing_at(pricing, at or datetime.now(timezone.utc)) if isinstance(pricing, dict) else None
     return None
 
 

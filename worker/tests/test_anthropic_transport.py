@@ -2,6 +2,7 @@ import asyncio
 import json
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
+from types import SimpleNamespace
 
 import anthropic
 import httpx2 as httpx
@@ -34,7 +35,7 @@ class AnthropicTransportTests(unittest.TestCase):
     def test_messages_create_omits_sampling_parameters_for_sonnet_5_5(self, client_for_api_key):
         client = type("Client", (), {})()
         client.messages = type("Messages", (), {})()
-        client.messages.create = Mock(return_value=object())
+        client.messages.create = Mock(return_value=SimpleNamespace(content=[{"type": "text", "text": "{}"}], stop_reason="end_turn"))
         client_for_api_key.return_value = client
 
         messages_create(
@@ -53,7 +54,7 @@ class AnthropicTransportTests(unittest.TestCase):
     @patch("app.services.anthropic_transport.async_client_for_api_key")
     def test_sonnet_5_5_async_uses_between_tools_thinking(self, async_client_for_api_key):
         client = Mock()
-        client.messages.create = AsyncMock(return_value=object())
+        client.messages.create = AsyncMock(return_value=SimpleNamespace(content=[{"type": "text", "text": "{}"}], stop_reason="end_turn"))
         async_client_for_api_key.return_value = client
 
         asyncio.run(messages_create_async(
@@ -89,7 +90,7 @@ class AnthropicTransportTests(unittest.TestCase):
     def test_messages_create_omits_sampling_parameters_for_opus_5_5(self, client_for_api_key):
         client = type("Client", (), {})()
         client.messages = type("Messages", (), {})()
-        client.messages.create = Mock(return_value=object())
+        client.messages.create = Mock(return_value=SimpleNamespace(content=[{"type": "text", "text": "{}"}], stop_reason="end_turn"))
         client_for_api_key.return_value = client
 
         messages_create(

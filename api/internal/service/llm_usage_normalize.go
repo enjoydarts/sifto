@@ -35,8 +35,9 @@ func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 	if entry == nil || entry.Pricing == nil {
 		return usage
 	}
-	// A prompt-length tier applies per request, not to the total of merged calls.
-	if entry.Pricing.LongContext != nil && usage.Calls > 1 {
+	// Length tiers and dated prices apply per request, not to merged calls
+	// which may cross a tier or price-change boundary.
+	if (entry.Pricing.LongContext != nil || len(entry.Pricing.Scheduled) > 0) && usage.Calls > 1 {
 		return usage
 	}
 	normalized := *usage

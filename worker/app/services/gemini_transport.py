@@ -16,11 +16,20 @@ _GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
 _GEMINI_CONTEXT_CACHE_SKIP: dict[str, float] = {}
 _REDIS_CLIENT = None
 _MODELS_WITHOUT_SAMPLING_PARAMETERS = (
+    "gemini-4-carbon",
+    "gemini-4-argon",
+    "gemini-4-hydrogen",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
 )
+
+
+def is_gemini_4(model: str) -> bool:
+    name = (model or "").strip().removeprefix("models/")
+    return any(name == base or name.startswith(base + "-") for base in
+               ("gemini-4-carbon", "gemini-4-argon", "gemini-4-hydrogen"))
 
 
 def env_timeout_seconds(name: str, default: float) -> float:
@@ -61,6 +70,10 @@ def build_generation_config(
     temperature: float | None,
     top_p: float | None,
 ) -> dict:
+    if is_gemini_4(model):
+        # Thinking shares the output budget. Direct, non-streaming REST has a
+        # 32K limit on Carbon/Argon and a 64K limit on Hydrogen.
+        max_output_tokens = 65536 if "hydrogen" in model else 32768
     config = {
         "maxOutputTokens": max_output_tokens,
         "responseMimeType": response_mime_type,
@@ -257,7 +270,7 @@ def generate_content(
     cached_content_name = ""
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        if context_cache_key:
+        if context_cache_key and not is_gemini_4(model_name):
             try:
                 cached_name = get_or_create_cached_content(
                     model_name,
@@ -323,13 +336,21 @@ def generate_content(
     }
     candidates = data.get("candidates", []) if isinstance(data, dict) else []
     if not candidates:
+        if is_gemini_4(model_name):
+            raise RuntimeError("Gemini 4 returned no answer candidates")
         return "", usage
+    if is_gemini_4(model_name) and candidates[0].get("finishReason") != "STOP":
+        raise RuntimeError(f"Gemini 4 returned incomplete answer (finish_reason={candidates[0].get('finishReason')})")
     parts = candidates[0].get("content", {}).get("parts", [])
     text = ""
     for p in parts:
+        if p.get("thought"):
+            continue
         t = p.get("text")
         if isinstance(t, str):
             text += t
+    if is_gemini_4(model_name) and not text.strip():
+        raise RuntimeError("Gemini 4 returned no answer text")
     return text.strip(), usage
 
 
@@ -413,7 +434,7 @@ async def generate_content_async(
     cached_content_name = ""
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        if context_cache_key:
+        if context_cache_key and not is_gemini_4(model_name):
             try:
                 cached_name = await get_or_create_cached_content_async(
                     model_name,
@@ -479,11 +500,19 @@ async def generate_content_async(
     }
     candidates = data.get("candidates", []) if isinstance(data, dict) else []
     if not candidates:
+        if is_gemini_4(model_name):
+            raise RuntimeError("Gemini 4 returned no answer candidates")
         return "", usage
+    if is_gemini_4(model_name) and candidates[0].get("finishReason") != "STOP":
+        raise RuntimeError(f"Gemini 4 returned incomplete answer (finish_reason={candidates[0].get('finishReason')})")
     parts = candidates[0].get("content", {}).get("parts", [])
     text = ""
     for p in parts:
+        if p.get("thought"):
+            continue
         t = p.get("text")
         if isinstance(t, str):
             text += t
+    if is_gemini_4(model_name) and not text.strip():
+        raise RuntimeError("Gemini 4 returned no answer text")
     return text.strip(), usage

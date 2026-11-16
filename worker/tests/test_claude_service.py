@@ -22,8 +22,8 @@ class ClaudeServiceTests(unittest.TestCase):
 
         llm = _llm_meta(_Message(), "summary", "claude-sonnet-5-5")
         self.assertEqual(llm["pricing_model_family"], "claude-sonnet-5-5")
-        self.assertEqual(llm["pricing_source"], "anthropic_static_2026_09")
-        self.assertEqual(llm["estimated_cost_usd"], 7.29)
+        self.assertEqual(llm["pricing_source"], "anthropic_docs_2026_11")
+        self.assertEqual(llm["estimated_cost_usd"], 7.27)
 
     def test_llm_meta_prices_opus_5_5_family(self):
         class _Message:

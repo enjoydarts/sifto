@@ -58,6 +58,28 @@ type LLMModelPricing struct {
 	CacheWritePerMTokUSD float64                `json:"cache_write_per_mtok_usd"`
 	CacheReadPerMTokUSD  float64                `json:"cache_read_per_mtok_usd"`
 	LongContext          *LLMLongContextPricing `json:"long_context,omitempty"`
+	Scheduled            []LLMScheduledPricing  `json:"scheduled,omitempty"`
+}
+
+type LLMScheduledPricing struct {
+	EffectiveAt time.Time        `json:"effective_at"`
+	Pricing     *LLMModelPricing `json:"pricing"`
+}
+
+func catalogPricingAt(pricing *LLMModelPricing, at time.Time) *LLMModelPricing {
+	if pricing == nil || len(pricing.Scheduled) == 0 {
+		return pricing
+	}
+	resolved := *pricing
+	var effective time.Time
+	for _, change := range pricing.Scheduled {
+		if change.Pricing != nil && !change.EffectiveAt.IsZero() && !change.EffectiveAt.After(at) && change.EffectiveAt.After(effective) {
+			resolved = *change.Pricing
+			effective = change.EffectiveAt
+		}
+	}
+	resolved.Scheduled = pricing.Scheduled
+	return &resolved
 }
 
 type LLMLongContextPricing struct {
@@ -324,6 +346,11 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 	dynamicCatalogMu.RLock()
 	defer dynamicCatalogMu.RUnlock()
 	merged := *base
+	now := time.Now()
+	merged.EmbeddingModels = append([]LLMModelCatalog(nil), base.EmbeddingModels...)
+	for i := range merged.EmbeddingModels {
+		merged.EmbeddingModels[i].Pricing = catalogPricingAt(merged.EmbeddingModels[i].Pricing, now)
+	}
 	totalDynamic := 0
 	for _, models := range dynamicChatModels {
 		totalDynamic += len(models)
@@ -331,6 +358,7 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 	seen := make(map[string]struct{}, len(base.ChatModels)+totalDynamic)
 	merged.ChatModels = make([]LLMModelCatalog, 0, len(base.ChatModels)+totalDynamic)
 	for _, model := range base.ChatModels {
+		model.Pricing = catalogPricingAt(model.Pricing, now)
 		merged.ChatModels = append(merged.ChatModels, model)
 		seen[model.ID] = struct{}{}
 	}
@@ -342,6 +370,7 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 			if _, exists := seen[model.ID]; exists {
 				continue
 			}
+			model.Pricing = catalogPricingAt(model.Pricing, now)
 			merged.ChatModels = append(merged.ChatModels, model)
 			seen[model.ID] = struct{}{}
 		}

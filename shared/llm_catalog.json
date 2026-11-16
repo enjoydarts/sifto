@@ -1483,11 +1483,11 @@
         "supports_cache_write_pricing": true
       },
       "pricing": {
-        "pricing_source": "anthropic_static_2026_09",
+        "pricing_source": "anthropic_docs_2026_11",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 10.0,
         "cache_write_per_mtok_usd": 2.5,
-        "cache_read_per_mtok_usd": 0.2
+        "cache_read_per_mtok_usd": 0.1
       }
     },
     {
@@ -1625,7 +1625,51 @@
       }
     },
     {
-      "id": "gemini-3.8-flash",
+      "id": "gemini-4-carbon",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [
+        "latest",
+        "long-context"
+      ],
+      "comment": "Gemini 4 Carbon。複雑な要約・調査・ダイジェスト向けの高推論モデル。明示キャッシュには非対応。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_docs_intro_2026_11",
+        "input_per_mtok_usd": 2,
+        "output_per_mtok_usd": 10,
+        "cache_read_per_mtok_usd": 0.1,
+        "scheduled": [
+          {
+            "effective_at": "2026-12-01T00:00:00Z",
+            "pricing": {
+              "pricing_source": "google_docs_standard_2026_12",
+              "input_per_mtok_usd": 4,
+              "output_per_mtok_usd": 20,
+              "cache_read_per_mtok_usd": 0.2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gemini-4-argon",
       "provider": "google",
       "available_purposes": [
         "facts",
@@ -1639,10 +1683,87 @@
       "best_for": "summary",
       "highlights": [
         "latest",
+        "long-context"
+      ],
+      "comment": "Gemini 4 Argon。要約・Ask・ダイジェスト向けに速度と推論力を両立するモデル。明示キャッシュには非対応。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_docs_intro_2026_11",
+        "input_per_mtok_usd": 2,
+        "output_per_mtok_usd": 10,
+        "cache_read_per_mtok_usd": 0.1,
+        "scheduled": [
+          {
+            "effective_at": "2026-12-01T00:00:00Z",
+            "pricing": {
+              "pricing_source": "google_docs_standard_2026_12",
+              "input_per_mtok_usd": 4,
+              "output_per_mtok_usd": 20,
+              "cache_read_per_mtok_usd": 0.2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gemini-4-hydrogen",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": [
+        "latest",
         "fast",
         "long-context"
       ],
-      "comment": "Google の最新 Gemini 3.8 Flash。1M context、64K max output と調整可能な thinking level を備え、長時間の software engineering、agentic workflow、複雑な要約・調査向け。",
+      "comment": "Gemini 4 Hydrogen。日常的な事実抽出・要約・Ask向けの高速モデル。明示キャッシュには非対応。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_docs_2026_11",
+        "input_per_mtok_usd": 1.5,
+        "output_per_mtok_usd": 7.5,
+        "cache_read_per_mtok_usd": 0.075
+      }
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "provider": "google",
+      "available_purposes": [
+        "facts",
+        "summary",
+        "digest_cluster_draft",
+        "digest",
+        "ask",
+        "source_suggestion"
+      ],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [
+        "fast",
+        "long-context"
+      ],
+      "comment": "Google の Gemini 3.8 Flash。1M context、64K max output と調整可能な thinking level を備え、長時間の software engineering、agentic workflow、複雑な要約・調査向け。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,

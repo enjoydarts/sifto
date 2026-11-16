@@ -72,7 +72,7 @@ ALIASED_PROVIDER_MODELS = (
 
 class LlmCatalogSmokeTests(unittest.TestCase):
     def test_new_model_standard_prices(self):
-        for model, cache_read in (("claude-sonnet-5-5", 0.2), ("gpt-6.1-sol", 0.1)):
+        for model, cache_read in (("claude-sonnet-5-5", 0.1), ("gpt-6.1-sol", 0.1)):
             with self.subTest(model=model):
                 pricing = model_pricing(model)
                 self.assertIsNotNone(pricing)

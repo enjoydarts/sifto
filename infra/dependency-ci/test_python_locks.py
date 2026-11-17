@@ -155,30 +155,34 @@ bgutil-ytdlp-pot-provider==1.3.2
             with self.subTest(directory=directory):
                 check_directory(ROOT / directory)
 
-    def test_stale_input_hash_and_missing_transitive_are_refused(self):
-        for failure in ['direct', 'hash', 'transitive']:
+    def test_changed_direct_pin_is_refused_with_published_versions(self):
+        # Both versions exist: an unpublished future version would only test
+        # solver failure instead of detecting a stale, otherwise valid lock.
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            source = target / 'requirements.in'
+            source.write_text('six==1.16.0\n')
+            compile_lock(target)
+            check_directory(target)
+            source.write_text('six==1.17.0\n')
+            with self.assertRaisesRegex(LockError, 'Python lock is stale'):
+                check_directory(target)
+
+    def test_invalid_hash_and_missing_transitive_are_refused(self):
+        for failure in ['hash', 'transitive']:
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 target = Path(temporary)
                 for file in ['requirements.in', 'requirements.txt']:
                     shutil.copyfile(ROOT / 'infra/audio-concat' / file, target / file)
-                if failure == 'direct':
-                    source = target / 'requirements.in'
-                    original = source.read_text()
-                    changed, count = re.subn(r'(?m)^(boto3==[0-9]+\.[0-9]+\.)([0-9]+)$',
-                                            lambda match: match[1] + str(int(match[2]) + 1), original)
-                    self.assertEqual(count, 1, 'Expected one boto3 input pin to mutate')
-                    self.assertNotEqual(changed, original)
-                    source.write_text(changed)
+                lock = target / 'requirements.txt'
+                text = lock.read_text()
+                if failure == 'hash':
+                    text = re.sub(r'sha256:[0-9a-f]{64}', 'sha256:' + '0' * 64, text, count=1)
                 else:
-                    lock = target / 'requirements.txt'
-                    text = lock.read_text()
-                    if failure == 'hash':
-                        text = re.sub(r'sha256:[0-9a-f]{64}', 'sha256:' + '0' * 64, text, count=1)
-                    else:
-                        start = text.index('six==')
-                        end = text.find('\n', text.index('    # via', start))
-                        text = text[:start] + text[end + 1:]
-                    lock.write_text(text)
+                    start = text.index('six==')
+                    end = text.find('\n', text.index('    # via', start))
+                    text = text[:start] + text[end + 1:]
+                lock.write_text(text)
                 with self.assertRaises(LockError):
                     check_directory(target)
 

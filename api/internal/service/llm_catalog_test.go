@@ -424,6 +424,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: TogetherAliasModelID("Qwen/Qwen3.6-Plus"), provider: "together"},
 		{model: TogetherAliasModelID("MiniMaxAI/MiniMax-M3"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
+		{model: "gpt-6.2-astra", provider: "openai"},
+		{model: "gpt-6.2-sol", provider: "openai"},
 		{model: "gpt-6-astra", provider: "openai"},
 		{model: "gpt-6-sol", provider: "openai"},
 		{model: "gpt-6.1-sol", provider: "openai"},
@@ -642,6 +644,8 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 		cacheWrite float64
 		cacheRead  float64
 	}{
+		{model: "gpt-6.2-astra", input: 8, output: 40, cacheWrite: 10, cacheRead: 0.4},
+		{model: "gpt-6.2-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1},
 		{model: "gpt-6-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2},
 		{model: "gpt-6.1-sol", input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1},
 		{model: "gpt-6.1-terra", input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.05},
@@ -664,22 +668,38 @@ func TestLLMCatalogNewModelPricing(t *testing.T) {
 	}
 }
 
-func TestLLMCatalogGPT61TerraCapabilitiesAndLongContext(t *testing.T) {
-	item := findModelCatalog("gpt-6.1-terra")
-	if item == nil || item.Capabilities == nil || item.Pricing == nil || item.Pricing.LongContext == nil {
-		t.Fatal("gpt-6.1-terra capabilities and pricing must be present")
+func TestLLMCatalogGPT6CapabilitiesAndLongContext(t *testing.T) {
+	tests := []struct {
+		model      string
+		input      float64
+		output     float64
+		cacheRead  float64
+		cacheWrite float64
+	}{
+		{model: "gpt-6.2-astra", input: 16, output: 60, cacheRead: 0.8, cacheWrite: 20},
+		{model: "gpt-6.2-sol", input: 4, output: 15, cacheRead: 0.2, cacheWrite: 5},
+		{model: "gpt-6.1-terra", input: 2, output: 7.5, cacheRead: 0.1, cacheWrite: 2.5},
 	}
-	if !item.Capabilities.SupportsStrictJSONSchema || !item.Capabilities.SupportsStructuredOutput {
-		t.Fatal("gpt-6.1-terra must support structured output and strict schema")
-	}
-	for _, purpose := range []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"} {
-		if !CatalogModelSupportsPurpose(item.ID, purpose) {
-			t.Fatalf("gpt-6.1-terra must support %s", purpose)
-		}
-	}
-	p := item.Pricing.LongContext
-	if p.InputTokenThreshold != 272000 || p.InputPerMTokUSD != 2 || p.OutputPerMTokUSD != 7.5 || p.CacheReadPerMTokUSD != 0.1 || p.CacheWritePerMTokUSD != 2.5 {
-		t.Fatalf("unexpected long-context pricing: %#v", p)
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			item := findModelCatalog(tt.model)
+			if item == nil || item.Capabilities == nil || item.Pricing == nil || item.Pricing.LongContext == nil {
+				t.Fatal("capabilities and long-context pricing must be present")
+			}
+			if !item.Capabilities.SupportsStrictJSONSchema || !item.Capabilities.SupportsStructuredOutput {
+				t.Fatal("model must support structured output and strict schema")
+			}
+			for _, purpose := range []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"} {
+				if !CatalogModelSupportsPurpose(item.ID, purpose) {
+					t.Fatalf("model must support %s", purpose)
+				}
+			}
+			p := item.Pricing.LongContext
+			if p.InputTokenThreshold != 272000 || p.InputPerMTokUSD != tt.input || p.OutputPerMTokUSD != tt.output ||
+				p.CacheReadPerMTokUSD != tt.cacheRead || p.CacheWritePerMTokUSD != tt.cacheWrite {
+				t.Fatalf("unexpected long-context pricing: %#v", p)
+			}
+		})
 	}
 }
 

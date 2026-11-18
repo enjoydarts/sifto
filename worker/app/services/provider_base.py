@@ -137,7 +137,13 @@ class OpenAICompatProvider:
         )
 
     def _estimate_cost_usd(self, model: str, purpose: str, usage: dict) -> float:
-        return estimate_cost_usd(model, purpose, usage, pricing_for_model_func=self._pricing_for_model)
+        return estimate_cost_usd(
+            model,
+            purpose,
+            usage,
+            pricing_for_model_func=self._pricing_for_model,
+            charge_cache_writes=self.config.provider_name == "openai",
+        )
 
     def _llm_meta(self, model: str, purpose: str, usage: dict) -> dict:
         if self.config.include_resolved_model_in_meta:

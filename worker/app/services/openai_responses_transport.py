@@ -5,6 +5,9 @@ import time
 import httpx
 
 
+GPT_62_MODELS = ("gpt-6.2-astra", "gpt-6.2-sol")
+
+
 def _env_timeout_seconds(name: str, default: float) -> float:
     raw = os.getenv(name)
     if raw is None or raw == "":
@@ -22,7 +25,7 @@ def usage_from_responses(data: dict) -> dict:
     return {
         "input_tokens": int(usage.get("input_tokens", 0) or 0),
         "output_tokens": int(usage.get("output_tokens", 0) or 0),
-        "cache_creation_input_tokens": 0,
+        "cache_creation_input_tokens": int(input_details.get("cache_write_tokens", 0) or 0),
         "cache_read_input_tokens": int(input_details.get("cached_tokens", 0) or 0),
     }
 
@@ -51,6 +54,17 @@ def extract_text_from_responses(data: dict) -> str:
     return "\n".join(v for v in out if v).strip()
 
 
+def _responses_input(model: str, prompt: str, system_instruction: str | None) -> dict:
+    if not system_instruction:
+        return {"input": prompt}
+    if model in GPT_62_MODELS:
+        return {"input": [
+            {"role": "developer", "content": system_instruction},
+            {"role": "user", "content": prompt},
+        ]}
+    return {"input": prompt, "instructions": system_instruction}
+
+
 def run_responses_json(
     prompt: str,
     model: str,
@@ -67,14 +81,13 @@ def run_responses_json(
     temperature: float | None = None,
     top_p: float | None = None,
 ) -> tuple[str, dict]:
+    model_name = normalize_model_name(model)
     body: dict = {
-        "model": normalize_model_name(model),
-        "input": prompt,
+        "model": model_name,
+        **_responses_input(model_name, prompt, system_instruction),
         "store": False,
         "max_output_tokens": max_output_tokens,
     }
-    if system_instruction:
-        body["instructions"] = system_instruction
     if temperature is not None:
         body["temperature"] = temperature
     if top_p is not None:
@@ -166,14 +179,13 @@ async def run_responses_json_async(
     temperature: float | None = None,
     top_p: float | None = None,
 ) -> tuple[str, dict]:
+    model_name = normalize_model_name(model)
     body: dict = {
-        "model": normalize_model_name(model),
-        "input": prompt,
+        "model": model_name,
+        **_responses_input(model_name, prompt, system_instruction),
         "store": False,
         "max_output_tokens": max_output_tokens,
     }
-    if system_instruction:
-        body["instructions"] = system_instruction
     if temperature is not None:
         body["temperature"] = temperature
     if top_p is not None:

@@ -9,7 +9,7 @@ from .llm_text_utils import (
 )
 from .title_translation_common import run_title_translation
 from .openai_compat_transport import run_chat_json, run_chat_json_async
-from .openai_responses_transport import run_responses_json, run_responses_json_async
+from .openai_responses_transport import GPT_62_MODELS, run_responses_json, run_responses_json_async
 from .llm_catalog import model_supports
 from .task_transport_common import wrap_usage_transport
 
@@ -25,7 +25,7 @@ class _OpenAIProvider(OpenAICompatProvider):
 
     def _responses_reasoning(self, model: str) -> dict | None:
         family = self._normalize_model_family(model)
-        if family in {"gpt-6-astra", "gpt-6.1-sol"}:
+        if family in {*GPT_62_MODELS, "gpt-6-astra", "gpt-6.1-sol"}:
             return {"effort": "low"}
         if family.startswith("gpt-6"):
             return {"effort": "none"}
@@ -145,6 +145,7 @@ _config = ProviderConfig(
     default_model="gpt-5",
     default_translate_model="gpt-5-mini",
     model_families=[
+        *GPT_62_MODELS,
         "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna",
         "gpt-5.5-pro", "gpt-5.5", "gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2",
         "gpt-5.1", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5",

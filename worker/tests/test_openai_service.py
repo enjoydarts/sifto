@@ -1,11 +1,72 @@
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
+
+import httpx
 
 from app.services.openai_service import _p
 
 
 class OpenAIServiceModelBehaviorTests(unittest.TestCase):
+    def test_gpt_6_2_strict_responses_and_usage(self):
+        schema = {
+            "type": "object",
+            "properties": {"summary": {"type": "string"}},
+            "required": ["summary"],
+            "additionalProperties": False,
+        }
+        for model, short_cost, long_cost in (
+            ("gpt-6.2-astra", 1.856, 3.512016),
+            ("gpt-6.2-sol", 0.464, 0.878004),
+        ):
+            for asynchronous, input_tokens, expected_cost in (
+                (False, 272000, short_cost),
+                (True, 272001, long_cost),
+            ):
+                with self.subTest(model=model, asynchronous=asynchronous):
+                    response = httpx.Response(200, json={
+                        "output_text": '{"summary":"ok"}',
+                        "usage": {
+                            "input_tokens": input_tokens,
+                            "input_tokens_details": {"cached_tokens": 100000, "cache_write_tokens": 20000},
+                            "output_tokens": 10000,
+                        },
+                    })
+                    client = httpx.AsyncClient if asynchronous else httpx.Client
+                    with patch.object(client, "post", return_value=response) as post:
+                        kwargs = {
+                            "system_instruction": "Summarize the article.",
+                            "response_schema": schema,
+                            "temperature": 0.2,
+                            "top_p": 0.9,
+                        }
+                        if asynchronous:
+                            result, usage = asyncio.run(_p._chat_json_async("Article", model, "api-key", **kwargs))
+                        else:
+                            result, usage = _p._chat_json("Article", model, "api-key", **kwargs)
+
+                    self.assertEqual(json.loads(result), {"summary": "ok"})
+                    post.assert_called_once()
+                    self.assertEqual(post.call_args.args[0], "https://api.openai.com/v1/responses")
+                    body = post.call_args.kwargs["json"]
+                    self.assertEqual(body["model"], model)
+                    self.assertEqual(body["reasoning"], {"effort": "low"})
+                    self.assertEqual(body["input"], [
+                        {"role": "developer", "content": "Summarize the article."},
+                        {"role": "user", "content": "Article"},
+                    ])
+                    for key in ("instructions", "temperature", "top_p"):
+                        self.assertNotIn(key, body)
+                    self.assertEqual(body["text"]["format"], {
+                        "type": "json_schema", "name": "response", "schema": schema, "strict": True,
+                    })
+                    meta = _p._llm_meta(model, "summary", usage)
+                    self.assertEqual(meta["pricing_model_family"], model)
+                    self.assertEqual(meta["cache_creation_input_tokens"], 20000)
+                    self.assertEqual(meta["cache_read_input_tokens"], 100000)
+                    self.assertEqual(meta["estimated_cost_usd"], expected_cost)
+
     def test_gpt_6_1_terra_uses_strict_responses_without_sampling(self):
         model = "gpt-6.1-terra"
         self.assertTrue(_p._should_use_responses_api(model))

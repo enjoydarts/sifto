@@ -267,10 +267,9 @@ func (c *OpenAIClient) TranslateTextsToJA(ctx context.Context, apiKey, model str
 }
 
 func (c *OpenAIClient) translateTextsToJAResponses(ctx context.Context, apiKey, model string, promptJSON []byte) (map[string]string, error) {
+	const instructions = "Translate each English model description into natural Japanese. Return only valid JSON. Preserve model names and technical tokens."
 	reqBody := map[string]any{
 		"model":             model,
-		"input":             string(promptJSON),
-		"instructions":      "Translate each English model description into natural Japanese. Return only valid JSON. Preserve model names and technical tokens.",
 		"max_output_tokens": 1200,
 		"text": map[string]any{
 			"format": map[string]any{
@@ -298,6 +297,15 @@ func (c *OpenAIClient) translateTextsToJAResponses(ctx context.Context, apiKey, 
 				},
 			},
 		},
+	}
+	if isGPT62Model(model) {
+		reqBody["input"] = []map[string]string{
+			{"role": "developer", "content": instructions},
+			{"role": "user", "content": string(promptJSON)},
+		}
+	} else {
+		reqBody["input"] = string(promptJSON)
+		reqBody["instructions"] = instructions
 	}
 	if reasoning := responsesReasoning(model); reasoning != nil {
 		reqBody["reasoning"] = reasoning
@@ -375,10 +383,22 @@ func (c *OpenAIClient) translateTextsToJAResponses(ctx context.Context, apiKey, 
 }
 
 func shouldUseResponsesAPI(model string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-5")
+	return isGPT62Model(model) || strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-5")
+}
+
+func isGPT62Model(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "gpt-6.2-astra", "gpt-6.2-sol":
+		return true
+	default:
+		return false
+	}
 }
 
 func responsesReasoning(model string) map[string]any {
+	if isGPT62Model(model) {
+		return map[string]any{"effort": "low"}
+	}
 	family := strings.ToLower(strings.TrimSpace(model))
 	if !strings.HasPrefix(family, "gpt-5") {
 		return nil

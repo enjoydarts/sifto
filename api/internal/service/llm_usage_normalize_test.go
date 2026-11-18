@@ -2,6 +2,30 @@ package service
 
 import "testing"
 
+func TestGPT62CacheWritePricingAndLongContextBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		model string
+		input int
+		want  float64
+	}{
+		{"gpt-6.2-astra", 272_000, 1.856},
+		{"gpt-6.2-astra", 272_001, 3.512016},
+		{"gpt-6.2-sol", 272_000, 0.464},
+		{"gpt-6.2-sol", 272_001, 0.878004},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			got := NormalizeCatalogPricedUsage("summary", &LLMUsage{
+				Provider: "openai", Model: tc.model, Calls: 1,
+				InputTokens: tc.input, OutputTokens: 10_000,
+				CacheReadInputTokens: 100_000, CacheCreationInputTokens: 20_000,
+			})
+			if got.EstimatedCostUSD != tc.want {
+				t.Fatalf("input %d: cost = %.8f, want %.8f", tc.input, got.EstimatedCostUSD, tc.want)
+			}
+		})
+	}
+}
+
 func TestKimiK31ProCacheWritesAreNotChargedTwice(t *testing.T) {
 	for _, tc := range []struct {
 		model string

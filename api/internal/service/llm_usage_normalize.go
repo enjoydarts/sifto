@@ -54,8 +54,8 @@ func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 		nonCachedInput = normalized.InputTokens
 		promptTokens += normalized.CacheReadInputTokens
 	}
-	if normalized.Provider == "moonshot" && entry.Pricing.CacheWritePerMTokUSD > 0 {
-		// Moonshot prompt_tokens includes cache reads and writes. Charge writes
+	if (normalized.Provider == "moonshot" || normalized.Provider == "openai") && entry.Pricing.CacheWritePerMTokUSD > 0 {
+		// These providers include cache reads and writes in total input tokens. Charge writes
 		// at their own rate instead of also counting them as uncached input.
 		nonCachedInput -= normalized.CacheCreationInputTokens
 		promptTokens = normalized.InputTokens

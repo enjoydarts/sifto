@@ -82,6 +82,7 @@ def estimate_cost_usd(
     usage: dict,
     *,
     pricing_for_model_func: Callable[[str, str], dict],
+    charge_cache_writes: bool = False,
 ) -> float:
     pricing = dict(pricing_for_model_func(model, purpose))
     long_context = pricing.get("long_context")
@@ -90,9 +91,13 @@ def estimate_cost_usd(
     if isinstance(long_context, dict) and pricing.get("pricing_source") != "env_override":
         if int(usage.get("input_tokens", 0) or 0) > int(long_context["input_token_threshold"]):
             pricing.update({key: value for key, value in long_context.items() if key != "input_token_threshold"})
-    non_cached_input_tokens = max(0, int(usage.get("input_tokens", 0) or 0) - int(usage.get("cache_read_input_tokens", 0) or 0))
+    input_tokens = int(usage.get("input_tokens", 0) or 0)
+    cache_read_tokens = int(usage.get("cache_read_input_tokens", 0) or 0)
+    cache_write_tokens = int(usage.get("cache_creation_input_tokens", 0) or 0) if charge_cache_writes else 0
+    non_cached_input_tokens = max(0, input_tokens - cache_read_tokens - cache_write_tokens)
     total = 0.0
     total += non_cached_input_tokens / 1_000_000 * pricing["input_per_mtok_usd"]
     total += int(usage.get("output_tokens", 0) or 0) / 1_000_000 * pricing["output_per_mtok_usd"]
-    total += int(usage.get("cache_read_input_tokens", 0) or 0) / 1_000_000 * pricing.get("cache_read_per_mtok_usd", 0.0)
+    total += cache_read_tokens / 1_000_000 * pricing.get("cache_read_per_mtok_usd", 0.0)
+    total += cache_write_tokens / 1_000_000 * pricing.get("cache_write_per_mtok_usd", pricing["input_per_mtok_usd"])
     return round(total, 8)

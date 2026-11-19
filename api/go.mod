@@ -7,9 +7,9 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	github.com/inngest/inngest v1.51.0
+	github.com/inngest/inngest v1.52.0
 	github.com/inngest/inngestgo v0.16.5
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/mmcdole/gofeed v1.5.0
 	github.com/redis/go-redis/v9 v9.23.0
 )

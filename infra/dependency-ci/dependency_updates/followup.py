@@ -1,10 +1,10 @@
-"""One data-only Renovate notification after native approval fully completes."""
+"""One data-only Renovate notification after the verified pipeline completes."""
 import os
 import re
 import time
 
 from .github import Ambiguous, GitHub
-from .policy import Refused, SHA, canonical, load_json, require, verify_approval
+from .policy import Refused, SHA, canonical, load_json, require
 
 WORKFLOW = 'dependency-followup.yml'
 PARENT_WORKFLOW = 'dependency-update.yml'
@@ -140,25 +140,6 @@ def parent(api, event_run, parent_id, repo_id, source, active=False, plan=None):
     if plan is not None:
         require((number, head, base) == (plan['pr'], plan['head'], plan['base'])
                 and base == plan['source'], 'Queued parent does not match the exact approved dependency plan')
-    approvals = api.get('/actions/runs/%d/approvals' % parent_id)
-    require(type(approvals) is list and len(approvals) <= 100
-            and all(type(review) is dict and type(review.get('user')) is dict
-                    and type(review.get('environments')) is list
-                    and all(type(environment) is dict for environment in review['environments'])
-                    for review in approvals), 'Malformed native approval inventory')
-    verify_approval(approvals, run['actor']['login'])
-    jobs = api.pages('/actions/runs/%d/jobs?filter=all' % parent_id, 'jobs', require_total=True)
-    from .pipeline import native_job_names
-    names = native_job_names(api, base)
-    require(len(jobs) == len(names) and all(type(job) is dict and positive(job.get('id'))
-            and type(job.get('run_id')) is int and job['run_id'] == parent_id
-            and type(job.get('run_attempt')) is int and job['run_attempt'] == 1
-            and job.get('head_sha') == base
-            and job.get('status') == ('in_progress' if active and job.get('name') == 'approve-merge-deploy' else 'completed')
-            and job.get('conclusion') == (None if active and job.get('name') == 'approve-merge-deploy' else 'success') for job in jobs)
-            and len({job['id'] for job in jobs}) == len(names)
-            and {job.get('name') for job in jobs} == names,
-            'Complete first-attempt native job success is required')
     pr = api.get('/pulls/' + str(number))
     require(type(pr) is dict and type(pr.get('number')) is int and pr['number'] == number
             and pr.get('state') == 'closed' and pr.get('merged') is True
@@ -199,11 +180,10 @@ def parent(api, event_run, parent_id, repo_id, source, active=False, plan=None):
     if plan is not None:
         require(branch == plan['branch'],
                 'Queued parent does not match the exact approved dependency plan')
-    from .pipeline import native_authority
+    from .pipeline import dependency_authority
     normalized_run = dict(run, path=run['path'].removesuffix('@main'))
-    return canonical({'run': immutable_run(run), 'authority': native_authority(normalized_run, approvals),
-        'jobs': [{key: job.get(key) for key in ('id', 'name', 'run_id', 'run_attempt', 'head_sha', 'status', 'conclusion')}
-                 for job in sorted(jobs, key=lambda job: job['id'])],
+    authority = dependency_authority(api, normalized_run, base, emergency, active=active)
+    return canonical({'run': immutable_run(run), 'authority': authority,
         'pr': {**identity(pr, ('number', 'state', 'merged', 'merge_commit_sha')),
                'user': identity(pr['user'], ('id', 'login', 'type')),
                'head': {**identity(pr['head'], ('sha', 'ref')), 'repo': identity(pr['head']['repo'], ('id', 'full_name'))},
@@ -340,7 +320,7 @@ def entrypoint():
     text = ('Renovate follow-up notification: %s. The native parent has fully completed. '
             'Dispatch acknowledgement does not prove scan success; audit Renovate run history if unconfirmed or rejected. '
             'No notification replay is permitted; the daily Renovate scan remains the fallback. '
-            'Fresh proposals require their own CI and native owner approval.\n') % outcome
+            'Fresh proposals require their own CI and dependency validation.\n') % outcome
     print(text.strip())
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
         summary.write(text)

@@ -6,7 +6,7 @@
   "automerge": false,
   "platformAutomerge": false,
   "prBodyTemplate": "{{{header}}}{{{table}}}{{{warnings}}}{{{notes}}}{{{changelogs}}}{{{controls}}}{{{footer}}}",
-  "prFooter": "Sifto requests owner approval in the production-maintenance Environment. After that approval, Sifto automatically merges and deploys the verified candidate. No manual PR merge is required.",
+  "prFooter": "Sifto automatically merges and deploys this update after the dependency policy, CI, and image evidence checks pass. Live maintenance executor activation has a separate workflow.",
   "minimumReleaseAge": "7 days",
   "rebaseWhen": "behind-base-branch",
   "prHourlyLimit": 2,

@@ -62,6 +62,7 @@ class CompletedFollowupTests(unittest.TestCase):
         self.hook = None
         self.error = None
         self.three_jobs = False
+        self.automatic = False
         self.api = GitHub(REPO['full_name'], self.transport)
 
     def transport(self, method, path, body):
@@ -78,6 +79,8 @@ class CompletedFollowupTests(unittest.TestCase):
             text = ('jobs:\n  prepare:\n' + ('  owner-approval:\n' if self.three_jobs else '  approve-merge-deploy:\n')
                     + '    needs: prepare\n    environment: production-maintenance\n'
                     + ('  approve-merge-deploy:\n    needs: [prepare, owner-approval]\n' if self.three_jobs else ''))
+            if self.automatic:
+                text = (Path(__file__).resolve().parents[2] / self.parent_workflow['path']).read_text()
             return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
         routes = {'': REPO, '/actions/workflows/dependency-update.yml': self.parent_workflow,
                   '/actions/workflows/dependency-followup.yml': self.self_workflow,
@@ -105,6 +108,17 @@ class CompletedFollowupTests(unittest.TestCase):
         self.assertEqual(self.reads.count('/actions/runs/10'), 2)
         self.assertEqual(self.reads.count('/actions/runs/10/approvals'), 2)
         self.assertEqual(sum(path.startswith('/actions/runs/10/jobs?filter=all') for path in self.reads), 2)
+
+    def test_completed_automatic_run_notifies_only_with_a_verified_skipped_gate(self):
+        self.automatic = True
+        self.approvals = []
+        gate = dict(self.jobs[0], id=103, name='owner-approval', conclusion='skipped')
+        self.jobs.insert(1, gate)
+        self.assertEqual(self.notify(), 'requested')
+        self.assertEqual(self.mutations, [('POST', '/actions/workflows/renovate.yml/dispatches', {'ref': 'main'})])
+        self.mutations.clear()
+        gate['conclusion'] = 'success'
+        self.refused()
 
     def test_parent_and_self_accept_only_plain_or_documented_main_qualified_run_paths(self):
         for parent_suffix, self_suffix in product(['', '@main'], repeat=2):
@@ -576,7 +590,7 @@ class CompletedFollowupTests(unittest.TestCase):
                 summary = summary_path.read_text()
                 self.assertIn('notification: ' + outcome, summary)
                 self.assertIn('daily Renovate scan', summary)
-                self.assertIn('their own CI and native owner approval', summary)
+                self.assertIn('their own CI and dependency validation', summary)
                 self.assertNotIn('created', summary)
                 self.assertEqual(len(self.mutations), 1)
 

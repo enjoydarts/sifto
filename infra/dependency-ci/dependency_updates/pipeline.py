@@ -1,4 +1,4 @@
-"""Trusted main orchestration: prepare, native approval, merge, explicit deploy."""
+"""Trusted main orchestration for validated dependency merges and deployments."""
 import base64
 import difflib
 import hashlib
@@ -123,7 +123,7 @@ def run_name(plan):
     return 'Dependency PR %d %s %s' % (plan['pr'], plan['head'], plan['base'])
 
 
-def native_job_names(api, source):
+def native_workflow(api, source):
     """Bind REST job inventory to the immutable trusted workflow source.
 
     This intentionally recognizes only the historical two-job workflow and
@@ -155,7 +155,24 @@ def native_job_names(api, source):
             and re.findall(r'^    environment:[^\n]*$', sections[gate], re.M)
                 == ['    environment: production-maintenance'],
             'Native owner gate environment or dependency DAG mismatch')
-    return set(names)
+    automatic = False
+    if 'owner-approval' in sections:
+        owner_condition = re.findall(r'^    if:[^\n]*$', sections[gate], re.M)
+        apply = sections['approve-merge-deploy']
+        automatic = owner_condition == [
+            "    if: github.ref == 'refs/heads/main' && needs.prepare.outputs.approval_mode == 'owner'"
+        ] and apply.startswith(
+            "    if: >-\n"
+            "      !cancelled() && github.ref == 'refs/heads/main' && needs.prepare.result == 'success' &&\n"
+            "      ((needs.prepare.outputs.approval_mode == 'automatic' && needs.owner-approval.result == 'skipped') ||\n"
+            "       (needs.prepare.outputs.approval_mode == 'owner' && needs.owner-approval.result == 'success'))\n"
+        ) and len(re.findall(r'^    if:', apply, re.M)) == 1
+        require(automatic or 'approval_mode' not in block, 'Unsupported automatic authorization DAG')
+    return set(names), automatic
+
+
+def native_job_names(api, source):
+    return native_workflow(api, source)[0]
 
 
 def registered_native(api, run, repo_id, workflow_id):
@@ -430,7 +447,7 @@ def discover(api):
             require(final_proofs == stale_proofs,
                     'Waiting gate or candidate changed before fresh dispatch')
             api.request('POST', '/actions/workflows/' + WORKFLOW + '/dispatches', {'ref': 'main', 'inputs': {'pr_number': str(plan['pr']), 'head_sha': plan['head'], 'base_sha': source, 'source_sha': source}})
-            print('Requested native dependency approval for PR %d' % pr['number'])
+            print('Requested dependency validation for PR %d' % pr['number'])
             return
 
 
@@ -494,8 +511,11 @@ def prepare(api, number, head, base, source):
     # Immutable job outputs originate only in this trusted prepare job.
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
         output.write('plan=' + encoded + '\nplan_hash=' + digest + '\n')
+        output.write('approval_mode=' + ('owner' if plan['emergency'] else 'automatic') + '\n')
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-        summary.write('## Dependency candidate requires owner approval\n\n')
+        summary.write('## Verified dependency candidate\n\n')
+        summary.write('**Authorization:** %s\n\n' % (
+            'Owner approval required' if plan['emergency'] else 'Automatic after CI and image evidence validation'))
         summary.write('PR [%d](https://github.com/%s/pull/%d)\n\n' % (number, api.repo, number))
         for key in ('head', 'base', 'source', 'diff_hash', 'ci_run'):
             summary.write('**%s:** `%s`\n\n' % (key, plan[key]))
@@ -531,7 +551,7 @@ def merge_once(api, plan):
     # passed. The ordinary merge endpoint still enforces all protected rules.
     require(current.get('mergeable') is True and current.get('mergeable_state') in {'clean', 'unstable'}, 'GitHub has not confirmed the candidate is ready to merge')
     try:
-        result = api.request('PUT', '/pulls/%d/merge' % plan['pr'], {'sha': plan['head'], 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #%d' % plan['pr']})
+        result = api.request('PUT', '/pulls/%d/merge' % plan['pr'], {'sha': plan['head'], 'merge_method': 'merge', 'commit_title': 'Verified dependency update PR #%d' % plan['pr']})
     except Ambiguous:
         # The read is an audit only. An unknown merge commit cannot be promoted
         # to authorization or followed by a deployment after lost acknowledgement.
@@ -564,6 +584,39 @@ def native_authority(run, approvals):
     return canonical(proof)
 
 
+def dependency_authority(api, run, source, emergency, *, active):
+    """Verify the owner review or the first-attempt automatic job sequence."""
+    from . import followup
+    names, automatic_enabled = native_workflow(api, source)
+    automatic = automatic_enabled and emergency is False
+    approvals = api.get('/actions/runs/%d/approvals' % run['id'])
+    proof = native_authority(run, approvals)
+    if automatic:
+        followup.bot(run.get('actor'))
+        followup.bot(run.get('triggering_actor'))
+        require(approvals == [], 'Automatic dependency execution has unexpected owner review history')
+    else:
+        verify_approval(approvals, run.get('actor', {}).get('login'))
+    jobs = api.pages('/actions/runs/%d/jobs?filter=all' % run['id'], 'jobs', require_total=True)
+    keys = ('id', 'name', 'run_id', 'run_attempt', 'head_sha', 'status', 'conclusion')
+    require(len(jobs) == len(names)
+            and all(type(job) is dict and followup.positive(job.get('id'))
+                    and type(job.get('run_id')) is int and job['run_id'] == run['id']
+                    and type(job.get('run_attempt')) is int and job['run_attempt'] == 1
+                    and job.get('head_sha') == source for job in jobs)
+            and len({job['id'] for job in jobs}) == len(names)
+            and {job.get('name') for job in jobs} == names,
+            'Complete first-attempt native job success is required')
+    for job in jobs:
+        applying = active and job['name'] == 'approve-merge-deploy'
+        skipped = automatic and job['name'] == 'owner-approval'
+        require(job.get('status') == ('in_progress' if applying else 'completed')
+                and job.get('conclusion') == (None if applying else 'skipped' if skipped else 'success'),
+                'Complete first-attempt native job success is required')
+    return canonical({'authority': proof, 'jobs': [
+        {key: job.get(key) for key in keys} for job in sorted(jobs, key=lambda job: job['id'])]})
+
+
 def execute(api, plan, digest):
     from . import followup, image_security
     require(os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Consumed approval cannot be rerun')
@@ -575,11 +628,7 @@ def execute(api, plan, digest):
             and run.get('head_branch') == 'main' and run.get('head_sha') == plan['source']
             and run.get('path') == '.github/workflows/' + WORKFLOW
             and run.get('run_attempt') == 1, 'Approval run source mismatch')
-    approvals = api.get('/actions/runs/%d/approvals' % run_id)
-    authority = native_authority(run, approvals)
-    verify_approval(approvals, run.get('actor', {}).get('login'))
-    require(native_job_names(api, plan['source']) == {'prepare', 'owner-approval', 'approve-merge-deploy'},
-            'Execution requires the current separate native owner gate')
+    authority = dependency_authority(api, run, plan['source'], plan['emergency'], active=True)
     require_unsuperseded(api, run, plan)
     require(plan.get('version') == 2 and type(plan.get('python_age')) is dict,
             'Prepared plan has no fixed Python artifact-age evidence; prepare again')
@@ -587,6 +636,8 @@ def execute(api, plan, digest):
             'Prepared plan has no mandatory candidate image evidence; prepare again')
     current = candidate(api, plan['pr'], plan['head'], plan['base'], plan['source'],
                         python_cutoff=plan['python_age']['cutoff'])
+    if current['emergency'] is False:
+        followup.bot(api.get('/pulls/%d' % plan['pr']).get('user'))
     current['ci_run'] = plan['ci_run']
     current['image_security'] = image_security.revalidate(api, current, plan['image_security'])
     assert_unchanged(plan, current, digest)
@@ -595,9 +646,7 @@ def execute(api, plan, digest):
     # Artifact downloads and candidate/CI reads can outlive a native review.
     # Recheck that same authority immediately before the ordinary merge guard.
     final_run = api.get('/actions/runs/' + str(run_id))
-    final_approvals = api.get('/actions/runs/%d/approvals' % run_id)
-    verify_approval(final_approvals, final_run.get('actor', {}).get('login'))
-    require(native_authority(final_run, final_approvals) == authority,
+    require(dependency_authority(api, final_run, plan['source'], current['emergency'], active=True) == authority,
             'Native approval authority changed during revalidation; fresh approval required')
     # Supersession cannot retroactively revoke a legitimate running mutation.
     # The global apply job lock plus exact protected-main/head merge guards
@@ -635,7 +684,7 @@ def execute(api, plan, digest):
                       'Audit this native run and the follow-up history if acknowledgement is unconfirmed or rejected. '
                       'The daily Renovate scan remains the fallback. '
                       'A requested queue acknowledges dispatch only; the child waits until after this native approval workflow fully completes '
-                      'and verifies terminal success before requesting proposals with their own fresh CI and owner approval.\n' % outcome)
+                      'and verifies terminal success before requesting proposals with their own fresh CI.\n' % outcome)
     require(outcome == 'requested', 'Follow-up queue %s; audit required, no replay; daily Renovate scan remains fallback' % outcome)
 
 

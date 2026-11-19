@@ -71,9 +71,9 @@ class DependencyAutomationContract(unittest.TestCase):
         self.assertNotIn('pip_requirements', config['enabledManagers'])
         self.assertNotIn('github-actions', config['enabledManagers'])
 
-    def test_renovate_pr_text_points_to_native_approval_and_automatic_merge(self):
+    def test_renovate_pr_text_points_to_validation_and_automatic_merge(self):
         config = json.loads((ROOT / 'renovate.json').read_text())
-        self.assertIn('production-maintenance', config.get('prFooter', ''))
+        self.assertIn('dependency policy, CI, and image evidence', config.get('prFooter', ''))
         self.assertIn('merges and deploys', config.get('prFooter', ''))
         self.assertNotIn('{{{configDescription}}}', config.get('prBodyTemplate', '{{{configDescription}}}'))
 
@@ -391,6 +391,7 @@ class DependencyAutomationContract(unittest.TestCase):
         gate = workflow['jobs']['owner-approval']
         self.assertEqual(gate['permissions'], {})
         self.assertEqual(gate['needs'], 'prepare')
+        self.assertIn("needs.prepare.outputs.approval_mode == 'owner'", gate['if'])
         self.assertEqual(gate['environment'], 'production-maintenance')
         self.assertEqual(gate['steps'], [{'name': 'Record native owner approval',
                                         'run': "printf '%s\\n' 'Native owner approval recorded.'"}])
@@ -398,7 +399,11 @@ class DependencyAutomationContract(unittest.TestCase):
         from unittest.mock import patch
         from dependency_updates import pipeline
         with patch.object(pipeline, 'blob', return_value=(ROOT / '.github/workflows/dependency-update.yml').read_text()):
-            self.assertEqual(pipeline.native_job_names(None, 'a' * 40), set(workflow['jobs']))
+            self.assertEqual(pipeline.native_workflow(None, 'a' * 40), (set(workflow['jobs']), True))
+        self.assertIn("needs.prepare.result == 'success'", execution['if'])
+        self.assertIn("needs.owner-approval.result == 'skipped'", execution['if'])
+        self.assertIn("needs.owner-approval.result == 'success'", execution['if'])
+        self.assertEqual(workflow['jobs']['prepare']['outputs']['approval_mode'], '${{ steps.plan.outputs.approval_mode }}')
         self.assertIn('dependency_updates.pipeline execute', str(execution))
         self.assertIn('dependency_updates.pipeline discover', (ROOT / '.github/workflows/renovate.yml').read_text())
 

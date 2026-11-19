@@ -992,6 +992,8 @@ class PipelineTests(unittest.TestCase):
         self.image_validation_hook = None
         self.image_events = []
         self.queue_error = None
+        self.automatic = False
+        self.owner_job = 'success'
 
     def transport(self, method, path, body):
         if method != 'GET':
@@ -1021,7 +1023,8 @@ class PipelineTests(unittest.TestCase):
         if endpoint == '/actions/runs/10/jobs':
             return {'jobs': [{'id': 100 + index, 'name': name, 'run_id': 10, 'run_attempt': 1,
                              'head_sha': BASE, 'status': 'in_progress' if name == 'approve-merge-deploy' else 'completed',
-                             'conclusion': None if name == 'approve-merge-deploy' else 'success'}
+                             'conclusion': None if name == 'approve-merge-deploy' else
+                             self.owner_job if name == 'owner-approval' else 'success'}
                             for index, name in enumerate(['prepare', 'owner-approval', 'approve-merge-deploy'])], 'total_count': 3}
         if endpoint == '/git/ref/heads/main':
             return {'object': {'sha': self.base}}
@@ -1034,7 +1037,7 @@ class PipelineTests(unittest.TestCase):
                         'head': {'sha': self.head, 'ref': self.branch, 'repo': repository},
                         'base': {'sha': self.base, 'ref': 'main', 'repo': repository},
                         'labels': self.labels, 'body': self.body}
-            return {'state': 'open', 'draft': False, 'merged': False, 'user': {'login': self.author}, 'head': {'sha': self.head, 'ref': self.branch, 'repo': {'full_name': 'other/repo' if self.fork else self.repo}}, 'base': {'sha': self.base, 'ref': 'main', 'repo': {'full_name': self.repo}}, 'changed_files': len(self.paths), 'labels': self.labels, 'body': self.body, 'mergeable': True, 'mergeable_state': self.mergeable_state}
+            return {'state': 'open', 'draft': False, 'merged': False, 'user': bot if self.author == 'github-actions[bot]' else {'login': self.author}, 'head': {'sha': self.head, 'ref': self.branch, 'repo': {'full_name': 'other/repo' if self.fork else self.repo}}, 'base': {'sha': self.base, 'ref': 'main', 'repo': {'full_name': self.repo}}, 'changed_files': len(self.paths), 'labels': self.labels, 'body': self.body, 'mergeable': True, 'mergeable_state': self.mergeable_state}
         if endpoint.startswith('/compare/'):
             return {'merge_base_commit': {'sha': self.base}, 'status': 'ahead'}
         if endpoint == '/pulls/1/files':
@@ -1045,6 +1048,8 @@ class PipelineTests(unittest.TestCase):
                 text = ('jobs:\n  prepare:\n  owner-approval:\n    needs: prepare\n'
                         '    environment: production-maintenance\n  approve-merge-deploy:\n'
                         '    needs: [prepare, owner-approval]\n')
+                if self.automatic:
+                    text = (Path(__file__).resolve().parents[2] / '.github/workflows/dependency-update.yml').read_text()
                 return {'type': 'file', 'encoding': 'base64', 'size': len(text), 'content': base64.b64encode(text.encode()).decode()}
             text = 'httpx==0.28.1\n' if 'ref=' + BASE in path else self.after
             if '/requirements.txt?' in path:
@@ -1092,6 +1097,52 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.Refused, 'image evidence'):
             self.execute(plan)
         self.assertEqual(self.mutations, [])
+
+    def test_daily_bot_candidate_merges_deploys_and_queues_followup_without_owner_review(self):
+        self.automatic = True
+        self.approvals = []
+        self.owner_job = 'skipped'
+        self.execute(self.plan())
+        self.assertEqual([mutation[:2] for mutation in self.mutations], [
+            ('PUT', '/pulls/1/merge'),
+            ('POST', '/actions/workflows/deploy.yml/dispatches'),
+            ('POST', '/actions/workflows/dependency-followup.yml/dispatches'),
+        ])
+
+    def test_automatic_path_refuses_unexpected_gate_and_emergency_without_approval(self):
+        for condition in ('legacy', 'unexpected-gate', 'new-review', 'emergency'):
+            with self.subTest(condition=condition):
+                self.automatic = condition != 'legacy'
+                self.approvals = ([{'state': 'rejected', 'user': {'login': 'enjoydarts'},
+                                    'environments': [{'name': 'production-maintenance'}]}]
+                                  if condition == 'new-review' else [])
+                self.owner_job = 'success' if condition == 'unexpected-gate' else 'skipped'
+                if condition == 'emergency':
+                    self.branch = 'dependency-security/example'
+                    self.author = 'enjoydarts'
+                    self.labels = [{'name': 'dependency-security'}]
+                    self.body = 'Security fix: example'
+                with self.assertRaises(policy.Refused):
+                    self.execute(self.plan())
+                self.assertEqual(self.mutations, [])
+
+    def test_automatic_gate_changes_during_revalidation_prevent_merge(self):
+        self.automatic = True
+        self.approvals = []
+        self.owner_job = 'skipped'
+        self.image_validation_hook = lambda: setattr(self, 'owner_job', 'success')
+        with self.assertRaises(policy.Refused):
+            self.execute(self.plan())
+        self.assertEqual(self.mutations, [])
+
+    def test_emergency_candidate_with_actual_owner_approval_still_deploys(self):
+        self.automatic = True
+        self.branch = 'dependency-security/example'
+        self.author = 'enjoydarts'
+        self.labels = [{'name': 'dependency-security'}]
+        self.body = 'Security fix: example'
+        self.execute(self.plan())
+        self.assertEqual([mutation[0] for mutation in self.mutations], ['PUT', 'POST', 'POST'])
 
     def test_semantically_unready_candidate_is_rejected_before_any_image_scan(self):
         self.paths = ['worker/requirements.in']
@@ -1474,16 +1525,19 @@ class PipelineTests(unittest.TestCase):
         self.preview_failure = True
         self.execute(self.plan())
         self.assertEqual([m[0] for m in self.mutations], ['PUT', 'POST', 'POST'])
-        self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Approved dependency update PR #1'})
+        self.assertEqual(self.mutations[0][2], {'sha': SHA, 'merge_method': 'merge', 'commit_title': 'Verified dependency update PR #1'})
 
     def test_unstable_pr_with_failed_fixed_ci_still_cannot_merge(self):
         self.mergeable_state = 'unstable'
+        self.automatic = True
+        self.approvals = []
+        self.owner_job = 'skipped'
         plan = self.plan()
         transport = self.transport
 
         def controlled(method, path, body):
             result = transport(method, path, body)
-            if path.split('?')[0].endswith('/jobs'):
+            if path.split('?')[0] == '/actions/runs/15/jobs':
                 result['jobs'][0]['conclusion'] = 'failure'
             return result
 
@@ -1783,7 +1837,8 @@ class DeploymentAuthorizationTests(unittest.TestCase):
             if self.override == 'duplicate': rows.append(dict(rows[0], id=21))
             return {'workflow_runs': rows, 'total_count': len(rows)}
         if path == '/git/commits/' + self.fixture.merged:
-            return {'parents': [] if self.override == 'parents' else [{'sha': BASE}, {'sha': SHA}]}
+            return {'sha': self.fixture.merged,
+                    'parents': [] if self.override == 'parents' else [{'sha': BASE}, {'sha': SHA}]}
         if path == '/pulls/1':
             value = self.fixture.transport(method, path, body)
             value.update(merged=True, merge_commit_sha=self.fixture.merged)
@@ -1796,6 +1851,16 @@ class DeploymentAuthorizationTests(unittest.TestCase):
         with patch.dict(os.environ, self.environment):
             self.assertEqual(self.deploy.authorize(self.api), self.fixture.merged)
         self.assertEqual(self.fixture.mutations, [])
+
+    def test_deploy_accepts_only_the_exact_verified_automatic_parent(self):
+        self.fixture.automatic = True
+        self.fixture.approvals = []
+        self.fixture.owner_job = 'skipped'
+        with patch.dict(os.environ, self.environment):
+            self.assertEqual(self.deploy.authorize(self.api), self.fixture.merged)
+            self.fixture.owner_job = 'success'
+            with self.assertRaises(policy.Refused):
+                self.deploy.authorize(self.api)
 
     def test_chat_flags_stale_pr_and_reused_approval_cannot_authorize_deployment(self):
         for condition in ['approval', 'source', 'parents', 'duplicate', 'head', 'base', 'rerun', 'ref']:

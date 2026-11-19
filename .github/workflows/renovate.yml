@@ -18,7 +18,7 @@ jobs:
       # minimumReleaseAge publishes pending/success commit statuses before PR creation.
       statuses: write
       # GITHUB_TOKEN PR/push events are suppressed or require workflow approval;
-      # explicit fixed-workflow dispatch runs CI and the native environment gate.
+      # explicit fixed-workflow dispatch runs CI and the dependency pipeline.
       actions: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -32,7 +32,7 @@ jobs:
         env:
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.release_age
-      - name: Propose dependency updates for native owner approval
+      - name: Propose dependency updates
         uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
         with:
           token: ${{ github.token }}
@@ -52,7 +52,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.declined
-      - name: Request approval pipelines for validated immutable candidates
+      - name: Request validation for immutable dependency candidates
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONPATH: infra/dependency-ci

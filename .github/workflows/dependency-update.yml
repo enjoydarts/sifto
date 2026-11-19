@@ -38,6 +38,7 @@ jobs:
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
       plan_hash: ${{ steps.plan.outputs.plan_hash }}
+      approval_mode: ${{ steps.plan.outputs.approval_mode }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -55,7 +56,7 @@ jobs:
           PYTHONPATH: infra/dependency-ci
         run: python3 -B -m dependency_updates.pipeline prepare
   owner-approval:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.prepare.outputs.approval_mode == 'owner'
     needs: prepare
     environment: production-maintenance
     runs-on: ubuntu-26.04
@@ -65,10 +66,12 @@ jobs:
       - name: Record native owner approval
         run: printf '%s\n' 'Native owner approval recorded.'
   approve-merge-deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && needs.prepare.result == 'success' &&
+      ((needs.prepare.outputs.approval_mode == 'automatic' && needs.owner-approval.result == 'skipped') ||
+       (needs.prepare.outputs.approval_mode == 'owner' && needs.owner-approval.result == 'success'))
     needs: [prepare, owner-approval]
-    # Approval happens before this repository-wide write lock. Keep approved
-    # pending jobs queued instead of replacing the previous pending apply.
+    # Keep validated candidates queued under the repository-wide write lock.
     concurrency:
       group: dependency-production-apply
       cancel-in-progress: false
@@ -86,7 +89,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify native owner approval and unchanged plan, merge once, then deploy
+      - name: Verify authorization and unchanged plan, merge once, then deploy
         env:
           GH_TOKEN: ${{ github.token }}
           PREPARED_PLAN: ${{ needs.prepare.outputs.plan }}

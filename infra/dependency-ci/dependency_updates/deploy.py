@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 from .github import Ambiguous, GitHub, NoRedirect
-from .policy import Refused, SHA, require, verify_approval, surfaces
+from .policy import Refused, SHA, require, surfaces
 
 
 def validate_dispatch(expected, current_main, event, approved):
@@ -25,8 +25,8 @@ def single_request(api, workflow, commit, approval_run, run_id, attempt):
 
 
 def authorize(api):
+    from . import followup
     expected = os.environ['EXPECTED_COMMIT']
-    current = api.get('/git/ref/heads/main')['object']['sha']
     event = os.environ['GITHUB_EVENT_NAME']
     if event == 'workflow_dispatch':
         source = os.environ['APPROVED_BASE']
@@ -36,14 +36,16 @@ def authorize(api):
         workflow = os.environ['GITHUB_WORKFLOW_REF'].split('@')[0].rsplit('/', 1)[-1]
         single_request(api, workflow, expected, run_id, int(os.environ['GITHUB_RUN_ID']), os.environ['GITHUB_RUN_ATTEMPT'])
         number = int(os.environ['APPROVED_PR'])
-        run = api.get('/actions/runs/' + str(run_id))
-        title = 'Dependency PR %d %s %s' % (number, head, source)
-        require(run.get('head_sha') == source and run.get('head_branch') == 'main' and run.get('path') == '.github/workflows/dependency-update.yml' and run.get('event') == 'workflow_dispatch' and run.get('run_attempt') == 1 and run.get('display_title') == title, 'Deployment approval source mismatch')
-        verify_approval(api.get('/actions/runs/%d/approvals' % run_id), run.get('actor', {}).get('login'))
-        pr = api.get('/pulls/' + str(number))
-        require(pr.get('merged') is True and pr.get('merge_commit_sha') == expected and pr.get('head', {}).get('sha') == head and pr.get('head', {}).get('repo', {}).get('full_name') == api.repo and pr.get('base', {}).get('ref') == 'main', 'Deployment is not the approved merged PR')
-        commit = api.get('/git/commits/' + expected)
-        require([p['sha'] for p in commit.get('parents', [])] == [source, head], 'Approved merge parent mismatch')
+        repository = api.get('')
+        require(type(repository) is dict and followup.positive(repository.get('id')),
+                'Missing deployment repository identity')
+        repo_id = repository['id']
+        followup.repository(repository, api.repo, repo_id)
+        run, actual_pr, actual_head, actual_base = followup.native_run(api, run_id, repo_id)
+        require((actual_pr, actual_head, actual_base) == (number, head, source),
+                'Deployment authorization source mismatch')
+        followup.parent(api, run, run_id, repo_id, expected, active=True)
+    current = api.get('/git/ref/heads/main')['object']['sha']
     validate_dispatch(expected, current, event, 'true')
     require(os.environ['GITHUB_REF'] == 'refs/heads/main' and os.environ['GITHUB_SHA'] == expected, 'Deployment workflow must originate from exact merged main')
     return expected

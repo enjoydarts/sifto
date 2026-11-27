@@ -188,6 +188,12 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     if (refreshing) return;
     setRefreshing(true);
     enableForceFreshReload();
+    if (pathname === "/items") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("cache_bust", "1");
+      window.location.replace(url);
+      return;
+    }
     window.location.reload();
   };
 

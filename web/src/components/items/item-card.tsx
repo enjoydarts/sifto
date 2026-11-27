@@ -258,6 +258,7 @@ export function ItemCard({
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.1em] text-[var(--color-editorial-ink-faint)] sm:mt-2 sm:text-xs">
               <span>
                 {new Date(item.published_at ?? item.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
+                  timeZone: "Asia/Tokyo",
                   year: "numeric",
                   month: "2-digit",
                   day: "2-digit",

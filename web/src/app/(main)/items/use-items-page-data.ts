@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Item, ItemGenreCount, ItemSearchSuggestion } from "@/lib/api";
+import { api, hasForceFreshReload, Item, ItemGenreCount, ItemSearchSuggestion } from "@/lib/api";
+import type { ItemListResponse } from "@/types/api/items";
 import { patchItemsInFeedCaches } from "@/lib/query-cache-helpers";
 import { queryKeys } from "@/lib/query-keys";
 import { useI18n } from "@/components/i18n-provider";
@@ -11,6 +12,7 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { buildItemsSearchParams, useItemsViewState } from "@/components/items/use-items-view-state";
+import { matchesItemsInitialFeed, type ItemsInitialFeed } from "./items-initial-feed";
 import {
   ITEMS_FEED_STALE_TIME_MS,
   ITEM_DETAIL_STALE_TIME_MS,
@@ -26,7 +28,17 @@ export type ItemsFeedQueryData = {
   searchMode?: "natural" | "and" | "or" | string | null;
 };
 
-export function useItemsPageData() {
+function toFeedData(data: ItemListResponse, searchMode: string): ItemsFeedQueryData {
+  return {
+    items: data?.items ?? [],
+    total: data?.total ?? 0,
+    genreCounts: data?.genre_counts ?? [],
+    searchUnavailable: data?.search_unavailable ?? false,
+    searchMode: data?.search_mode ?? searchMode,
+  };
+}
+
+export function useItemsPageData(initialFeed?: ItemsInitialFeed, userId?: string | null) {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -81,9 +93,15 @@ export function useItemsPageData() {
     [favoriteOnly, feedMode, filter, genre, page, readMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
+  const feedSeed = matchesItemsInitialFeed(initialFeed, userId, buildItemsSearchParams(viewState).toString())
+    ? initialFeed
+    : undefined;
   const listQuery = useQuery<ItemsFeedQueryData>({
     queryKey: listQueryKey,
     staleTime: ITEMS_FEED_STALE_TIME_MS,
+    initialData: feedSeed ? () => toFeedData(feedSeed.response, searchMode) : undefined,
+    initialDataUpdatedAt: feedSeed?.dataUpdatedAt,
+    refetchOnMount: () => hasForceFreshReload() ? "always" : true,
     placeholderData: (previousData, previousQuery) =>
       canReuseItemsFeedPlaceholder(previousQuery?.queryKey, listQueryKey) ? previousData : undefined,
     queryFn: async () => {
@@ -102,13 +120,7 @@ export function useItemsPageData() {
         favorite_only: pendingMode || deletedMode ? false : favoriteOnly,
         later_only: pendingMode || deletedMode ? false : laterMode,
       });
-      return {
-        items: data?.items ?? [],
-        total: data?.total ?? 0,
-        genreCounts: data?.genre_counts ?? [],
-        searchUnavailable: data?.search_unavailable ?? false,
-        searchMode: data?.search_mode ?? searchMode,
-      };
+      return toFeedData(data, searchMode);
     },
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
@@ -538,7 +550,7 @@ export function useItemsPageData() {
       const d = new Date(item.published_at ?? item.created_at);
       const key = Number.isNaN(d.getTime())
         ? (locale === "ja" ? "日付不明" : "Unknown Date")
-        : d.toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
+        : d.toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" });
       const curr = map.get(key) ?? [];
       curr.push(item);
       map.set(key, curr);

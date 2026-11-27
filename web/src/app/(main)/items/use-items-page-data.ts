@@ -60,7 +60,6 @@ export function useItemsPageData() {
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const restoredScrollRef = useRef<string | null>(null);
-  const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
 
   const listQueryKey = useMemo(
@@ -257,6 +256,9 @@ export function useItemsPageData() {
       setRetryingIds((prev) => ({ ...prev, [itemId]: true }));
       try {
         await api.retryItem(itemId);
+        const queryKey = queryKeys.items.detail(itemId);
+        await queryClient.cancelQueries({ queryKey, exact: true });
+        await queryClient.invalidateQueries({ queryKey, exact: true });
         showToast(t("items.toast.retryQueued"), "success");
         await queryClient.invalidateQueries({ queryKey: queryKeys.items.feedPrefix });
       } catch (e) {
@@ -300,6 +302,9 @@ export function useItemsPageData() {
           await api.markItemRead(item.id);
           showToast(t("itemDetail.toast.markRead"), "success");
         }
+        const queryKey = queryKeys.items.detail(item.id);
+        await queryClient.cancelQueries({ queryKey, exact: true });
+        await queryClient.invalidateQueries({ queryKey, exact: true });
         await queryClient.invalidateQueries({ queryKey: queryKeys.items.feedPrefix });
         await queryClient.invalidateQueries({ queryKey: queryKeys.queues.focus() });
         await queryClient.invalidateQueries({ queryKey: queryKeys.briefing.todayPrefix });
@@ -566,12 +571,11 @@ export function useItemsPageData() {
     sessionStorage.setItem(queueStorageKey, JSON.stringify(ids));
   }, [queueStorageKey]);
   const prefetchItemDetail = useCallback((itemId: string) => {
-    if (prefetchedDetailIDsRef.current[itemId]) return;
-    prefetchedDetailIDsRef.current[itemId] = true;
     void queryClient.prefetchQuery({
       queryKey: queryKeys.items.detail(itemId),
       queryFn: () => api.getItem(itemId),
       staleTime: ITEM_DETAIL_STALE_TIME_MS,
+      retry: false,
     });
   }, [queryClient]);
 
@@ -606,6 +610,7 @@ export function useItemsPageData() {
         rating: nextRating,
         is_favorite: nextFavorite,
       });
+      await queryClient.cancelQueries({ queryKey: queryKeys.items.detail(item.id), exact: true });
       syncFeedbackInFeeds(item.id, next.is_favorite, next.rating);
       await queryClient.invalidateQueries({ queryKey: queryKeys.items.feedPrefix, refetchType: "none" });
       await queryClient.invalidateQueries({ queryKey: queryKeys.preferenceProfile() });

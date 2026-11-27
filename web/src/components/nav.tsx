@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useClerk, useUser } from "@clerk/nextjs";
+import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -98,7 +99,13 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
   const [watchOpenRouterSync, setWatchOpenRouterSync] = useState(false);
-  const [canManagePrompts, setCanManagePrompts] = useState(false);
+  const promptCapabilities = useQuery({
+    queryKey: ["prompt-admin-capabilities"],
+    queryFn: api.getPromptAdminCapabilities,
+    enabled: menuOpen || moreOpen,
+    staleTime: 60_000,
+  });
+  const canManagePrompts = Boolean(promptCapabilities.data?.can_manage_prompts);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const visibleSecondaryLinks = secondaryLinks.filter((link) => (link.href === "/prompt-admin" ? canManagePrompts : true));
   const moreStandaloneLinks = visibleSecondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href));
@@ -135,20 +142,6 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getPromptAdminCapabilities()
-      .then((result) => {
-        if (!cancelled) setCanManagePrompts(Boolean(result.can_manage_prompts));
-      })
-      .catch(() => {
-        if (!cancelled) setCanManagePrompts(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

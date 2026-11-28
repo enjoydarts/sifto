@@ -371,6 +371,9 @@ function ItemDetailContent() {
     setItemNavigatorOpen,
     itemNavigatorDisplayPersona,
     genreSuggestions,
+    genreSuggestionsLoading,
+    genreSuggestionsError,
+    refetchGenreSuggestions,
     dateLocale,
     canMarkRead,
     isDeleted,
@@ -1098,6 +1101,18 @@ function ItemDetailContent() {
                 disabled={disableMutations || genreUpdating}
                 onSave={saveGenre}
               />
+              {genreSuggestionsLoading || genreSuggestionsError ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-[var(--color-editorial-ink-soft)]" role="status">
+                  <span>
+                    {t("itemDetail.genre.suggestions")} {t(genreSuggestionsLoading ? "common.loading" : "common.error")}
+                  </span>
+                  {!genreSuggestionsLoading && (
+                    <button type="button" className="underline focus-ring" onClick={() => void refetchGenreSuggestions()}>
+                      {t("items.retry")}
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </section>
           </div>
         ) : null}

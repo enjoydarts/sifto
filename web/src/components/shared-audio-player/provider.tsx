@@ -51,6 +51,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const navigatorPersonasQuery = useQuery({
     queryKey: ["navigator-personas"],
     queryFn: () => api.getNavigatorPersonas(),
+    enabled: mode === "summary_queue" && Boolean(summaryPersonaKey),
   });
 
   const summaryQueueGetterRef = useRef<() => SharedSummaryQueueState>(() => createEmptySummaryQueue());

@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { ClerkProvider } from "@clerk/nextjs";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { itemsSSREnabled, itemsSSRRequested } from "@/lib/items-ssr-request";
 
 export const metadata: Metadata = {
   title: "Sifto",
@@ -20,13 +23,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const clerkEnabled = Boolean(clerkPublishableKey);
+  const itemsSSR = clerkEnabled && itemsSSREnabled() && itemsSSRRequested(await headers());
+  const content = (
+    <Providers clerkEnabled={clerkEnabled} clerkPublishableKey={clerkPublishableKey} clerkContextProvided={itemsSSR}>
+      {children}
+    </Providers>
+  );
 
   return (
     <html lang="ja">
@@ -46,9 +55,7 @@ export default function RootLayout({
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
           strategy="lazyOnload"
         />
-        <Providers clerkEnabled={clerkEnabled} clerkPublishableKey={clerkPublishableKey}>
-          {children}
-        </Providers>
+        {itemsSSR ? <ClerkProvider dynamic publishableKey={clerkPublishableKey}>{content}</ClerkProvider> : content}
       </body>
     </html>
   );

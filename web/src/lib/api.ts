@@ -252,18 +252,21 @@ const FORCE_FRESH_UNTIL_KEY = "sifto.forceFreshUntil";
 function withCacheBust(path: string, method?: string, enabled = true): string {
   const upperMethod = (method ?? "GET").toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return path;
-  if (!enabled) return path;
-  if (typeof window === "undefined") return path;
+  if (!enabled || !hasForceFreshReload()) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  if (path.includes("cache_bust=")) return path;
+  return `${path}${sep}cache_bust=1`;
+}
+
+export function hasForceFreshReload(): boolean {
+  if (typeof window === "undefined") return false;
   const raw = window.sessionStorage.getItem(FORCE_FRESH_UNTIL_KEY);
   const until = raw ? Number(raw) : 0;
   if (!Number.isFinite(until) || until <= Date.now()) {
     if (raw) window.sessionStorage.removeItem(FORCE_FRESH_UNTIL_KEY);
-    return path;
+    return false;
   }
-  const hasQuery = path.includes("?");
-  const sep = hasQuery ? "&" : "?";
-  if (path.includes("cache_bust=")) return path;
-  return `${path}${sep}cache_bust=1`;
+  return true;
 }
 
 export function enableForceFreshReload(windowMs = 15000) {

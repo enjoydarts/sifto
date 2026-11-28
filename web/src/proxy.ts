@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { ITEMS_DOCUMENT_HEADER, itemsSSREnabled } from "@/lib/items-ssr-request";
 
 const isPublicRoute = createRouteMatcher([
   "/login(.*)",
@@ -16,13 +17,18 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.delete(ITEMS_DOCUMENT_HEADER);
   if (isPublicRoute(req)) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const { userId } = await auth();
   if (userId) {
-    return NextResponse.next();
+    if (itemsSSREnabled() && req.nextUrl.pathname === "/items" && req.headers.get("rsc") !== "1") {
+      requestHeaders.set(ITEMS_DOCUMENT_HEADER, "1");
+    }
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const loginURL = new URL("/login", req.url);

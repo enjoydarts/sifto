@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +18,14 @@ type ProvidersProps = {
   children: React.ReactNode;
   clerkEnabled: boolean;
   clerkPublishableKey?: string;
+  clerkContextProvided?: boolean;
 };
+
+const QueryUserContext = createContext<string | undefined>(undefined);
+
+export function useQueryUserId() {
+  return useContext(QueryUserContext);
+}
 
 const clerkJapaneseLocalization = {
   signIn: {
@@ -98,7 +105,7 @@ function UIFontSettingsSync() {
   return null;
 }
 
-export function Providers({ children, clerkEnabled, clerkPublishableKey }: ProvidersProps) {
+export function Providers({ children, clerkEnabled, clerkPublishableKey, clerkContextProvided }: ProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -121,6 +128,7 @@ export function Providers({ children, clerkEnabled, clerkPublishableKey }: Provi
         <ProvidersWithI18n
           clerkEnabled={clerkEnabled}
           clerkPublishableKey={clerkPublishableKey}
+          clerkContextProvided={clerkContextProvided}
         >
           <ToastProvider>
             <ConfirmProvider>
@@ -144,15 +152,15 @@ function ProvidersWithI18n({
   children,
   clerkEnabled,
   clerkPublishableKey,
-}: {
-  children: React.ReactNode;
-  clerkEnabled: boolean;
-  clerkPublishableKey?: string;
-}) {
+  clerkContextProvided,
+}: ProvidersProps) {
   const { locale } = useI18n();
 
   if (!clerkEnabled) {
     return children;
+  }
+  if (clerkContextProvided) {
+    return <ProtectedAppGate>{children}</ProtectedAppGate>;
   }
 
   return (
@@ -195,10 +203,10 @@ function ProtectedAppGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <UserQueryCache key={userId ?? "anonymous"}>{children}</UserQueryCache>;
+  return <UserQueryCache key={userId ?? "anonymous"} userId={userId ?? undefined}>{children}</UserQueryCache>;
 }
 
-function UserQueryCache({ children }: { children: React.ReactNode }) {
+function UserQueryCache({ children, userId }: { children: React.ReactNode; userId?: string }) {
   const [client] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -211,5 +219,9 @@ function UserQueryCache({ children }: { children: React.ReactNode }) {
       },
     },
   }));
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <QueryUserContext.Provider value={userId}>{children}</QueryUserContext.Provider>
+    </QueryClientProvider>
+  );
 }

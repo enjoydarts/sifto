@@ -6,7 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import { dict } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/types";
@@ -19,16 +19,31 @@ type I18nValue = {
 };
 
 const I18nContext = createContext<I18nValue | null>(null);
+const localeKey = "sifto.locale";
+const localeChangedEvent = "sifto:locale-changed";
+
+function readLocale(): Locale {
+  return window.localStorage.getItem(localeKey) === "en" ? "en" : "ja";
+}
+
+function subscribeToLocale(listener: () => void) {
+  window.addEventListener("storage", listener);
+  window.addEventListener(localeChangedEvent, listener);
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener(localeChangedEvent, listener);
+  };
+}
+
+function setLocale(locale: Locale) {
+  window.localStorage.setItem(localeKey, locale);
+  window.dispatchEvent(new Event(localeChangedEvent));
+}
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(() => {
-    if (typeof window === "undefined") return "ja";
-    const saved = window.localStorage.getItem("sifto.locale");
-    return saved === "ja" || saved === "en" ? saved : "ja";
-  });
+  const locale = useSyncExternalStore<Locale>(subscribeToLocale, readLocale, () => "ja");
 
   useEffect(() => {
-    globalThis.localStorage?.setItem("sifto.locale", locale);
     if (typeof document !== "undefined") {
       document.documentElement.lang = locale;
     }

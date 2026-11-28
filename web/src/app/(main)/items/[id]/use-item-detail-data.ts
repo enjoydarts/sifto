@@ -147,6 +147,7 @@ export function useItemDetailData() {
   const genreSuggestionsQuery = useQuery({
     queryKey: ["item-genre-suggestions"] as const,
     queryFn: () => api.getItems({ status: "summarized", sort: "newest", page: 1, page_size: 1 }),
+    enabled: detailTab === "genre",
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
@@ -239,7 +240,17 @@ export function useItemDetailData() {
     );
     let cancelled = false;
     const loads = startItemDetailLoads({
-      loadDetail: () => api.getItem(id),
+      loadDetail: async () => {
+        const queryKey = queryKeys.items.detail(id);
+        if (queryClient.getQueryState(queryKey)?.fetchStatus === "fetching") {
+          try {
+            return await queryClient.fetchQuery({ queryKey, queryFn: () => api.getItem(id) });
+          } catch (error) {
+            if (cancelled) throw error;
+          }
+        }
+        return api.getItem(id);
+      },
       loadRelated: () => api.getRelatedItems(id, { limit: 6 }),
       onDetail: (detail) => {
         if (cancelled) return;
@@ -360,6 +371,7 @@ export function useItemDetailData() {
       queryKey: queryKeys.items.detail(nextId),
       queryFn: () => api.getItem(nextId),
       staleTime: ITEM_DETAIL_STALE_TIME_MS,
+      retry: false,
     });
   }, [nextItemHref, queryClient, router]);
   const isRelatedStateCurrent = isItemScopedStateCurrent(id, relatedStateItemId);
@@ -785,6 +797,9 @@ export function useItemDetailData() {
     setItemNavigatorOpen,
     itemNavigatorDisplayPersona,
     genreSuggestions,
+    genreSuggestionsLoading: genreSuggestionsQuery.isLoading,
+    genreSuggestionsError: genreSuggestionsQuery.isError,
+    refetchGenreSuggestions: genreSuggestionsQuery.refetch,
     dateLocale,
     canMarkRead,
     isDeleted,
